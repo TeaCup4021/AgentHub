@@ -1,0 +1,23 @@
+# Web framework
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+
+# Database
+sqlalchemy[asyncio]==2.0.*
+asyncpg==0.30.*
+alembic==1.14.*
+
+# Redis
+redis[hiredis]==5.2.*
+
+# MinIO
+minio==7.2.*
+
+# Config & validation
+pydantic==2.10.*
+pydantic-settings==2.7.*
+python-dotenv==1.0.*
+
+# Dev
+pytest-asyncio
+httpx
