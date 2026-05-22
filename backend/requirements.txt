@@ -1,22 +1,27 @@
 # Web framework
-fastapi==0.115.*
-uvicorn[standard]==0.34.*
+fastapi>=0.124.1,<1
+uvicorn[standard]>=0.34
 
 # Database
-sqlalchemy[asyncio]==2.0.*
-asyncpg==0.30.*
-alembic==1.14.*
+sqlalchemy[asyncio]>=2.0
+asyncpg>=0.30
+alembic>=1.14
 
 # Redis
-redis[hiredis]==5.2.*
+redis[hiredis]>=5.2
 
 # MinIO
-minio==7.2.*
+minio>=7.2
 
 # Config & validation
-pydantic==2.10.*
-pydantic-settings==2.7.*
-python-dotenv==1.0.*
+pydantic>=2.12,<3
+pydantic-settings>=2.7
+python-dotenv>=1.0
+
+# Google ADK 2.0 (Agent Engine)
+google-adk==2.0.0
+anthropic
+openai
 
 # Dev
 pytest-asyncio

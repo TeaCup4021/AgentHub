@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://agenthub:agenthub@localhost:5432/agenthub"
+    DATABASE_URL: str = "postgresql+asyncpg://agenthub:agenthub@localhost:5433/agenthub"
     REDIS_URL: str = "redis://localhost:6379/0"
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
