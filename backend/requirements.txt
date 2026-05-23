@@ -6,6 +6,7 @@ uvicorn[standard]>=0.34
 sqlalchemy[asyncio]>=2.0
 asyncpg>=0.30
 alembic>=1.14
+psycopg2
 
 # Redis
 redis[hiredis]>=5.2
