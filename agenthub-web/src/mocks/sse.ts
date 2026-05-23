@@ -97,9 +97,13 @@ export function createMockSSEStream(
       const artifactId = `art-${generateId()}`;
       const artifact: Artifact = {
         id: artifactId,
-        type: "code",
+        artifactType: "code",
         title: block.fileName,
         content: { fileName: block.fileName, language: block.language || "text", code: block.code },
+        storageKey: null,
+        mimeType: null,
+        version: 1,
+        createdAt: new Date().toISOString(),
       };
       accumulatedArtifacts.push(artifact);
       setTimeout(() => {
@@ -150,6 +154,7 @@ export function createMockSSEStream(
       content: accumulatedText,
       artifacts: accumulatedArtifacts,
       status: "done",
+      meta: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

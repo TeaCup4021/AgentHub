@@ -65,6 +65,7 @@ export interface Message {
   content: string;
   artifacts: Artifact[];
   status: MessageStatus;
+  meta?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -90,7 +91,6 @@ export interface CreateConversationParams {
   title: string;
   type: ConversationType;
   agentIds: string[];
-  initialMessage?: string;
 }
 
 export interface UpdateConversationParams {
@@ -100,15 +100,30 @@ export interface UpdateConversationParams {
   agentIds?: string[];
 }
 
+// ========== API 响应结构 ==========
+
+export interface MessageListData {
+  items: Message[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 // ========== Artifact（产物）==========
 
 export type ArtifactType = "code" | "diff" | "preview" | "file" | "deploy_status";
 
+// 注意：后端 SSE mock 当前 artifact 对象写的是 "type" 而非 "artifactType"，
+// 这是后端的 bug，需通知后端同学在 SSE 流中也改为 artifactType 以与 REST schema (ArtifactBrief.artifact_type) 保持一致。
+
 export interface Artifact {
   id: string;
-  type: ArtifactType;
+  artifactType: ArtifactType;
   title?: string;
   content: Record<string, unknown>;
+  storageKey?: string | null;
+  mimeType?: string | null;
+  version: number;
+  createdAt: string;
 }
 
 export interface CodeArtifactContent {

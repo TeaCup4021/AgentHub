@@ -17,7 +17,7 @@ const cardRenderers: Record<string, FC<CardRendererProps>> = {
 };
 
 export function CardRenderer({ artifact }: CardRendererProps) {
-  const Renderer = cardRenderers[artifact.type];
+  const Renderer = cardRenderers[artifact.artifactType];
   if (!Renderer) return null;
   return <Renderer artifact={artifact} />;
 }

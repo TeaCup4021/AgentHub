@@ -144,7 +144,7 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
     // POST /conversations/:id/messages
     else if (method === "post" && /^\/conversations\/[^/]+\/messages$/.test(url)) {
       const conversationId = url.split("/")[2];
-      const body = parseBody(config) as unknown as { content: string };
+      const body = parseBody(config) as unknown as { content: string; contentType?: string; parentMessageId?: string };
       await delay();
       const now = new Date().toISOString();
       const userMsg: Message = {
@@ -153,10 +153,12 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
         senderType: "user",
         senderId: "user-1",
         senderName: "我",
-        contentType: "text",
+        contentType: body.contentType || "text",
         content: body.content,
+        parentMessageId: body.parentMessageId,
         artifacts: [],
         status: "done",
+        meta: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -171,12 +173,25 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
         Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
-    // GET /conversations/:id/messages
+    // GET /conversations/:id/messages (cursor-based pagination)
     else if (method === "get" && /^\/conversations\/[^/]+\/messages$/.test(url)) {
       const conversationId = url.split("/")[2];
       await delay();
-      const msgs = messages[conversationId] || [];
-      const [, responseBody] = successResponse(msgs);
+      const params = (config.params as { cursor?: string; limit?: number }) || {};
+      const cursor = params.cursor;
+      const limit = params.limit || 50;
+      let msgs = messages[conversationId] || [];
+
+      if (cursor) {
+        msgs = msgs.filter((m) => m.createdAt < cursor);
+      }
+      msgs = [...msgs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+      const hasMore = msgs.length > limit;
+      const items = msgs.slice(0, limit);
+      const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].createdAt : null;
+
+      const [, responseBody] = successResponse({ items, nextCursor, hasMore });
       config.adapter = () =>
         Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }

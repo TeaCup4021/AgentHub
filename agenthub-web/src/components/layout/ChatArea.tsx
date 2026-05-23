@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChatStore } from "@/stores/chatStore";
 import { useMessages } from "@/hooks/useMessages";
@@ -6,7 +6,8 @@ import { useAgents } from "@/hooks/useAgents";
 import { createSSEStream } from "@/lib/sse";
 import { messageApi } from "@/lib/api";
 import { ChatHeader, MessageList, ChatInput } from "@/components/chat";
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEMessageEnd, SSEError, Conversation } from "@/types";
+import type { InfiniteData } from "@tanstack/react-query";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEMessageEnd, SSEError, Conversation, Message, MessageListData } from "@/types";
 
 interface ChatAreaProps {
   conversations: Conversation[];
@@ -26,7 +27,16 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const streamAgentRef = useRef<string>("");
 
   const qc = useQueryClient();
-  const { data: rawMessages = [] } = useMessages(activeId ?? "");
+  const {
+    data: messagesData,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useMessages(activeId ?? "");
+  const rawMessages = useMemo(
+    () => messagesData?.pages.flatMap((p) => p.items).reverse() ?? [],
+    [messagesData],
+  );
   const { data: agents = [] } = useAgents();
 
   const conversation = conversations.find((c) => c.id === activeId);
@@ -35,13 +45,41 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   const handleSend = useCallback(async (content: string) => {
     if (!activeId) return;
-    try {
-      await messageApi.send(activeId, { content, mode: "direct" });
-    } catch (err) {
+
+    const now = new Date().toISOString();
+    const optimisticMsg: Message = {
+      id: `msg-opt-${Date.now()}`,
+      conversationId: activeId,
+      senderType: "user",
+      senderId: "user-1",
+      senderName: "我",
+      contentType: "text",
+      content,
+      artifacts: [],
+      status: "done",
+      meta: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    qc.setQueryData(
+      ["messages", activeId],
+      (old: InfiniteData<MessageListData> | undefined) => {
+        if (!old) return old;
+        const newPages = old.pages.map((page, i) => {
+          if (i === 0) {
+            return { ...page, items: [optimisticMsg, ...page.items] };
+          }
+          return page;
+        });
+        return { ...old, pages: newPages };
+      },
+    );
+
+    messageApi.send(activeId, { content, mode: "direct" }).catch((err) => {
       console.error("消息发送失败:", err);
-      setIsStreaming(false);
-      return;
-    }
+      qc.invalidateQueries({ queryKey: ["messages", activeId] });
+    });
 
     disconnectRef.current?.();
     setIsStreaming(true);
@@ -95,6 +133,9 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         streamingMessageId={streamMsgIdRef.current}
         streamingAgentName={streamAgentRef.current}
         isWaiting={isStreaming && !streamMsgIdRef.current}
+        hasMore={!!hasNextPage}
+        isFetchingMore={isFetchingNextPage}
+        onLoadMore={() => fetchNextPage()}
       />
       <ChatInput onSend={handleSend} disabled={isStreaming} />
     </div>

@@ -1,33 +1,28 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.eggs/
+node_modules/
 dist/
-build/
-*.egg
-.venv/
-venv/
-env/
-
-# Environment
-.env
-*.env.local
+dist-ssr/
+*.local
 
 # IDE
-.idea/
-
-# Docker
-docker-compose.override.yml
-
-# Node (for future frontend)
-node_modules/
-.next/
-.cache/
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # OS
 .DS_Store
 Thumbs.db
 
-# MinIO data
-data/
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Backend env
+backend/.env

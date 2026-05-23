@@ -16,6 +16,7 @@ import type {
   UpdateAgentRequest,
   UpdateAgentResponse,
   GetArtifactsResponse,
+  GetMessageListResponse,
   ApiResponse,
   Message,
 } from "@/types";
@@ -55,11 +56,11 @@ api.interceptors.response.use(
 
 export const conversationApi = {
   create(data: CreateConversationRequest) {
-    return api.post<CreateConversationResponse>("/conversations/", data);
+    return api.post<CreateConversationResponse>("/conversations", data);
   },
 
   list(params?: ConversationListParams) {
-    return api.get<GetConversationListResponse>("/conversations/", { params });
+    return api.get<GetConversationListResponse>("/conversations", { params });
   },
 
   detail(id: string) {
@@ -117,12 +118,14 @@ export interface AgentVerifyRequest {
 
 export interface SendMessageRequest {
   content: string;
+  contentType?: string;
   mentions?: string[];
+  parentMessageId?: string;
+  // mode 字段暂未对接后端，为 Orchestrator 功能预留
   mode?: "auto_orchestrate" | "direct";
 }
 
 export interface SendMessageResponse extends ApiResponse<Message> {}
-export interface GetMessageListResponse extends ApiResponse<Message[]> {}
 
 export const messageApi = {
   send(conversationId: string, data: SendMessageRequest) {

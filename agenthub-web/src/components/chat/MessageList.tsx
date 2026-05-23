@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { CardRenderer } from "@/components/cards";
 import type { Message } from "@/types";
@@ -76,11 +77,46 @@ interface MessageListProps {
   streamingMessageId?: string | null;
   streamingAgentName?: string;
   isWaiting?: boolean;
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
-export function MessageList({ messages, streamingMessageId, streamingAgentName, isWaiting }: MessageListProps) {
+export function MessageList({
+  messages, streamingMessageId, streamingAgentName,
+  isWaiting, hasMore, isFetchingMore, onLoadMore,
+}: MessageListProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const sentinel = topSentinelRef.current;
+    if (!sentinel || !onLoadMore) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !isFetchingMore) {
+          onLoadMore();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, isFetchingMore, onLoadMore]);
+
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div ref={containerRef} className="flex-1 overflow-y-auto">
+      {onLoadMore && <div ref={topSentinelRef} className="h-1" />}
+      {isFetchingMore && (
+        <div className="flex justify-center py-2">
+          <span className="text-xs text-gray-400">加载历史消息...</span>
+        </div>
+      )}
+      {!hasMore && messages.length > 0 && onLoadMore && (
+        <div className="flex justify-center py-2">
+          <span className="text-xs text-gray-300">已加载全部消息</span>
+        </div>
+      )}
       {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
       {streamingMessageId && streamingAgentName && (
         <StreamingMessageBubble messageId={streamingMessageId} agentName={streamingAgentName} />

@@ -1,4 +1,4 @@
-import type { Artifact, Conversation, CreateConversationParams, UpdateConversationParams } from "./chat";
+import type { Artifact, Conversation, CreateConversationParams, UpdateConversationParams, MessageListData } from "./chat";
 import type { Agent, CreateAgentParams, UpdateAgentParams } from "./agent";
 
 // ========== 通用响应 ==========
@@ -59,3 +59,7 @@ export type GetAgentDetailResponse = ApiResponse<Agent>;
 // ========== Artifact API ==========
 
 export type GetArtifactsResponse = ApiResponse<Artifact[]>;
+
+// ========== Message API ==========
+
+export type GetMessageListResponse = ApiResponse<MessageListData>;
