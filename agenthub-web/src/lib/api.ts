@@ -7,11 +7,17 @@ import type {
   GetConversationDetailResponse,
   UpdateConversationRequest,
   UpdateConversationResponse,
+  DeleteConversationResponse,
+  ConversationListParams,
   GetAgentListResponse,
   GetAgentDetailResponse,
   CreateAgentRequest,
   CreateAgentResponse,
+  UpdateAgentRequest,
+  UpdateAgentResponse,
+  GetArtifactsResponse,
   ApiResponse,
+  Message,
 } from "@/types";
 
 const api: AxiosInstance = axios.create({
@@ -22,7 +28,6 @@ const api: AxiosInstance = axios.create({
   },
 });
 
-// 请求拦截器 — 注入 token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -31,34 +36,30 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// 响应拦截器
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const body = response.data;
+    if (body && typeof body.code === "number" && body.code >= 400) {
+      return Promise.reject(new Error(body.message || "请求失败"));
+    }
+    return response;
+  },
   (error: AxiosError) => {
-    if (error.response) {
-      const status = error.response.status;
-      if (status === 401) {
-        localStorage.removeItem("token");
-        console.warn("未登录，需要跳转到登录页");
-      } else if (status === 500) {
-        console.error("服务器错误");
-      }
-    } else if (error.request) {
-      console.error("网络错误，无法连接到服务器");
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   },
 );
 
-// ========== 对话 API ==========
-
 export const conversationApi = {
   create(data: CreateConversationRequest) {
-    return api.post<CreateConversationResponse>("/conversations", data);
+    return api.post<CreateConversationResponse>("/conversations/", data);
   },
 
-  list() {
-    return api.get<GetConversationListResponse>("/conversations");
+  list(params?: ConversationListParams) {
+    return api.get<GetConversationListResponse>("/conversations/", { params });
   },
 
   detail(id: string) {
@@ -70,15 +71,21 @@ export const conversationApi = {
   },
 
   delete(id: string) {
-    return api.delete<ApiResponse<null>>(`/conversations/${id}`);
+    return api.delete<DeleteConversationResponse>(`/conversations/${id}`);
   },
 
   streamUrl(id: string): string {
     return `/api/v1/conversations/${id}/stream`;
   },
-};
 
-// ========== Agent API ==========
+  pinMessage(conversationId: string, messageId: string) {
+    return api.post<ApiResponse<null>>(`/conversations/${conversationId}/pins`, { message_id: messageId });
+  },
+
+  unpinMessage(conversationId: string, messageId: string) {
+    return api.delete<ApiResponse<null>>(`/conversations/${conversationId}/pins/${messageId}`);
+  },
+};
 
 export const agentApi = {
   list() {
@@ -92,9 +99,21 @@ export const agentApi = {
   create(data: CreateAgentRequest) {
     return api.post<CreateAgentResponse>("/agents", data);
   },
+
+  update(id: string, data: UpdateAgentRequest) {
+    return api.patch<UpdateAgentResponse>(`/agents/${id}`, data);
+  },
+
+  verify(data: AgentVerifyRequest) {
+    return api.post<{ status: string; message: string }>("/agents/verify", data);
+  },
 };
 
-// ========== 消息 API ==========
+export interface AgentVerifyRequest {
+  provider: string;
+  model: string;
+  systemPrompt?: string;
+}
 
 export interface SendMessageRequest {
   content: string;
@@ -102,23 +121,26 @@ export interface SendMessageRequest {
   mode?: "auto_orchestrate" | "direct";
 }
 
+export interface SendMessageResponse extends ApiResponse<Message> {}
+export interface GetMessageListResponse extends ApiResponse<Message[]> {}
+
 export const messageApi = {
   send(conversationId: string, data: SendMessageRequest) {
-    return api.post(`/conversations/${conversationId}/messages`, data);
+    return api.post<SendMessageResponse>(`/conversations/${conversationId}/messages`, data);
   },
 
   list(conversationId: string, cursor?: string, limit = 50) {
-    return api.get(`/conversations/${conversationId}/messages`, {
+    return api.get<GetMessageListResponse>(`/conversations/${conversationId}/messages`, {
       params: { cursor, limit },
     });
   },
 
   regenerate(messageId: string) {
-    return api.post(`/messages/${messageId}/regenerate`);
+    return api.post<SendMessageResponse>(`/messages/${messageId}/regenerate`);
   },
 
   getArtifacts(messageId: string) {
-    return api.get(`/messages/${messageId}/artifacts`);
+    return api.get<GetArtifactsResponse>(`/messages/${messageId}/artifacts`);
   },
 };
 

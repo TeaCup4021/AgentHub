@@ -2,6 +2,8 @@ import type { AxiosInstance } from "axios";
 import { mockConversations, mockMessages, mockAgents } from "./data";
 import { generateId } from "@/lib/utils";
 import type {
+  ApiResponse,
+  PaginatedResponse,
   CreateConversationRequest,
   UpdateConversationRequest,
   CreateAgentRequest,
@@ -14,8 +16,12 @@ function delay(ms = 300): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function ok<T>(data: T) {
-  return { code: 0, data, message: "ok" };
+function paginatedResponse<T>(list: T[], page = 1, pageSize = 20): [200, PaginatedResponse<T>] {
+  return [200, { code: 200, data: { list, total: list.length, page, pageSize }, message: "success" }];
+}
+
+function successResponse<T>(data: T): [200, ApiResponse<T>] {
+  return [200, { code: 200, data, message: "success" }];
 }
 
 function parseBody(config: { data?: unknown }): Record<string, unknown> {
@@ -39,7 +45,6 @@ export function addMockMessage(conversationId: string, message: Message) {
   messages[conversationId].push(message);
   const conv = conversations.find((c) => c.id === conversationId);
   if (conv) {
-    conv.lastMessage = message.content.find((c) => c.type === "text")?.text?.slice(0, 50) || "";
     conv.lastActiveAt = new Date().toISOString();
   }
 }
@@ -66,27 +71,32 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
     // GET /conversations
     if (method === "get" && url === "/conversations") {
       await delay();
+      const [status, body] = paginatedResponse(conversations);
       config.adapter = () =>
-        Promise.resolve({ data: ok(conversations), status: 200, statusText: "OK", headers: {}, config });
+        Promise.resolve({ data: body, status, statusText: "OK", headers: {}, config });
     }
 
     // POST /conversations
     else if (method === "post" && url === "/conversations") {
       const body = parseBody(config) as unknown as CreateConversationRequest;
       await delay();
+      const now = new Date().toISOString();
       const conv: Conversation = {
         id: `conv-${generateId()}`,
         title: body.title,
         type: body.type,
+        ownerId: "00000000-0000-0000-0000-000000000001",
         agentIds: body.agentIds,
-        lastActiveAt: new Date().toISOString(),
+        lastActiveAt: now,
         isPinned: false,
         isArchived: false,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
       };
       conversations.unshift(conv);
+      const [, responseBody] = successResponse(conv);
       config.adapter = () =>
-        Promise.resolve({ data: ok(conv), status: 201, statusText: "Created", headers: {}, config });
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
     // GET /conversations/:id
@@ -94,10 +104,14 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       const id = url.split("/").pop()!;
       await delay();
       const conv = conversations.find((c) => c.id === id);
-      config.adapter = () =>
-        conv
-          ? Promise.resolve({ data: ok(conv), status: 200, statusText: "OK", headers: {}, config })
-          : Promise.reject({ response: { status: 404, data: { code: 404, message: "未找到" } } });
+      if (conv) {
+        const [, responseBody] = successResponse(conv);
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+      } else {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 404, data: { code: 404, message: "未找到" } } });
+      }
     }
 
     // PATCH /conversations/:id
@@ -107,9 +121,10 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       await delay();
       const idx = conversations.findIndex((c) => c.id === id);
       if (idx >= 0) {
-        conversations[idx] = { ...conversations[idx], ...body };
+        conversations[idx] = { ...conversations[idx], ...body, updatedAt: new Date().toISOString() };
+        const [, responseBody] = successResponse(conversations[idx]);
         config.adapter = () =>
-          Promise.resolve({ data: ok(conversations[idx]), status: 200, statusText: "OK", headers: {}, config });
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
       } else {
         config.adapter = () =>
           Promise.reject({ response: { status: 404, data: { code: 404, message: "未找到" } } });
@@ -121,8 +136,9 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       const id = url.split("/").pop()!;
       await delay();
       conversations = conversations.filter((c) => c.id !== id);
+      const [, responseBody] = successResponse(null);
       config.adapter = () =>
-        Promise.resolve({ data: ok(null), status: 200, statusText: "OK", headers: {}, config });
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
     // POST /conversations/:id/messages
@@ -130,23 +146,29 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       const conversationId = url.split("/")[2];
       const body = parseBody(config) as unknown as { content: string };
       await delay();
+      const now = new Date().toISOString();
       const userMsg: Message = {
         id: `msg-${generateId()}`,
         conversationId,
-        role: "user",
-        content: [{ type: "text", text: body.content }],
+        senderType: "user",
+        senderId: "user-1",
+        senderName: "我",
+        contentType: "text",
+        content: body.content,
+        artifacts: [],
         status: "done",
-        createdAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
       };
       if (!messages[conversationId]) messages[conversationId] = [];
       messages[conversationId].push(userMsg);
       const conv = conversations.find((c) => c.id === conversationId);
       if (conv) {
-        conv.lastMessage = body.content;
-        conv.lastActiveAt = new Date().toISOString();
+        conv.lastActiveAt = now;
       }
+      const [, responseBody] = successResponse(userMsg);
       config.adapter = () =>
-        Promise.resolve({ data: ok(userMsg), status: 201, statusText: "Created", headers: {}, config });
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
     // GET /conversations/:id/messages
@@ -154,34 +176,42 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       const conversationId = url.split("/")[2];
       await delay();
       const msgs = messages[conversationId] || [];
+      const [, responseBody] = successResponse(msgs);
       config.adapter = () =>
-        Promise.resolve({ data: ok(msgs), status: 200, statusText: "OK", headers: {}, config });
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
     // GET /agents
     else if (method === "get" && url === "/agents") {
       await delay();
+      const [, responseBody] = successResponse(agents);
       config.adapter = () =>
-        Promise.resolve({ data: ok(agents), status: 200, statusText: "OK", headers: {}, config });
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
     // POST /agents
     else if (method === "post" && url === "/agents") {
       const body = parseBody(config) as unknown as CreateAgentRequest;
       await delay();
+      const now = new Date().toISOString();
       const agent: Agent = {
         id: `agent-${generateId()}`,
         name: body.name,
-        avatar: body.avatar,
-        provider: "custom",
-        capabilities: [],
+        avatarUrl: body.avatarUrl || "",
+        provider: body.provider,
+        model: body.model,
+        capabilities: body.capabilities || [],
         systemPrompt: body.systemPrompt,
-        tools: body.tools.map((t) => ({ name: t, description: "" })),
-        createdAt: new Date().toISOString(),
+        toolConfig: body.toolConfig || {},
+        isBuiltin: false,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
       };
       agents.push(agent);
+      const [, responseBody] = successResponse(agent);
       config.adapter = () =>
-        Promise.resolve({ data: ok(agent), status: 201, statusText: "Created", headers: {}, config });
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
     return config;

@@ -6,7 +6,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { createSSEStream } from "@/lib/sse";
 import { messageApi } from "@/lib/api";
 import { ChatHeader, MessageList, ChatInput } from "@/components/chat";
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEMessageEnd, SSEError, MessageContent, Conversation } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEMessageEnd, SSEError, Conversation } from "@/types";
 
 interface ChatAreaProps {
   conversations: Conversation[];
@@ -26,7 +26,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const streamAgentRef = useRef<string>("");
 
   const qc = useQueryClient();
-  const { data: rawMessages = [] } = useMessages(activeId);
+  const { data: rawMessages = [] } = useMessages(activeId ?? "");
   const { data: agents = [] } = useAgents();
 
   const conversation = conversations.find((c) => c.id === activeId);
@@ -57,7 +57,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       },
       onArtifact: (data: SSEArtifact) => {
         if (streamMsgIdRef.current) {
-          appendArtifact(streamMsgIdRef.current, mapArtifactToContent(data.artifact));
+          appendArtifact(streamMsgIdRef.current, data.artifact);
         }
       },
       onMessageEnd: (_data: SSEMessageEnd) => {
@@ -99,31 +99,4 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       <ChatInput onSend={handleSend} disabled={isStreaming} />
     </div>
   );
-}
-
-function mapArtifactToContent(artifact: import("@/types").Artifact): MessageContent {
-  switch (artifact.type) {
-    case "code": {
-      const c = artifact.content as unknown as import("@/types").CodeArtifactContent;
-      return { type: "code", language: c.language, code: c.code, fileName: c.fileName };
-    }
-    case "diff": {
-      const c = artifact.content as unknown as import("@/types").DiffArtifactContent;
-      return { type: "diff", language: c.language, oldCode: c.oldCode, newCode: c.newCode, fileName: c.fileName };
-    }
-    case "preview": {
-      const c = artifact.content as unknown as import("@/types").PreviewArtifactContent;
-      return { type: "preview", url: c.url, title: c.title, previewType: c.previewType };
-    }
-    case "file": {
-      const c = artifact.content as unknown as import("@/types").FileArtifactContent;
-      return { type: "file", fileName: c.fileName, fileUrl: c.fileUrl, fileType: c.fileType, fileSize: c.fileSize };
-    }
-    case "deploy_status": {
-      const c = artifact.content as unknown as import("@/types").DeployStatusArtifactContent;
-      return { type: "deploy_status", status: c.status, url: c.url };
-    }
-    default:
-      return { type: "text", text: JSON.stringify(artifact.content) };
-  }
 }

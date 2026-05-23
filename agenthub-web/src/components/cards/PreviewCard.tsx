@@ -1,19 +1,20 @@
 import { useState } from "react";
-import type { PreviewContent } from "@/types";
+import type { Artifact, PreviewArtifactContent } from "@/types";
 
 interface PreviewCardProps {
-  content: PreviewContent;
+  artifact: Artifact;
 }
 
-export function PreviewCard({ content }: PreviewCardProps) {
+export function PreviewCard({ artifact }: PreviewCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const c = artifact.content as unknown as PreviewArtifactContent;
 
   return (
     <>
       <div className="my-2 overflow-hidden rounded-md border border-gray-300 text-left">
         <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100">
           <span className="text-xs text-gray-600">
-            {content.title || "预览"} ({content.previewType})
+            {c.title || "预览"} ({c.previewType})
           </span>
           <button
             className="text-xs text-blue-600 hover:text-blue-800"
@@ -24,8 +25,8 @@ export function PreviewCard({ content }: PreviewCardProps) {
         </div>
         <div className="h-48 bg-white">
           <iframe
-            src={content.url}
-            title={content.title || "preview"}
+            src={c.url}
+            title={c.title || "preview"}
             className="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin"
           />
@@ -42,7 +43,7 @@ export function PreviewCard({ content }: PreviewCardProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-2 border-b">
-              <span className="text-sm font-medium">{content.title || "全屏预览"}</span>
+              <span className="text-sm font-medium">{c.title || "全屏预览"}</span>
               <button
                 className="text-gray-500 hover:text-gray-800 text-lg"
                 onClick={() => setExpanded(false)}
@@ -52,8 +53,8 @@ export function PreviewCard({ content }: PreviewCardProps) {
             </div>
             <div className="flex-1">
               <iframe
-                src={content.url}
-                title={content.title || "preview"}
+                src={c.url}
+                title={c.title || "preview"}
                 className="w-full h-full border-0"
                 sandbox="allow-scripts allow-same-origin"
               />

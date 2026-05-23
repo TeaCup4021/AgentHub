@@ -4,7 +4,8 @@ import { Sidebar } from "./Sidebar";
 import { ChatArea } from "./ChatArea";
 
 export function AppLayout() {
-  const { data: conversations = [] } = useConversations();
+  const { data: conversationsData } = useConversations();
+  const conversations = conversationsData?.list ?? [];
   const createConversation = useCreateConversation();
   const setActive = useChatStore((s) => s.setActiveConversation);
 

@@ -16,21 +16,19 @@ function StreamingTextBubble({ text }: { text: string }) {
 }
 
 function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
+  const isUser = message.senderType === "user";
   return (
     <div className={`flex gap-3 px-4 py-3 ${isUser ? "flex-row-reverse" : ""}`}>
       <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white ${
         isUser ? "bg-blue-500" : "bg-emerald-500"}`}>
-        {isUser ? "我" : (message.agentName || "A").charAt(0)}
+        {isUser ? "我" : (message.senderName || "A").charAt(0)}
       </div>
       <div className={`max-w-[75%] ${isUser ? "text-right" : ""}`}>
-        {!isUser && <p className="mb-1 text-xs font-medium text-gray-500">{message.agentName || "Agent"}</p>}
+        {!isUser && <p className="mb-1 text-xs font-medium text-gray-500">{message.senderName || "Agent"}</p>}
         <div className={`inline-block rounded-2xl px-4 py-2 text-sm leading-relaxed ${
           isUser ? "bg-chat-bubble-user text-gray-900" : "bg-chat-bubble-agent text-gray-800"}`}>
-          {message.content.map((c, i) => {
-            if (c.type === "text") return <TextBubble key={i} text={c.text} />;
-            return <CardRenderer key={i} content={c} />;
-          })}
+          {message.content && <TextBubble text={message.content} />}
+          {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
         </div>
       </div>
     </div>
@@ -38,7 +36,8 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 function StreamingMessageBubble({ messageId, agentName }: { messageId: string; agentName: string }) {
-  const content = useChatStore((s) => s.streamingContent[messageId] || []);
+  const sc = useChatStore((s) => s.getStreamingContent(messageId));
+  if (!sc) return null;
   return (
     <div className="flex gap-3 px-4 py-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-medium text-white">
@@ -47,10 +46,8 @@ function StreamingMessageBubble({ messageId, agentName }: { messageId: string; a
       <div className="max-w-[75%]">
         <p className="mb-1 text-xs font-medium text-gray-500">{agentName || "Agent"}</p>
         <div className="inline-block rounded-2xl px-4 py-2 text-sm leading-relaxed bg-chat-bubble-agent text-gray-800">
-          {content.map((c, i) => {
-            if (c.type === "text") return <StreamingTextBubble key={i} text={c.text} />;
-            return <CardRenderer key={i} content={c} />;
-          })}
+          {sc.content && <StreamingTextBubble text={sc.content} />}
+          {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
         </div>
       </div>
     </div>

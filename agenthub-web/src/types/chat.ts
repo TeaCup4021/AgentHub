@@ -51,19 +51,22 @@ export type MessageContent =
 
 // ========== 消息 ==========
 
-export type MessageRole = "user" | "agent" | "system" | "orchestrator";
-export type MessageStatus = "pending" | "streaming" | "done" | "error";
+export type SenderType = "user" | "agent" | "system" | "orchestrator";
+export type MessageStatus = "pending" | "streaming" | "done" | "failed";
 
 export interface Message {
   id: string;
   conversationId: string;
-  role: MessageRole;
-  agentId?: string;
-  agentName?: string;
-  content: MessageContent[];
-  replyTo?: string;
+  senderType: SenderType;
+  senderId?: string;
+  senderName?: string;
+  parentMessageId?: string;
+  contentType: string;
+  content: string;
+  artifacts: Artifact[];
   status: MessageStatus;
   createdAt: string;
+  updatedAt: string;
 }
 
 // ========== 对话 ==========
@@ -74,12 +77,13 @@ export interface Conversation {
   id: string;
   title: string;
   type: ConversationType;
+  ownerId: string;
   agentIds: string[];
-  lastMessage?: string;
-  lastActiveAt: string;
   isPinned: boolean;
   isArchived: boolean;
+  lastActiveAt: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateConversationParams {
@@ -87,6 +91,13 @@ export interface CreateConversationParams {
   type: ConversationType;
   agentIds: string[];
   initialMessage?: string;
+}
+
+export interface UpdateConversationParams {
+  title?: string;
+  isPinned?: boolean;
+  isArchived?: boolean;
+  agentIds?: string[];
 }
 
 // ========== Artifact（产物）==========
