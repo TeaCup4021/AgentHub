@@ -54,7 +54,7 @@ export function Sidebar({ conversations, onCreateConversation }: SidebarProps) {
 
   const handleNewConversation = useCallback(() => {
     if (!newTitle.trim()) return;
-    onCreateConversation(newTitle.trim(), "single", ["agent-claude-code"]);
+    onCreateConversation(newTitle.trim(), "single", []);
     setNewTitle("");
     setShowNewDialog(false);
   }, [newTitle, onCreateConversation]);

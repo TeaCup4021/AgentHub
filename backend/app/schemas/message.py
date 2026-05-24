@@ -1,6 +1,6 @@
 from uuid import UUID
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import Field
 from app.schemas.base import BaseSchema
 
@@ -10,6 +10,7 @@ class MessageCreate(BaseSchema):
     content_type: str = "text"  # text / markdown
     mentions: List[UUID] = []
     parent_message_id: Optional[UUID] = None
+    mode: Optional[str] = None  # "auto_orchestrate" | "direct"
 
 
 class ArtifactBrief(BaseSchema):
@@ -26,13 +27,13 @@ class ArtifactBrief(BaseSchema):
 class MessageResponse(BaseSchema):
     id: UUID
     conversation_id: UUID
-    sender_type: str
+    sender_type: Literal["user", "agent", "system", "orchestrator"]
     sender_id: Optional[UUID] = None
-    sender_name: str
+    sender_name: Optional[str] = None
     parent_message_id: Optional[UUID] = None
     content_type: str
     content: str
-    status: str
+    status: Literal["pending", "streaming", "done", "failed"]
     meta: Optional[dict] = None
     artifacts: List[ArtifactBrief] = []
     created_at: datetime

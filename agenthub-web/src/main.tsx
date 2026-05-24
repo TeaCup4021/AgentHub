@@ -4,7 +4,7 @@ import { enableMockMode } from "./mocks";
 import "./index.css";
 import App from "./App";
 
-enableMockMode();
+//enableMockMode();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

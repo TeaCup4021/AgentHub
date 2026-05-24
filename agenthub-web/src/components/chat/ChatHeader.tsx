@@ -17,11 +17,11 @@ export function ChatHeader({ conversation, agents }: ChatHeaderProps) {
       <div className="flex items-center gap-1.5">
         {conversation.agentIds.map((aid) => {
           const agent = agents.find((a) => a.id === aid);
-          return agent ? (
+          return (
             <span key={aid} className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] text-gray-600">
-              {agent.name}
+              {agent ? agent.name : aid.slice(0, 8)}
             </span>
-          ) : null;
+          );
         })}
       </div>
     </div>

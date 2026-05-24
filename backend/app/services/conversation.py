@@ -5,6 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func, desc, or_
 from app.models.conversation import Conversation
 from app.models.conversation_participant import ConversationParticipant
+from app.models.message import Message
+from app.models.message_mention import MessageMention
+from app.models.message_pin import MessagePin
+from app.models.artifact import Artifact
+from app.models.orchestrator_task import OrchestratorTask
+from app.models.orchestrator_subtask import OrchestratorSubtask
 from app.schemas.conversation import ConversationCreate, ConversationUpdate
 from app.schemas.base import Page
 from fastapi import HTTPException
@@ -155,17 +161,51 @@ class ConversationService:
 
     @staticmethod
     async def delete_conversation(db: AsyncSession, user_id: UUID, conv_id: UUID):
-        # Optional: check ownership
         query = select(Conversation).where(Conversation.id == conv_id, Conversation.owner_id == user_id)
         result = await db.execute(query)
         conv = result.scalar_one_or_none()
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-            
-        # Delete participants
-        await db.execute(delete(ConversationParticipant).where(ConversationParticipant.conversation_id == conv_id))
-        # Delete conversation
+
+        # Collect related message IDs for cascade cleanup
+        msg_query = select(Message.id).where(Message.conversation_id == conv_id)
+        msg_result = await db.execute(msg_query)
+        message_ids = [row[0] for row in msg_result.fetchall()]
+
+        # 1. Delete orchestrator_subtasks (FK → orchestrator_tasks, messages)
+        if message_ids:
+            await db.execute(delete(OrchestratorSubtask).where(
+                OrchestratorSubtask.task_id.in_(
+                    select(OrchestratorTask.id).where(OrchestratorTask.conversation_id == conv_id)
+                )
+            ))
+            # Also delete subtasks referencing messages in this conversation
+            await db.execute(delete(OrchestratorSubtask).where(
+                OrchestratorSubtask.output_message_id.in_(message_ids)
+            ))
+
+        # 2. Delete orchestrator_tasks (FK → conversations, messages)
+        await db.execute(delete(OrchestratorTask).where(OrchestratorTask.conversation_id == conv_id))
+
+        # 3. Delete message_mentions (FK → messages)
+        if message_ids:
+            await db.execute(delete(MessageMention).where(MessageMention.message_id.in_(message_ids)))
+
+        # 4. Delete artifacts (FK → conversations, messages)
+        await db.execute(delete(Artifact).where(Artifact.conversation_id == conv_id))
+
+        # 5. Delete message_pins (FK → conversations, messages)
+        await db.execute(delete(MessagePin).where(MessagePin.conversation_id == conv_id))
+
+        # 6. Delete messages (FK → conversations)
+        await db.execute(delete(Message).where(Message.conversation_id == conv_id))
+
+        # 7. Delete conversation_participants (FK → conversations)
+        await db.execute(delete(ConversationParticipant).where(
+            ConversationParticipant.conversation_id == conv_id
+        ))
+
+        # 8. Delete conversation
         await db.execute(delete(Conversation).where(Conversation.id == conv_id))
         await db.commit()
-        return True
 

@@ -199,7 +199,7 @@ export interface SSEAgentStatus {
   version: string;
   event_id: string;
   conversation_id: string;
-  task_id: string;
+  message_id: string;
   subtask_id: string;
   agent: { id: string; name: string };
   status: "queued" | "running" | "success" | "failed" | "timeout";

@@ -1,7 +1,7 @@
 export interface Agent {
   id: string;
   name: string;
-  avatarUrl: string;
+  avatarUrl: string | null;
   provider: string;
   model: string;
   systemPrompt?: string;

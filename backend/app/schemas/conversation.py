@@ -14,6 +14,10 @@ class ConversationUpdate(BaseSchema):
     is_pinned: Optional[bool] = None
     agent_ids: Optional[List[UUID]] = None
 
+class PinMessageRequest(BaseSchema):
+    message_id: UUID
+
+
 class ConversationResponse(BaseSchema):
     id: UUID
     title: str

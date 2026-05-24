@@ -17,9 +17,13 @@
 | 3 | 分页格式 | 列表接口返回 `{ list: T[], total: number, page: number, pageSize: number }` |
 | 4 | 日期格式 | ISO 8601（`2026-05-20T10:00:00Z`） |
 | 5 | 消息内联产物 | `GET /messages` 响应中每条 message 直接包含 `artifacts[]` 数组，不做二次查询 |
-| 6 | 消息 sender_name | 查询时 JOIN `users`/`agents` 表，返回 `sender_name` 字段 |
-| 7 | SSE 协议 | 6 种事件（message_start / token / artifact / agent_status / message_end / error），格式见前端文档 5.6 节 |
+| 6 | 消息 sender_name | 查询时 JOIN `users`/`agents` 表，返回 `sender_name` 字段；**前端类型为 `senderName?: string`（可选），后端 Schema 必须为 `Optional[str]`** |
+| 7 | SSE 协议 | 6 种事件（message_start / token / artifact / agent_status / message_end / error），格式见前端文档 5.6 节；**artifact 对象字段使用 `artifactType`（camelCase），与 REST schema `ArtifactBrief.artifact_type` 序列化后一致** |
 | 8 | 会话 agentIds | 会话 API 返回 `agentIds: string[]`（从 participants 表聚合），前端不感知 participants 表 |
+| 9 | 查询参数命名 | 前端发送 camelCase 查询参数（如 `pageSize`），后端 Query 参数需添加 `alias` 支持（Pydantic `alias_generator` 仅对 body 生效） |
+| 10 | avatar_url 非空 | 前端 `Agent.avatarUrl: string` 为非可选字段，后端 `AgentBase.avatar_url` 默认空字符串 `""`，确保永不为 null |
+| 11 | sender_type / status 枚举 | 前端定义 `senderType: "user" \| "agent" \| "system" \| "orchestrator"`，`status: "pending" \| "streaming" \| "done" \| "failed"`，后端 `MessageResponse` 使用 `Literal` 类型校验 |
+| 12 | 消息 mode 字段 | 前端 `SendMessageRequest.mode?: "auto_orchestrate" \| "direct"` 为群聊预留，后端 `MessageCreate.mode` 已定义但暂不启用 |
 
 ---
 
@@ -70,9 +74,10 @@
 **后端 A（业务基础设施）：**
 - Docker Compose 拉起 PostgreSQL、Redis、MinIO
 - FastAPI 骨架：CORS、全局异常处理、连接池
-- **【关键】响应格式中间件**：实现 `{ code, data, message }` 统一包装
-- **【关键】Pydantic camelCase 配置**：`alias_generator=to_camel`，所有 Schema 继承统一 BaseModel
+- **【关键】响应格式中间件**：实现 `{ code, data, message }` 统一包装（`backend/app/core/middleware.py`，已完成）
+- **【关键】Pydantic camelCase 配置**：`alias_generator=to_camel`，所有 Schema 继承统一 BaseModel（`backend/app/schemas/base.py`，已完成）
 - 建表（10 张核心表）
+- **注意**：`alias_generator=to_camel` 仅对 request/response body 生效，查询参数需单独添加 `alias`（如 `page_size: Query(..., alias="pageSize")`）
 
 **后端 B（ADK 环境搭建）：**
 - `pip install google-adk==2.0.0 anthropic openai` — 安装 ADK + 模型 SDK
@@ -86,10 +91,12 @@
 - `POST/GET/PATCH/DELETE /api/v1/conversations` — 返回格式含 `agentIds`
 - 分页工具函数：`{ list, total, page, pageSize }`
 - 搜索：`keyword` → `ILIKE`；排序：置顶优先 + `last_active_at` 倒序
+- **注意**：`GET /conversations` 的 `page_size` 查询参数需加 `alias="pageSize"`，因前端发送 `pageSize` 而非 `page_size`
 
 **后端 B（[ADK] Agent CRUD + 模型配置验证）：**
 - `GET /api/v1/agents` — 返回前端期望的 Agent 模型
 - `POST /api/v1/agents`、`PATCH /api/v1/agents/{id}`
+- **注意**：`AgentBase.avatar_url` 默认 `""`（非 Optional），与前端 `avatarUrl: string` 非可选对齐
 - **【ADK 验证】** 用 AnthropicLlm 创建一个 LlmAgent 并验证模型连通性：
   ```python
   agent = LlmAgent(name="test", model="claude-sonnet-4-6",
@@ -101,6 +108,7 @@
 **后端 A（消息 API）：**
 - `POST /api/v1/conversations/{id}/messages` — 写入消息 + `mentions`
 - `GET /api/v1/conversations/{id}/messages` — 游标分页，JOIN artifacts + users/agents
+- **Schema 约束**：`MessageResponse.sender_type` 使用 `Literal["user","agent","system","orchestrator"]`；`status` 使用 `Literal["pending","streaming","done","failed"]`；`sender_name` 为 `Optional[str]`（用户消息可能无 sender_name）
 
 **后端 B（Mock SSE + ADK Runner 预研）：**
 - **Mock SSE 端点**：`GET /api/v1/conversations/{id}/stream`，模拟完整 6 种事件序列
