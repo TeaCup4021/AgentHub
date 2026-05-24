@@ -27,8 +27,8 @@
 
 | 角色 | 核心职责 | 自研组件 | ADK 相关工作 |
 |------|---------|---------|-------------|
-| **后端 A** | 业务 API + 数据层 | Context Assembler、Artifact Service、CapabilityRegistry、SpecManager、Meta-Agent | 调用 ADK Session API 读取/写入上下文 |
-| **后端 B** | ADK 集成 + 流式管道 + 编排 | ADK-to-SSE Translator、Orchestrator 两阶段协议、ExecutionTracer + DAGBuilder、MergeAggregator | LlmAgent 配置、Workflow Graph 构建、Runner 调用、Planner 集成、模型配置 |
+| **后端 A** | 业务 API + 数据层 | Pin/Spec 注入 Callback、Artifact Service、CapabilityRegistry、SpecManager CRUD、Meta-Agent | 利用 ADK Session/Memory/Callback 管理上下文（历史消息、状态、跨会话记忆均由 ADK 原生覆盖） |
+| **后端 B** | ADK 集成 + 流式管道 + 编排 | ADK-to-SSE Translator、Orchestrator 两阶段协议、ExecutionTracer Callback、MergeAggregator | LlmAgent 配置、Workflow Graph 构建、Runner 调用、Planner 集成、模型配置；ADK 原生提供 Session/State/Memory/retry/callback |
 | **前端** | UI 渲染 + 状态管理 | 聊天界面、SSE 客户端、卡片体系 | 消费 SSE 6事件协议 |
 
 ---
@@ -48,14 +48,16 @@
 
 | 自研组件 | 负责人 | 开始 | 完成 | 说明 |
 |---------|--------|------|------|------|
-| ADK-to-SSE Translator | 后端B | Day 4 | Day 6 | 最核心组件，Event→6事件SSE |
-| Context Assembler | 后端A | Day 6 | Day 7 | 历史+Pin+Rules 组装 |
-| Orchestrator 两阶段协议 | 后端B | Day 9 | Day 12 | 计划→确认→执行 |
-| CapabilityRegistry | 后端A | Day 9 | Day 14 | Agent 能力注册+匹配 |
-| Meta-Agent (Builder) | 后端A | Day 14 | Day 15 | 对话式创建 Agent |
-| ExecutionTracer + DAGBuilder | 后端B | Day 11 | Day 16 | 执行轨迹→DAG JSON |
-| SpecManager | 后端A | Day 14 | Day 15 | Spec CRUD + 注入 |
-| MergeAggregator | 后端B | Day 13 | Day 16 | 结果聚合+仲裁 |
+| ADK-to-SSE Translator | 后端B | Day 4 | Day 5 | 薄协议适配层，ADK Event → 6事件 SSE |
+| Pin/Spec 注入 Callback | 后端A | Day 6 | Day 6 | ~50行，替代原 Context Assembler；ADK Session 自动管理历史 |
+| Orchestrator 两阶段协议 | 后端B | Day 9 | Day 12 | 计划→确认→执行，利用 ADK Planner + state_delta |
+| ExecutionTracer Callback | 后端B | Day 11 | Day 11 | ~100行，after_agent_callback 收集计时；DAG 拓扑直接读 Workflow.edges |
+| CapabilityRegistry | 后端A | Day 9 | Day 14 | Agent 能力注册+匹配，可借力 ADK AgentRouter |
+| Meta-Agent (Builder) | 后端A | Day 14 | Day 15 | 对话式创建 Agent，本质是另一个 LlmAgent + DB 写入工具 |
+| SpecManager CRUD | 后端A | Day 14 | Day 15 | Spec CRUD + 版本管理；注入由 ADK callback/InstructionProvider 完成 |
+| MergeAggregator | 后端B | Day 13 | Day 16 | 结果聚合+仲裁，本质是 Orchestrator Agent instruction + 后处理 |
+
+> **ADK 原生覆盖、不再需要自研的领域**：Session 历史管理、Session.state 上下文状态、MemoryService 跨会话记忆、retry_config 容错重试、Workflow Graph DAG 拓扑、Planner 任务拆解、模型配置（AnthropicLlm/LiteLLM）、Context Compaction 上下文压缩。
 
 ---
 
@@ -114,14 +116,14 @@
 
 ## 第二阶段：完整串联 1v1 单聊（Day 4 - Day 8）
 
-*目标：打通真实 LLM 的首字节（TTFB）、流式渲染与历史上下文。这是前端 P0 第一个里程碑。*
+*目标：打通真实 LLM 的首字节（TTFB）、流式渲染与历史上下文。这是前端 P0 第一个里程碑。ADK 原生覆盖 Session 历史管理、State 上下文、Memory 跨会话记忆，自研部分聚焦于 SSE 协议转换和 Pin/Spec 注入。*
 
 ### Day 4-5：【ADK 核心】单聊 SSE 全链路
 
 **后端 B（主攻 — ADK 集成 + SSE Translator）：**
 
 **Day 4：ADK 配置 + Translator 骨架**
-- 配置 `AnthropicLlm`（Claude）和 LiteLLM（Codex/OpenCode）模型：
+- 配置 `AnthropicLlm`（Claude）和 LiteLLM（Codex/OpenCode）模型（ADK 原生，一行代码）：
   ```python
   from google.adk.models.anthropic_llm import AnthropicLlm
   claude = AnthropicLlm(model="claude-sonnet-4-6")
@@ -130,36 +132,41 @@
   - `ADKToSSETranslator` 类：消费 `Runner.run_async()` 的 `AsyncGenerator[Event]`
   - 实现 6 种 SSE 事件的转换函数：`_to_message_start()`、`_to_token()`、`_to_artifact()`、`_to_agent_status()`、`_to_message_end()`、`_to_error()`
   - 处理 ADK Event 关键字段：`partial`（流式增量）、`turn_complete`（完成）、`actions.end_of_agent`（子 Agent 结束）、`error_code`（错误）
-- 编写 `AgentHubRunner` 封装类，统一单聊/群聊的 ADK 调用入口
+- 编写 `AgentHubRunner` 薄封装类，统一单聊/群聊的 ADK 调用入口
 
 **Day 5：端到端打通**
 - `GET /api/v1/conversations/{id}/stream` → Forwarder → ADK Runner → Translator → SSE 响应
 - `POST /api/v1/messages/{id}/regenerate` → 重新触发 ADK 调用
 - 验证：用户发消息 → ADK LlmAgent 调用 Claude → token 流 → SSE → 前端气泡
+- **注意**：ADK Session 自动管理历史消息（`Session.events`），无需手动拼装上下文
 
-**后端 A（Context Assembler）：**
-- **[自研] Context Assembler** 初版 (`backend/app/services/context_assembler.py`)：
-  - `assemble_context(conversation_id)`: 读取最近 N 条消息 + pinned 消息
-  - 组装为 ADK `Content` 列表格式
-  - 注入到 `runner.run_async(new_message=...)` 前的 `session.state`
+**后端 A（Pin/Spec 注入 Callback）：**
+- **[自研] Pin + Spec 注入 Callback** (`backend/app/services/pin_spec_injector.py`)：
+  - 实现为一个 `before_agent_callback` 函数（~50 行），在每个 Agent 执行前：
+    1. 从 DB 读取当前会话的 Pinned 消息
+    2. 从 DB 读取适用的 Spec/Rules
+    3. 注入到 `LlmRequest.config.system_instruction` 中
+  - ADK Session.events 自动提供完整历史消息，**无需手动拼装**
+  - ADK Session.state + MemoryService 提供会话状态和跨会话记忆，**无需自研**
 - Pin/Unpin 消息端点
 
 **Day 5 检查点（[ADK] 单聊里程碑）：**
 - [ ] ADK AnthropicLlm 配置正确，Claude 模型可正常调用
 - [ ] SSE Translator 输出符合前端 6 事件协议格式
 - [ ] 用户发送消息 → Agent 流式回复 → 前端气泡实时更新（全链路通）
+- [ ] ADK Session 自动管理上下文，历史消息正确传递
 
 ### Day 6-7：上下文完善 + Artifact 初版
 
-**后端 A（Context Assembler 完善）：**
-- Context Assembler 增强：
-  - 截取最近 N 条消息 + pinned 列表合并
-  - 注入 Spec/Skill/Rules（从 SpecManager 读取）
-  - **[ADK]** 利用 ADK Session.state 存储上下文元数据
+**后端 A（Pin/Spec 注入完善）：**
+- Pin/Spec 注入 Callback 增强：
+  - 截取最近 N 条消息 + pinned 列表合并（消息历史由 ADK Session 自动管理，仅需额外处理 Pin）
+  - Spec/Rules 从 SpecManager 读取并注入（注入机制使用 ADK `before_agent_callback`）
+  - 利用 ADK `Session.state` + `{key}` 模板存储上下文元数据（**ADK 原生**）
 - 消息响应完善：`GET /messages` 确保内联 `artifacts[]` + `sender_name`
 
 **后端 B（[ADK+自研] Artifact 事件流）：**
-- 利用 ADK `EventActions.artifact_delta` + `custom_metadata` 机制推送产物
+- 利用 ADK `EventActions.artifact_delta` + `custom_metadata` 机制推送产物（**ADK 原生提供 artifact pipeline**）
 - SSE `artifact` 事件：在 Translator 中检测 `event.custom_metadata["artifact"]` → 转换为 artifact SSE 事件
 - Artifact 落库：`artifacts` 表写入
 - 验证不同模型（Claude/Codex）在 ADK 下的单聊输出一致性
@@ -200,13 +207,13 @@
 **后端 B（主攻 — [ADK] Planner + [自研] 计划生成）：**
 
 **Day 9：Planner 集成 + Plan Schema**
-- **[ADK]** 调用 `BuiltInPlanner`：将用户意图拆解为步骤列表
-- **[自研]** 将 ADK Planner 输出转为标准 Plan JSON：
+- **[ADK]** 调用 `BuiltInPlanner`：将用户意图拆解为步骤列表（**ADK 原生，一行 import**）
+- **[自研]** 将 ADK Planner 输出转为标准 Plan JSON（轻量格式转换）：
   ```json
   { "subtasks": [{ "agentId": "...", "agentName": "...", "instruction": "..." }] }
   ```
-- **[ADK]** 根据 Plan JSON 动态构建 Workflow Graph：
-  - 可并行子任务 → `Node(parallel_worker=True)`
+- **[ADK]** 根据 Plan JSON 动态构建 Workflow Graph（**ADK 原生 API**）：
+  - 可并行子任务 → 并行 Edge 路由
   - 有依赖子任务 → `Edge(from_node=A, to_node=B)`
   - 设置 `Workflow(max_concurrency=2)`
 - **[自研]** 计划消息存储：`sender_type="orchestrator"`，`artifact_type="plan"`
@@ -215,33 +222,34 @@
 - **[自研]** `POST /api/v1/conversations/{id}/orchestrator/confirm`：
   - 接收前端确认/调整后的 Plan JSON
   - 更新 Workflow Graph（如有调整）
-  - 设置 `state_delta={"plan_confirmed": True}` 触发执行阶段
-- **[ADK]** 利用 ADK `state_delta` 机制实现 Phase 1 → Phase 2 的状态传递
+  - 设置 `state_delta={"plan_confirmed": True}` 触发执行阶段（**ADK 原生 state_delta 机制**）
+- **[ADK]** 利用 ADK `state_delta` 实现 Phase 1 → Phase 2 的状态传递
 
 **后端 A（CapabilityRegistry + 计划 API）：**
 - **[自研] Agent CapabilityRegistry** 初版：
   - 管理 Agent 能力标签（从 `agents.capabilities` JSONB 读取）
   - `match_agents(required_capability: str) → List[Agent]` 查询接口
-  - 注入 ADK Planner instruction 作为路由提示
+  - 可借力 ADK `RoutedAgent`（实验性）实现简单路由；LLM-driven routing 通过 agent `description` 字段自动选择
 - `orchestrator` sender_type 加入消息模型
 
 ### Day 11-12：【ADK 核心】Workflow 并发执行 + SSE 直推
 
 **后端 B（主攻 — [ADK] Workflow 执行 + [自研] 状态映射）：**
 
-**Day 11：Workflow 执行**
-- **[ADK]** 将确认后的 Plan → 构建 Workflow Graph → `runner.run_async()` 执行
-- **[自研]** ExecutionTracer 初版：在 `after_agent_callback` 中收集：
-  - agent_name, start_time, end_time, status, branch
-- **[自研]** agent_status SSE 事件映射：
+**Day 11：Workflow 执行 + ExecutionTracer**
+- **[ADK]** 将确认后的 Plan → 构建 Workflow Graph → `runner.run_async()` 执行（**ADK 原生**）
+- **[自研]** ExecutionTracer Callback（~100行）：在 `after_agent_callback` 中收集：
+  - agent_name, start_time, end_time, status（延迟和状态在同一 callback 中记录）
+  - DAG 拓扑直接读取 `Workflow.edges`（**Graph 本身就是 DAG，无需自研 DAGBuilder**）
+- **[自研]** agent_status SSE 事件映射（Translator 的一部分）：
   - `actions.transfer_to_agent` → agent_status(status="running")
   - `actions.end_of_agent` → agent_status(status="done")
-  - `Event.branch` → subtask_id
+  - `Event.branch` → subtask_id（**ADK 原生字段**）
 
 **Day 12：并发流式合并**
 - **[ADK+自研]** 多 Agent 并发流式输出：
-  - ADK Workflow 并行执行各 Node
-  - Translator 按 `Event.branch` 区分不同 Agent 的 token 流
+  - ADK Workflow 并行执行各 Node（**ADK 原生，`max_concurrency` 参数控制**）
+  - Translator 按 `Event.branch`（**ADK 原生字段**）区分不同 Agent 的 token 流
   - 合并推送到同一 SSE 连接（携带不同 sender_id）
 - 如果并发 Demultiplexing 混乱 → Plan B2（串行推流）
 
@@ -256,7 +264,8 @@
   - 从 ADK Orchestrator Agent 的输出提取聚合摘要
   - 汇总消息写入 messages 表（sender_type="orchestrator"）
 - **[自研] DAG 数据接口** 骨架：`GET /api/v1/orchestrator/tasks/{id}/dag`
-  - 从 Workflow Graph edges + ExecutionTracer 收集的数据生成 DAG JSON
+  - 从 `Workflow.edges`（**ADK 原生 DAG 拓扑**）+ ExecutionTracer Callback 收集的计时数据生成 DAG JSON
+  - 原有 DAGBuilder 自研组件取消，替代为从 Workflow Graph 直接读取拓扑
 
 **后端 A：**
 - 群聊消息历史查询：支持按 sender 过滤
@@ -271,45 +280,47 @@
 
 ## 第四阶段：群聊完善 + 降级容错（Day 14 - Day 16）
 
-*目标：补齐群聊的异常路径和边界情况，确保 Demo 稳定性。*
+*目标：补齐群聊的异常路径和边界情况，确保 Demo 稳定性。ADK 原生提供 retry_config、error callbacks、Session 持久化，自研聚焦于错误码映射和 DAG 端点完善。*
 
 ### Day 14-15：自研组件补齐 + 容错降级
 
 **后端 B（[ADK] 容错 + [自研] 组件完善）：**
 
 **Day 14：ADK 容错机制**
-- **[ADK]** `retry_config` 配置：节点失败自动重试 3 次
-- **[ADK]** `on_model_error_callback`：捕获 ADK 超时/报错 → SSE `error` 事件
-- **[自研]** 错误码映射：AGENT_TIMEOUT / AGENT_UNAVAILABLE / RATE_LIMITED
+- **[ADK]** `retry_config` 配置：节点失败自动重试 3 次（**ADK 原生**）
+- **[ADK]** `on_model_error_callback`：捕获 ADK 超时/报错 → SSE `error` 事件（**ADK 原生 callback 类型**）
+- **[自研]** 错误码映射：AGENT_TIMEOUT / AGENT_UNAVAILABLE / RATE_LIMITED（轻量映射表）
 - SSE `error` 事件完善：`{ code, message, retryable }` 格式
 
 **Day 15：ExecutionTracer + DAGBuilder 完善**
-- **[自研]** ExecutionTracer 完善：
-  - 收集每个 Node 的 latency_ms、retry_count、status
-  - 从 Workflow Graph edges 提取拓扑依赖
+- **[自研]** ExecutionTracer Callback 完善：
+  - 在 `after_agent_callback` 中收集每个 Node 的 latency_ms、retry_count、status
+  - DAG 拓扑直接读取 `Workflow.edges`（无需自研 DAGBuilder）
 - **[自研]** `GET /api/v1/orchestrator/tasks/{id}/dag` 端点完善：
   - 返回 nodes（agentId, instruction, status, latency_ms, retry_count）
-  - 返回 edges（from_node, to_node, route 条件）
+  - 返回 edges（from_node, to_node, route 条件）— 直接从 Workflow.edges 读取
 
-**后端 A（[自研] CapabilityRegistry + Meta-Agent + SpecManager）：**
+**后端 A（[自研] CapabilityRegistry + Meta-Agent + SpecManager CRUD）：**
 
 **Day 14：CapabilityRegistry 完善**
 - **[自研]** Agent 能力标签 CRUD API
-- Context Assembler 集成：读取标签 → 注入 ADK instruction
+- Pin/Spec 注入 Callback 集成：读取标签 → 注入 ADK instruction
 
-**Day 15：Meta-Agent + SpecManager**
+**Day 15：Meta-Agent + SpecManager CRUD**
 - **[自研] Meta-Agent (Builder Agent)**：
+  - 本质是另一个 `LlmAgent`（**ADK 原生**）+ 写入 agents 表的 Tool
   - 识别"创建 Agent"意图 → 触发多轮对话流程
   - 基于 ADK LlmAgent 实现 Builder：收集需求 → 生成 System Prompt → 能力归类 → 落库
   - 创建完成后返回 Agent 卡片消息
-- **[自研] SpecManager**：
-  - Spec/Rules CRUD API
-  - Context Assembler 集成：在调用 ADK 前注入 Spec 到 `global_instruction`
+- **[自研] SpecManager CRUD**：
+  - Spec/Rules CRUD API（**需自研，AgentHub 业务逻辑**）
+  - 版本管理
+  - 注入部分由 Pin/Spec 注入 Callback 完成（利用 ADK `before_agent_callback`，**不再需要独立的注入引擎**）
 
 ### Day 16：Orchestrator 可视化 + 群聊异常路径联调
 
 **后端 B：**
-- **[自研]** MergeAggregator 完善：冲突检测 + 仲裁解释文本生成
+- MergeAggregator 完善：冲突检测 + 仲裁解释文本生成
 - DAG 数据接口最终联调
 
 **后端 A：**
@@ -325,7 +336,7 @@
 ### Day 17：P1 产物卡片支持
 
 **后端 B（[ADK+自研] 产物映射）：**
-- **[ADK]** 利用 `EventActions.artifact_delta` 机制推送产物二进制
+- **[ADK]** 利用 `EventActions.artifact_delta` 机制推送产物（**ADK 原生 artifact pipeline**）
 - **[自研]** Diff 解析：从 Agent 输出提取代码变更 → artifact type `diff`
 - **[自研]** Code artifact：artifact type `code`
 - ADK `custom_metadata` 规范：Agent 输出中包含 artifact 数据时，在 `custom_metadata["artifact"]` 中附带结构化 JSON
@@ -354,8 +365,8 @@
 ### Day 19：容错加固 + Demo 场景编排
 
 **后端 B（[ADK] 容错 + SSE 可靠性）：**
-- **[ADK]** 全局超时配置：`Workflow(max_concurrency=N, timeout=120.0)`
-- **[ADK]** SSE 断线重连：记录最后 event_id，重连时基于 ADK Session 恢复断点
+- **[ADK]** 全局超时配置：`Workflow(max_concurrency=N, timeout=120.0)`（**ADK 原生参数**）
+- **[ADK]** SSE 断线重连：记录最后 event_id，重连时基于 ADK Session 恢复断点（**ADK Session 持久化 + Resume 机制原生支持**）
 - **[自研]** 错误事件完善：映射 ADK `error_code` 到 AgentHub 错误码体系
 
 **后端 A：**
@@ -387,10 +398,13 @@
 ### Plan B3：ADK 模型回退 (Day 5 触发)
 若 AnthropicLlm 配置遇阻，改用 ADK LiteLLM 通用接口调用 Claude（LiteLLM 支持 100+ 模型，兼容性好）。
 
-### Plan B4：删除 P2 全部内容
+### Plan B4：ADK Session 回退 (Day 4 触发)
+若 `DatabaseSessionService`（PostgreSQL backend）配置遇阻，先使用 `InMemorySessionService` 完成功能验证，后续再切换到持久化后端。
+
+### Plan B5：删除 P2 全部内容
 若进度落后超过 2 天，砍掉 DeployStatusCard、Docker 沙箱、对话式 Agent 创建（降级为仅表单创建）。
 
-### Plan B5：前端自过滤 @mention
+### Plan B6：前端自过滤 @mention
 Agent 搜索建议 API 来不及做 → 前端从 `useAgents()` 缓存中过滤匹配。
 
 ---
@@ -403,13 +417,30 @@ Agent 搜索建议 API 来不及做 → 前端从 `useAgents()` 缓存中过滤�
 | 模型适配 | 自研适配器逐一对接 | ADK AnthropicLlm + LiteLLM (100+ 模型) | ADK 直接内置，零适配代码 |
 | 多 Agent 编排 | 自研状态机流转 | ADK Workflow (Node/Edge/JoinNode/max_concurrency) | Graph-based 编排更灵活，天然支持可视化 |
 | 流式输出 | 自研 SSE Generator | ADK Runner.run_async() → AsyncGenerator[Event] → 自研 Translator 转 SSE | ADK 提供完整 Event 模型，自研仅做协议转换 |
+| 上下文管理 | 自研 Context Assembler（历史+Pin+Rules+State） | **退化为 Pin/Spec 注入 Callback（~50行）+ ADK Session/State/Memory 原生管理** | ADK Session.events 自动历史、State 自动管理、MemoryService 跨会话记忆 |
+| DAG 执行轨迹 | 自研 ExecutionTracer + DAGBuilder（收集+构建拓扑） | **退化为 after_agent_callback 计时器 + 直接读 Workflow.edges 拓扑（~100行）** | ADK Workflow Graph 本身就是 DAG，edges 已定义完整拓扑 |
+| Spec 注入 | 自研注入引擎 | **ADK before_agent_callback + InstructionProvider 原生注入点** | ADK callback 可拦截并修改 LlmRequest，注入机制完全覆盖 |
+| 会话持久化 | 自研 Session 管理 | ADK SessionService (InMemory/Database/VertexAI backend) | ADK 提供多种后端，DatabaseSessionService 直接支持 PostgreSQL |
+| 容错与重试 | Python 层级重试 | ADK retry_config + error callbacks（**ADK 原生**） | 标准框架，更可靠 |
+| 上下文压缩 | 自研 | ADK Context Compaction（**ADK 原生**） | 长对话自动压缩 |
 | API 响应格式 | 无统一约定 | Day 1 建立 `{code,data,message}` 中间件 | 前端文档要求 |
 | 字段命名 | snake_case | snake_case 存储 + camelCase 序列化 | 前端全量 camelCase |
 | 消息内联产物 | 单独查询 | Day 3 起消息响应含 `artifacts[]` | 前端要求 |
-| 容错与重试 | Python 层级重试 | ADK retry_config + error callbacks | 标准框架，更可靠 |
-| 会话持久化 | 自研 Session 管理 | ADK SessionService (SQLite/PostgreSQL backend) | ADK 提供多种后端 |
-| 后端 B 角色 | ADK 集成 + 包装 | ADK 集成 + 5 个自研组件 (Translator/两阶段协议/ExecutionTracer/DAGBuilder/MergeAggregator) | 明确自研组件清单 |
-| 后端 A 角色 | 业务 API + CRUD | 业务 API + 5 个自研组件 (ContextAssembler/ArtifactService/CapabilityRegistry/SpecManager/MetaAgent) | 明确自研组件清单 |
+| 后端 B 角色 | ADK 集成 + 5 个自研组件 | ADK 集成 + **3 个自研组件** (Translator/两阶段协议/MergeAggregator) — ExecutionTracer 退化为 callback | 2 个组件被 ADK 原生覆盖或大幅缩减 |
+| 后端 A 角色 | 业务 API + 5 个自研组件 | 业务 API + **3 个自研组件** (CapabilityRegistry/SpecManager CRUD/MetaAgent) — Context Assembler 退化为 callback | 2 个组件被 ADK 原生覆盖或大幅缩减 |
+
+### 自研代码量估算变化
+
+| 组件 | 原估算 | 修正后 | 变化 |
+|------|--------|--------|------|
+| ADK-to-SSE Translator | ~150行 | ~150行 | 不变 |
+| Context Assembler | ~300行 | **~50行** (Pin/Spec Callback) | -83% |
+| ExecutionTracer + DAGBuilder | ~500行 | **~100行** (Callback + 读 Workflow.edges) | -80% |
+| SpecManager 注入部分 | ~200行 | **~20行** (ADK callback 注入) | -90% |
+| CapabilityRegistry | ~200行 | ~200行 | 不变 |
+| MergeAggregator | ~150行 | ~150行 | 不变 |
+| AgentHubRunner | ~100行 | ~100行 | 不变 |
+| **总计** | **~1600行** | **~770行** | **-52%** |
 
 ---
 
@@ -419,16 +450,29 @@ Agent 搜索建议 API 来不及做 → 前端从 `useAgents()` 缓存中过滤�
 |---------|-----------------|---------|
 | `LlmAgent(name, model, instruction, tools, sub_agents)` | 单聊/群聊 Agent 定义 | `google.adk.agents` |
 | `AnthropicLlm(model="claude-sonnet-4-6")` | Claude 模型配置 | `google.adk.models.anthropic_llm` |
+| `LiteLlm(model="openai/gpt-5")` | Codex/OpenCode 模型配置 | `google.adk.models.litellm` |
 | `Runner.run_async(user_id, session_id, new_message)` | 触发 Agent 执行，返回 Event 流 | `google.adk.runners` |
-| `Workflow(name, edges, max_concurrency)` | 多 Agent 编排拓扑 | `google.adk.workflow` |
-| `Node(name, agent, parallel_worker)` | Workflow 中的 Agent 节点 | `google.adk.workflow` |
-| `Edge(from_node, to_node, route)` | Workflow 中的有向边 | `google.adk.workflow` |
+| `Workflow(name, edges, max_concurrency)` | 多 Agent 编排拓扑（**本身就是 DAG**） | `google.adk.workflow` |
+| `Edge(from_node, to_node, route)` | Workflow 中的有向边（**即 DAG 拓扑**） | `google.adk.workflow` |
 | `Event(author, content, partial, turn_complete, actions, branch, ...)` | 流式事件模型 (SSE 转换源) | `google.adk.events` |
 | `EventActions(state_delta, artifact_delta, transfer_to_agent, end_of_agent)` | 事件流控动作 | `google.adk.events` |
-| `Session(id, state, events)` | 会话上下文 + 历史 | `google.adk.sessions` |
-| `before_agent_callback / after_agent_callback` | DAG 执行轨迹拦截点 | `LlmAgent` 参数 |
+| `Session(id, state, events)` | 会话上下文 + 历史（**events 自动管理**） | `google.adk.sessions` |
+| `SessionService` / `DatabaseSessionService` | 会话持久化（**支持 PostgreSQL**） | `google.adk.sessions` |
+| `MemoryService` / `InMemoryMemoryService` | 跨会话长期记忆（**搜索 + 注入**） | `google.adk.memory` |
+| `Session.state` / `{key}` 模板 | 会话状态 + 指令模板注入（**ADK 原生**） | `google.adk.sessions.state` |
+| `before_agent_callback / after_agent_callback` | 上下文注入 + 执行轨迹拦截点 | `LlmAgent` 参数 |
+| `before_model_callback / after_model_callback` | 模型请求/响应拦截（**Spec 注入 + Guardrail**） | `LlmAgent` 参数 |
+| `before_agent_callback → return Content` | 跳过 Agent 执行、直接返回（**缓存/权限控制**） | Callback 返回值机制 |
+| `before_model_callback → return LlmResponse` | 跳过 LLM 调用（**缓存命中/策略拦截**） | Callback 返回值机制 |
+| `CallbackContext.state / ToolContext.state` | Callback/Tool 中安全修改状态 | ADK Context 对象 |
+| `InstructionProvider` | 动态生成 Agent instruction（**可访问 state**） | `google.adk.agents.readonly_context` |
 | `BuiltInPlanner / PlanReActPlanner` | 任务拆解规划 | `google.adk.planners` |
 | `RunConfig(streaming_mode=StreamingMode.SSE)` | SSE 流式模式配置 | `google.adk.agents.run_config` |
+| `retry_config` | 失败自动重试（**ADK 原生**） | `LlmAgent` 参数 |
+| `Context Compaction` | 长对话自动压缩（**ADK 原生**） | `google.adk.context` |
+| `RoutedAgent` (实验性) | 多 Agent 路由选择（**可借力实现简单路由**） | `google.adk.agents.routing` |
+| `load_memory` / `preload_memory` | 内置记忆检索工具 | `google.adk.tools` |
+| `ContainerCodeExecutor` | 代码执行沙箱 | `google.adk.tools` |
 
 ---
 
