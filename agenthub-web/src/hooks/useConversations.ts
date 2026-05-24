@@ -1,13 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { conversationApi } from "@/lib/api";
-import type { CreateConversationParams } from "@/types";
+import type { CreateConversationParams, UpdateConversationParams, ConversationListParams } from "@/types";
 
-export function useConversations() {
+export function useConversations(params?: ConversationListParams) {
   return useQuery({
-    queryKey: ["conversations"],
+    queryKey: ["conversations", params],
     queryFn: async () => {
-      const res = await conversationApi.list();
-      return res.data.data;
+      const res = await conversationApi.list(params);
+      return res.data.data; // { list, total, page, pageSize }
     },
   });
 }
@@ -26,8 +26,10 @@ export function useConversation(id: string) {
 export function useCreateConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (params: CreateConversationParams) =>
-      conversationApi.create(params).then((r) => r.data.data),
+    mutationFn: async (params: CreateConversationParams) => {
+      const res = await conversationApi.create(params);
+      return res.data.data;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
   });
 }
@@ -35,8 +37,10 @@ export function useCreateConversation() {
 export function useUpdateConversation(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (updates: { title?: string; isPinned?: boolean; isArchived?: boolean }) =>
-      conversationApi.update(id, updates).then((r) => r.data.data),
+    mutationFn: async (updates: UpdateConversationParams) => {
+      const res = await conversationApi.update(id, updates);
+      return res.data.data;
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["conversations"] });
       qc.invalidateQueries({ queryKey: ["conversations", id] });
@@ -47,11 +51,12 @@ export function useUpdateConversation(id: string) {
 export function useUpdateAnyConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...updates }: { id: string; title?: string; isPinned?: boolean; isArchived?: boolean }) =>
-      conversationApi.update(id, updates).then((r) => r.data.data),
-    onSuccess: (_data, vars) => {
+    mutationFn: async ({ id, ...updates }: { id: string } & UpdateConversationParams) => {
+      const res = await conversationApi.update(id, updates);
+      return res.data.data;
+    },
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["conversations"] });
-      qc.invalidateQueries({ queryKey: ["conversations", vars.id] });
     },
   });
 }
@@ -59,7 +64,11 @@ export function useUpdateAnyConversation() {
 export function useDeleteConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => conversationApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+    mutationFn: async (id: string) => {
+      await conversationApi.delete(id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    },
   });
 }

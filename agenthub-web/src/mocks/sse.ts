@@ -1,4 +1,4 @@
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEMessageEnd, MessageContent } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEMessageEnd, Artifact } from "@/types";
 import { mockAgents, mockConversations } from "./data";
 import { addMockMessage } from "./handlers";
 import { generateId } from "@/lib/utils";
@@ -56,7 +56,8 @@ export function createMockSSEStream(
   const agent = mockAgents.find((a) => a.id === agentId) || mockAgents[0];
   const blocks = mockResponseTexts[agentId] || mockResponseTexts["agent-claude-code"];
 
-  const accumulatedContent: MessageContent[] = [];
+  let accumulatedText = "";
+  const accumulatedArtifacts: Artifact[] = [];
 
   let tokenIndex = 0;
 
@@ -94,13 +95,17 @@ export function createMockSSEStream(
   for (const block of blocks) {
     if (block.code) {
       const artifactId = `art-${generateId()}`;
-      const codeContent: MessageContent = {
-        type: "code",
-        language: block.language || "text",
-        code: block.code,
-        fileName: block.fileName,
+      const artifact: Artifact = {
+        id: artifactId,
+        artifactType: "code",
+        title: block.fileName,
+        content: { fileName: block.fileName, language: block.language || "text", code: block.code },
+        storageKey: null,
+        mimeType: null,
+        version: 1,
+        createdAt: new Date().toISOString(),
       };
-      accumulatedContent.push(codeContent);
+      accumulatedArtifacts.push(artifact);
       setTimeout(() => {
         if (cancelled) return;
         sendEvent("artifact", {
@@ -108,12 +113,7 @@ export function createMockSSEStream(
           event_id: `evt-${generateId()}`,
           conversation_id: conversationId,
           message_id: messageId,
-          artifact: {
-            id: artifactId,
-            type: "code",
-            title: block.fileName,
-            content: { fileName: block.fileName, language: block.language || "text", code: block.code },
-          },
+          artifact,
           timestamp: new Date().toISOString(),
         });
       }, delay);
@@ -121,7 +121,7 @@ export function createMockSSEStream(
     }
 
     if (block.text) {
-      accumulatedContent.push({ type: "text", text: block.text });
+      accumulatedText += block.text;
     }
 
     for (let i = 0; i < block.text.length; i++) {
@@ -147,12 +147,16 @@ export function createMockSSEStream(
     addMockMessage(conversationId, {
       id: messageId,
       conversationId,
-      role: "agent",
-      agentId: agent.id,
-      agentName: agent.name,
-      content: accumulatedContent,
+      senderType: "agent",
+      senderId: agent.id,
+      senderName: agent.name,
+      contentType: "text",
+      content: accumulatedText,
+      artifacts: accumulatedArtifacts,
       status: "done",
+      meta: null,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     sendEvent("message_end", {
       version: "v1",

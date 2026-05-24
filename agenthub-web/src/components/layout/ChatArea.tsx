@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useChatStore } from "@/stores/chatStore";
 import { useMessages } from "@/hooks/useMessages";
@@ -6,7 +6,8 @@ import { useAgents } from "@/hooks/useAgents";
 import { createSSEStream } from "@/lib/sse";
 import { messageApi } from "@/lib/api";
 import { ChatHeader, MessageList, ChatInput } from "@/components/chat";
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEMessageEnd, SSEError, MessageContent, Conversation } from "@/types";
+import type { InfiniteData } from "@tanstack/react-query";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEMessageEnd, SSEError, Conversation, Message, MessageListData } from "@/types";
 
 interface ChatAreaProps {
   conversations: Conversation[];
@@ -26,7 +27,16 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const streamAgentRef = useRef<string>("");
 
   const qc = useQueryClient();
-  const { data: rawMessages = [] } = useMessages(activeId);
+  const {
+    data: messagesData,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  } = useMessages(activeId ?? "");
+  const rawMessages = useMemo(
+    () => messagesData?.pages.flatMap((p) => p.items).reverse() ?? [],
+    [messagesData],
+  );
   const { data: agents = [] } = useAgents();
 
   const conversation = conversations.find((c) => c.id === activeId);
@@ -35,13 +45,41 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   const handleSend = useCallback(async (content: string) => {
     if (!activeId) return;
-    try {
-      await messageApi.send(activeId, { content, mode: "direct" });
-    } catch (err) {
+
+    const now = new Date().toISOString();
+    const optimisticMsg: Message = {
+      id: `msg-opt-${Date.now()}`,
+      conversationId: activeId,
+      senderType: "user",
+      senderId: "user-1",
+      senderName: "我",
+      contentType: "text",
+      content,
+      artifacts: [],
+      status: "done",
+      meta: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    qc.setQueryData(
+      ["messages", activeId],
+      (old: InfiniteData<MessageListData> | undefined) => {
+        if (!old) return old;
+        const newPages = old.pages.map((page, i) => {
+          if (i === 0) {
+            return { ...page, items: [optimisticMsg, ...page.items] };
+          }
+          return page;
+        });
+        return { ...old, pages: newPages };
+      },
+    );
+
+    messageApi.send(activeId, { content, mode: "direct" }).catch((err) => {
       console.error("消息发送失败:", err);
-      setIsStreaming(false);
-      return;
-    }
+      qc.invalidateQueries({ queryKey: ["messages", activeId] });
+    });
 
     disconnectRef.current?.();
     setIsStreaming(true);
@@ -57,7 +95,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       },
       onArtifact: (data: SSEArtifact) => {
         if (streamMsgIdRef.current) {
-          appendArtifact(streamMsgIdRef.current, mapArtifactToContent(data.artifact));
+          appendArtifact(streamMsgIdRef.current, data.artifact);
         }
       },
       onMessageEnd: (_data: SSEMessageEnd) => {
@@ -95,35 +133,11 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         streamingMessageId={streamMsgIdRef.current}
         streamingAgentName={streamAgentRef.current}
         isWaiting={isStreaming && !streamMsgIdRef.current}
+        hasMore={!!hasNextPage}
+        isFetchingMore={isFetchingNextPage}
+        onLoadMore={() => fetchNextPage()}
       />
       <ChatInput onSend={handleSend} disabled={isStreaming} />
     </div>
   );
-}
-
-function mapArtifactToContent(artifact: import("@/types").Artifact): MessageContent {
-  switch (artifact.type) {
-    case "code": {
-      const c = artifact.content as unknown as import("@/types").CodeArtifactContent;
-      return { type: "code", language: c.language, code: c.code, fileName: c.fileName };
-    }
-    case "diff": {
-      const c = artifact.content as unknown as import("@/types").DiffArtifactContent;
-      return { type: "diff", language: c.language, oldCode: c.oldCode, newCode: c.newCode, fileName: c.fileName };
-    }
-    case "preview": {
-      const c = artifact.content as unknown as import("@/types").PreviewArtifactContent;
-      return { type: "preview", url: c.url, title: c.title, previewType: c.previewType };
-    }
-    case "file": {
-      const c = artifact.content as unknown as import("@/types").FileArtifactContent;
-      return { type: "file", fileName: c.fileName, fileUrl: c.fileUrl, fileType: c.fileType, fileSize: c.fileSize };
-    }
-    case "deploy_status": {
-      const c = artifact.content as unknown as import("@/types").DeployStatusArtifactContent;
-      return { type: "deploy_status", status: c.status, url: c.url };
-    }
-    default:
-      return { type: "text", text: JSON.stringify(artifact.content) };
-  }
 }

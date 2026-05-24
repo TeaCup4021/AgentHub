@@ -1,22 +1,35 @@
-export interface AgentTool {
-  name: string;
-  description: string;
-}
-
 export interface Agent {
   id: string;
   name: string;
-  avatar: string;
-  provider: "claude-code" | "codex" | "opencode" | "custom";
-  capabilities: string[];
+  avatarUrl: string;
+  provider: string;
+  model: string;
   systemPrompt?: string;
-  tools: AgentTool[];
+  capabilities: string[];
+  toolConfig: Record<string, unknown>;
+  isBuiltin: boolean;
+  isActive: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateAgentParams {
   name: string;
-  avatar: string;
-  systemPrompt: string;
-  tools: string[];
+  avatarUrl?: string;
+  provider: string;
+  model: string;
+  systemPrompt?: string;
+  capabilities?: string[];
+  toolConfig?: Record<string, unknown>;
+}
+
+export interface UpdateAgentParams {
+  name?: string;
+  avatarUrl?: string;
+  provider?: string;
+  model?: string;
+  systemPrompt?: string;
+  capabilities?: string[];
+  toolConfig?: Record<string, unknown>;
+  isActive?: boolean;
 }

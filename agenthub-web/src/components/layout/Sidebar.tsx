@@ -224,7 +224,7 @@ export function Sidebar({ conversations, onCreateConversation }: SidebarProps) {
               </div>
               <p className="mt-0.5 truncate text-xs text-gray-500">
                 {conv.type === "group" && <span className="mr-1 rounded bg-blue-100 px-1 py-0.5 text-[10px] text-blue-600">群聊</span>}
-                {conv.lastMessage ? truncate(conv.lastMessage, 30) : "新对话"}
+                {conv.type === "group" ? "群聊" : "单聊"}
               </p>
             </div>
             <span className="shrink-0 text-[11px] text-gray-400">{formatRelativeTime(conv.lastActiveAt)}</span>
