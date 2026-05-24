@@ -3,21 +3,27 @@ import { useChatStore } from "@/stores/chatStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useUpdateAnyConversation, useDeleteConversation } from "@/hooks";
 import { formatRelativeTime, truncate } from "@/lib/utils";
-import type { Conversation } from "@/types";
+import { CreateAgentModal } from "@/components/agent";
+import type { Agent, Conversation } from "@/types";
 
 interface SidebarProps {
   conversations: Conversation[];
+  agents: Agent[];
   onCreateConversation: (title: string, type: "single" | "group", agentIds: string[]) => void;
 }
 
-export function Sidebar({ conversations, onCreateConversation }: SidebarProps) {
+export function Sidebar({ conversations, agents, onCreateConversation }: SidebarProps) {
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [newType, setNewType] = useState<"single" | "group">("single");
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [agentSearch, setAgentSearch] = useState("");
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [showCreateAgent, setShowCreateAgent] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -54,10 +60,21 @@ export function Sidebar({ conversations, onCreateConversation }: SidebarProps) {
 
   const handleNewConversation = useCallback(() => {
     if (!newTitle.trim()) return;
-    onCreateConversation(newTitle.trim(), "single", []);
+    onCreateConversation(newTitle.trim(), newType, selectedAgentIds);
     setNewTitle("");
+    setNewType("single");
+    setSelectedAgentIds([]);
+    setAgentSearch("");
     setShowNewDialog(false);
-  }, [newTitle, onCreateConversation]);
+  }, [newTitle, newType, selectedAgentIds, onCreateConversation]);
+
+  const openNewDialog = useCallback(() => {
+    setNewTitle("");
+    setNewType("single");
+    setSelectedAgentIds(agents.length > 0 ? [agents[0].id] : []);
+    setAgentSearch("");
+    setShowNewDialog(true);
+  }, [agents]);
 
   const handlePin = (conv: Conversation) => {
     updateConversation.mutate({ id: conv.id, isPinned: !conv.isPinned });
@@ -106,9 +123,15 @@ export function Sidebar({ conversations, onCreateConversation }: SidebarProps) {
           </svg>
         </button>
         <h1 className="flex-1 text-base font-semibold">AgentHub</h1>
-        <button onClick={() => setShowNewDialog(true)} className="rounded-md p-1.5 text-gray-500 hover:bg-sidebar-hover" title="新建对话">
+        <button onClick={openNewDialog} className="rounded-md p-1.5 text-gray-500 hover:bg-sidebar-hover" title="新建对话">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+        <button onClick={() => setShowCreateAgent(true)} className="rounded-md p-1.5 text-gray-500 hover:bg-sidebar-hover" title="创建 Agent">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 2a4 4 0 014 4v1h2a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V9a2 2 0 012-2h2V6a4 4 0 014-4z" />
+            <circle cx="9" cy="14" r="1.5" fill="currentColor" /><circle cx="15" cy="14" r="1.5" fill="currentColor" />
           </svg>
         </button>
       </div>
@@ -156,17 +179,111 @@ export function Sidebar({ conversations, onCreateConversation }: SidebarProps) {
       </nav>
 
       {showNewDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setShowNewDialog(false)}>
-          <div className="w-96 rounded-lg bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => { setShowNewDialog(false); setAgentSearch(""); }}>
+          <div className="w-[28rem] rounded-lg bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 className="mb-4 text-lg font-semibold">新建对话</h2>
+
             <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleNewConversation(); if (e.key === "Escape") setShowNewDialog(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter") handleNewConversation(); if (e.key === "Escape") { setShowNewDialog(false); setAgentSearch(""); } }}
               placeholder="输入对话标题..." autoFocus
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-400"
             />
+
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => {
+                  setNewType("single");
+                  setSelectedAgentIds((prev) => prev.length > 0 ? [prev[0]] : (agents.length > 0 ? [agents[0].id] : []));
+                }}
+                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+                  newType === "single"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                单聊
+              </button>
+              <button
+                onClick={() => setNewType("group")}
+                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
+                  newType === "group"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                群聊
+              </button>
+            </div>
+
+            <div className="mt-3">
+              <input
+                type="text"
+                value={agentSearch}
+                onChange={(e) => setAgentSearch(e.target.value)}
+                placeholder="搜索 Agent..."
+                className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+              />
+            </div>
+
+            <div className="mt-2 max-h-48 overflow-y-auto">
+              {agents
+                .filter((a) => a.isActive && (!agentSearch || a.name.toLowerCase().includes(agentSearch.toLowerCase())))
+                .map((agent) => {
+                  const selected = selectedAgentIds.includes(agent.id);
+                  return (
+                    <button
+                      key={agent.id}
+                      onClick={() => {
+                        if (newType === "single") {
+                          setSelectedAgentIds([agent.id]);
+                        } else {
+                          setSelectedAgentIds((prev) =>
+                            prev.includes(agent.id) ? prev.filter((id) => id !== agent.id) : [...prev, agent.id],
+                          );
+                        }
+                      }}
+                      className={`w-full flex items-center gap-3 rounded-md px-3 py-2 text-left transition-colors ${
+                        selected ? "bg-blue-50 ring-1 ring-blue-400" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white ${
+                        selected ? "bg-blue-500" : "bg-emerald-500"
+                      }`}>
+                        {agent.name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-sm font-medium">{agent.name}</p>
+                        <p className="truncate text-xs text-gray-500">{agent.model}</p>
+                      </div>
+                      {selected && (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0 text-blue-600">
+                          <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                      )}
+                      {newType === "group" && !selected && (
+                        <div className="h-4 w-4 shrink-0 rounded border-2 border-gray-300" />
+                      )}
+                    </button>
+                  );
+                })}
+              {agents.filter((a) => a.isActive).length === 0 && (
+                <p className="py-4 text-center text-sm text-gray-400">暂无可用的 Agent</p>
+              )}
+            </div>
+
+            {newType === "group" && selectedAgentIds.length < 2 && selectedAgentIds.length > 0 && (
+              <p className="mt-1 text-xs text-amber-600">群聊至少需要选择 2 个 Agent</p>
+            )}
+
             <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => setShowNewDialog(false)} className="rounded-md px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100">取消</button>
-              <button onClick={handleNewConversation} disabled={!newTitle.trim()}
+              <button onClick={() => { setShowNewDialog(false); setAgentSearch(""); }}
+                className="rounded-md px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100">取消</button>
+              <button onClick={handleNewConversation}
+                disabled={
+                  !newTitle.trim() ||
+                  selectedAgentIds.length === 0 ||
+                  (newType === "group" && selectedAgentIds.length < 2)
+                }
                 className="rounded-md bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50">创建</button>
             </div>
           </div>
@@ -204,6 +321,8 @@ export function Sidebar({ conversations, onCreateConversation }: SidebarProps) {
           </div>
         </div>
       )}
+
+      <CreateAgentModal open={showCreateAgent} onClose={() => setShowCreateAgent(false)} />
     </aside>
   );
 

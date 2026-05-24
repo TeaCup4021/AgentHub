@@ -39,7 +39,7 @@ export type GetConversationDetailResponse = ApiResponse<Conversation>;
 export type UpdateConversationRequest = UpdateConversationParams;
 export type UpdateConversationResponse = ApiResponse<Conversation>;
 
-export type DeleteConversationResponse = ApiResponse<null>;
+export type DeleteConversationResponse = ApiResponse<void>;
 
 export interface ConversationListParams {
   keyword?: string;
