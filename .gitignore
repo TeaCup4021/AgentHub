@@ -26,3 +26,16 @@ venv/
 
 # Backend env
 backend/.env
+
+# Superpowers (外部仓库，不作为本项目代码提交)
+superpowers/
+
+# 项目配置
+.claude/
+.superpowers/
+
+# 临时/参考文件
+clone/
+AgentHub-架构设计前端.md
+AgentHub-架构设计后端.md
+课题：AgentHub - 多 Agent 协作平台.md

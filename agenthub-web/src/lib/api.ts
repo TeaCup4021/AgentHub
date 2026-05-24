@@ -80,11 +80,11 @@ export const conversationApi = {
   },
 
   pinMessage(conversationId: string, messageId: string) {
-    return api.post<ApiResponse<null>>(`/conversations/${conversationId}/pins`, { message_id: messageId });
+    return api.post<ApiResponse<{ status: string }>>(`/conversations/${conversationId}/pins`, { message_id: messageId });
   },
 
   unpinMessage(conversationId: string, messageId: string) {
-    return api.delete<ApiResponse<null>>(`/conversations/${conversationId}/pins/${messageId}`);
+    return api.delete<ApiResponse<void>>(`/conversations/${conversationId}/pins/${messageId}`);
   },
 };
 
@@ -106,7 +106,7 @@ export const agentApi = {
   },
 
   verify(data: AgentVerifyRequest) {
-    return api.post<{ status: string; message: string }>("/agents/verify", data);
+    return api.post<ApiResponse<{ status: string; message: string }>>("/agents/verify", data);
   },
 };
 

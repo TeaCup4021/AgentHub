@@ -12,12 +12,12 @@ import type {
   Agent,
 } from "@/types";
 
-function delay(ms = 300): Promise<void> {
+function delay(ms = 50): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
 function paginatedResponse<T>(list: T[], page = 1, pageSize = 20): [200, PaginatedResponse<T>] {
-  return [200, { code: 200, data: { list, total: list.length, page, pageSize }, message: "success" }];
+  return [200, { code: 200, data: { list: [...list], total: list.length, page, pageSize }, message: "success" }];
 }
 
 function successResponse<T>(data: T): [200, ApiResponse<T>] {
