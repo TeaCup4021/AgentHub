@@ -95,6 +95,7 @@ export interface CreateConversationParams {
 
 export interface UpdateConversationParams {
   title?: string;
+  type?: ConversationType;
   isPinned?: boolean;
   isArchived?: boolean;
   agentIds?: string[];
