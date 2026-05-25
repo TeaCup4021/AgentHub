@@ -2,6 +2,7 @@ import { CodeCard } from "./CodeCard";
 import { DiffCard } from "./DiffCard";
 import { PreviewCard } from "./PreviewCard";
 import { FileCard } from "./FileCard";
+import { DeployStatusCard } from "./DeployStatusCard";
 import type { Artifact } from "@/types";
 import type { FC } from "react";
 
@@ -14,6 +15,7 @@ const cardRenderers: Record<string, FC<CardRendererProps>> = {
   diff: DiffCard,
   preview: PreviewCard,
   file: FileCard,
+  deploy_status: DeployStatusCard,
 };
 
 export function CardRenderer({ artifact }: CardRendererProps) {

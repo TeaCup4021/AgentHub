@@ -11,6 +11,7 @@ interface ChatUIState {
   searchQuery: string;
   isStreaming: boolean;
   streamingContent: Record<string, StreamingMessage>;
+  pendingMention: string | null;
 
   setActiveConversation: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
@@ -21,6 +22,7 @@ interface ChatUIState {
   finalizeStreamingMessage: (messageId: string) => void;
   getStreamingContent: (messageId: string) => StreamingMessage | undefined;
   clearStreamingContent: (messageId: string) => void;
+  setPendingMention: (name: string | null) => void;
 }
 
 export const useChatStore = create<ChatUIState>((set, get) => ({
@@ -28,6 +30,7 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   searchQuery: "",
   isStreaming: false,
   streamingContent: {},
+  pendingMention: null,
 
   setActiveConversation: (id) => set({ activeConversationId: id }),
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -82,4 +85,6 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
       const { [messageId]: _, ...rest } = s.streamingContent;
       return { streamingContent: rest };
     }),
+
+  setPendingMention: (name) => set({ pendingMention: name }),
 }));

@@ -1,15 +1,21 @@
 from uuid import UUID, uuid4
-from typing import Optional
+from typing import Optional, AsyncGenerator
 from datetime import datetime, timezone
 import asyncio
 import json
-from fastapi import APIRouter, Depends, Query, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.schemas.conversation import ConversationCreate, ConversationUpdate, ConversationResponse
+from app.schemas.conversation import ConversationCreate, ConversationUpdate, ConversationResponse, PinMessageRequest
 from app.schemas.base import Page
+from app.models.conversation import Conversation
+from app.models.message_pin import MessagePin
 from app.services.conversation import ConversationService
+from app.services.adapters.adk_to_sse import ADKToSSETranslator
+from app.services.adk.runner import AgentHubRunner, build_single_chat_agent
 
 # Assuming we have a dependency to get the current user ID
 # For now, we will mock it or expect it in requests. Assuming there's some `get_current_user`
@@ -21,12 +27,15 @@ async def get_current_user_id() -> UUID:
     # return a mock UUID, or should be replaced with real auth later
     return UUID("00000000-0000-0000-0000-000000000001")
 
+def _use_adk_stream() -> bool:
+    flag = os.getenv("AGENTHUB_USE_ADK_STREAM", "0").strip().lower()
+    return flag in {"1", "true", "yes"}
+
 router = APIRouter()
 
 
 def _format_sse(event_name: str, data: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(data)}\n\n"
-
 
 async def _mock_sse_stream(conv_id: UUID):
     message_id = str(uuid4())
@@ -54,16 +63,20 @@ async def _mock_sse_stream(conv_id: UUID):
     events.append(("artifact", build_payload({
         "artifact": {
             "id": str(uuid4()),
-            "type": "code",
+            "artifactType": "code",
             "title": "mock_snippet.py",
             "content": {"language": "python", "code": "print('hello')"},
+            "storageKey": None,
+            "mimeType": None,
+            "version": 1,
+            "createdAt": datetime.now(timezone.utc).isoformat(),
         }
     })))
     events.append(("agent_status", {
         "version": "v1",
         "event_id": str(uuid4()),
         "conversation_id": str(conv_id),
-        "task_id": message_id,
+        "message_id": message_id,
         "subtask_id": "branch-demo",
         "agent": {"id": "demo-agent", "name": "Demo Agent"},
         "status": "running",
@@ -74,21 +87,31 @@ async def _mock_sse_stream(conv_id: UUID):
         "finish_reason": "completed",
         "usage": {"input_tokens": 12, "output_tokens": 8},
     })))
-    events.append(("error", build_payload({
-        "code": "MOCK_ERROR",
-        "message": "This is a mock error event.",
-        "retryable": False,
-    })))
-
     for event_name, data in events:
         yield _format_sse(event_name, data)
         await asyncio.sleep(0.05)
 
 
-@router.get("/", response_model=Page[ConversationResponse])
+async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -> AsyncGenerator[str, None]:
+    prompt_text = (prompt or "Hello from AgentHub").strip()
+    agent = build_single_chat_agent()
+    runner = AgentHubRunner(agent=agent)
+    translator = ADKToSSETranslator()
+    event_stream = runner.stream_single_chat(
+        user_id=str(user_id),
+        session_id=str(conv_id),
+        message=prompt_text,
+    )
+    async for payload in translator.translate(
+        event_stream=event_stream,
+        conversation_id=str(conv_id),
+    ):
+        yield payload
+
+@router.get("", response_model=Page[ConversationResponse])
 async def get_conversations(
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    page_size: int = Query(10, ge=1, le=100, alias="pageSize"),
     keyword: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id)
@@ -97,7 +120,7 @@ async def get_conversations(
         db=db, user_id=user_id, page=page, page_size=page_size, keyword=keyword
     )
 
-@router.post("/", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     data: ConversationCreate,
     db: AsyncSession = Depends(get_db),
@@ -123,9 +146,65 @@ async def delete_conversation(
     await ConversationService.delete_conversation(db=db, user_id=user_id, conv_id=conv_id)
 
 
+@router.get("/{conv_id}", response_model=ConversationResponse)
+async def get_conversation(
+    conv_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id)
+):
+    return await ConversationService.get_conversation(db, conv_id)
+
+
+@router.post("/{conv_id}/pins", status_code=status.HTTP_201_CREATED)
+async def pin_message(
+    conv_id: UUID,
+    data: PinMessageRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id)
+):
+    conv = await db.get(Conversation, conv_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    pin = MessagePin(
+        conversation_id=conv_id,
+        message_id=data.message_id,
+        created_by=user_id,
+    )
+    db.add(pin)
+    await db.commit()
+    return {"status": "pinned"}
+
+
+@router.delete("/{conv_id}/pins/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unpin_message(
+    conv_id: UUID,
+    message_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id)
+):
+    result = await db.execute(
+        select(MessagePin).where(
+            MessagePin.conversation_id == conv_id,
+            MessagePin.message_id == message_id,
+        )
+    )
+    pin = result.scalar_one_or_none()
+    if not pin:
+        raise HTTPException(status_code=404, detail="Pin not found")
+    await db.delete(pin)
+    await db.commit()
+    return
+
+
 @router.get("/{conv_id}/stream")
 async def stream_conversation(
     conv_id: UUID,
-    user_id: UUID = Depends(get_current_user_id)
+    user_id: UUID = Depends(get_current_user_id),
+    prompt: Optional[str] = Query(None),
 ):
+    if _use_adk_stream():
+        return StreamingResponse(
+            _adk_sse_stream(conv_id, user_id, prompt),
+            media_type="text/event-stream",
+        )
     return StreamingResponse(_mock_sse_stream(conv_id), media_type="text/event-stream")

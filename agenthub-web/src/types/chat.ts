@@ -95,6 +95,7 @@ export interface CreateConversationParams {
 
 export interface UpdateConversationParams {
   title?: string;
+  type?: ConversationType;
   isPinned?: boolean;
   isArchived?: boolean;
   agentIds?: string[];
@@ -199,7 +200,7 @@ export interface SSEAgentStatus {
   version: string;
   event_id: string;
   conversation_id: string;
-  task_id: string;
+  message_id: string;
   subtask_id: string;
   agent: { id: string; name: string };
   status: "queued" | "running" | "success" | "failed" | "timeout";

@@ -12,12 +12,12 @@ import type {
   Agent,
 } from "@/types";
 
-function delay(ms = 300): Promise<void> {
+function delay(ms = 50): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
 function paginatedResponse<T>(list: T[], page = 1, pageSize = 20): [200, PaginatedResponse<T>] {
-  return [200, { code: 200, data: { list, total: list.length, page, pageSize }, message: "success" }];
+  return [200, { code: 200, data: { list: [...list], total: list.length, page, pageSize }, message: "success" }];
 }
 
 function successResponse<T>(data: T): [200, ApiResponse<T>] {
@@ -202,6 +202,38 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       const [, responseBody] = successResponse(agents);
       config.adapter = () =>
         Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /agents/:id
+    else if (method === "get" && /^\/agents\/[^/]+$/.test(url)) {
+      const id = url.split("/").pop()!;
+      await delay();
+      const agent = agents.find((a) => a.id === id);
+      if (agent) {
+        const [, responseBody] = successResponse(agent);
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+      } else {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 404, data: { code: 404, message: "Agent not found" } } });
+      }
+    }
+
+    // PATCH /agents/:id
+    else if (method === "patch" && /^\/agents\/[^/]+$/.test(url)) {
+      const id = url.split("/").pop()!;
+      const body = parseBody(config) as unknown as { name?: string; provider?: string; model?: string; systemPrompt?: string };
+      await delay();
+      const idx = agents.findIndex((a) => a.id === id);
+      if (idx >= 0) {
+        agents[idx] = { ...agents[idx], ...body, updatedAt: new Date().toISOString() };
+        const [, responseBody] = successResponse(agents[idx]);
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+      } else {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 404, data: { code: 404, message: "Agent not found" } } });
+      }
     }
 
     // POST /agents

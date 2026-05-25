@@ -1,7 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { CardRenderer } from "@/components/cards";
-import type { Message } from "@/types";
+import { AgentDetailPopover } from "./AgentDetailPopover";
+import { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
+import type { Agent, Message } from "@/types";
 
 function TextBubble({ text }: { text: string }) {
   return <p className="whitespace-pre-wrap">{text}</p>;
@@ -16,14 +18,66 @@ function StreamingTextBubble({ text }: { text: string }) {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, agents }: { message: Message; agents: Agent[] }) {
   const isUser = message.senderType === "user";
+  const isOrchestrator = message.senderType === "orchestrator";
+  const agent = !isUser && !isOrchestrator && message.senderId
+    ? agents.find((a) => a.id === message.senderId)
+    : null;
+
+  const avatarRef = useRef<HTMLDivElement>(null);
+  const [showPopover, setShowPopover] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
+
+  const closeAll = useCallback(() => {
+    setShowPopover(false);
+    setShowMenu(false);
+  }, []);
+
+  const handleAvatarClick = useCallback(() => {
+    if (!agent || !avatarRef.current) return;
+    const rect = avatarRef.current.getBoundingClientRect();
+    setPopoverPos({ top: rect.bottom + 4, left: rect.left });
+    setShowPopover((prev) => !prev);
+    setShowMenu(false);
+  }, [agent]);
+
+  const handleAvatarContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!agent) return;
+    e.preventDefault();
+    setMenuPos({ top: e.clientY, left: e.clientX });
+    setShowMenu(true);
+    setShowPopover(false);
+  }, [agent]);
+
+  const avatarCursor = agent ? "cursor-pointer" : "";
+
   return (
     <div className={`flex gap-3 px-4 py-3 ${isUser ? "flex-row-reverse" : ""}`}>
-      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white ${
-        isUser ? "bg-blue-500" : "bg-emerald-500"}`}>
+      <div
+        ref={avatarRef}
+        onClick={handleAvatarClick}
+        onContextMenu={handleAvatarContextMenu}
+        onMouseDown={(e) => {
+          if (showPopover || showMenu) e.stopPropagation();
+        }}
+        className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white select-none ${
+          isUser ? "bg-blue-500" : "bg-emerald-500"
+        } ${avatarCursor}`}
+        title={agent ? `${agent.name} - ${agent.model}` : undefined}
+      >
         {isUser ? "我" : (message.senderName || "A").charAt(0)}
       </div>
+
+      {showPopover && agent && (
+        <AgentDetailPopover agent={agent} position={popoverPos} onClose={closeAll} />
+      )}
+      {showMenu && agent && (
+        <AgentAvatarContextMenu agentName={agent.name} position={menuPos} onClose={closeAll} />
+      )}
+
       <div className={`max-w-[75%] ${isUser ? "text-right" : ""}`}>
         {!isUser && <p className="mb-1 text-xs font-medium text-gray-500">{message.senderName || "Agent"}</p>}
         <div className={`inline-block rounded-2xl px-4 py-2 text-sm leading-relaxed ${
@@ -74,6 +128,7 @@ function PendingMessageBubble() {
 
 interface MessageListProps {
   messages: Message[];
+  agents: Agent[];
   streamingMessageId?: string | null;
   streamingAgentName?: string;
   isWaiting?: boolean;
@@ -83,7 +138,7 @@ interface MessageListProps {
 }
 
 export function MessageList({
-  messages, streamingMessageId, streamingAgentName,
+  messages, agents, streamingMessageId, streamingAgentName,
   isWaiting, hasMore, isFetchingMore, onLoadMore,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -117,7 +172,7 @@ export function MessageList({
           <span className="text-xs text-gray-300">已加载全部消息</span>
         </div>
       )}
-      {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
+      {messages.map((msg) => <MessageBubble key={msg.id} message={msg} agents={agents} />)}
       {streamingMessageId && streamingAgentName && (
         <StreamingMessageBubble messageId={streamingMessageId} agentName={streamingAgentName} />
       )}
