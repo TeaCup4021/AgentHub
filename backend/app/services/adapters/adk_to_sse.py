@@ -85,10 +85,28 @@ class ADKToSSETranslator:
         message_id: str,
         state: _TranslationState,
     ) -> AsyncGenerator[dict, None]:
-        if not getattr(event, "partial", False):
-            return
         content = getattr(event, "content", None)
         parts = getattr(content, "parts", None) if content else None
+        if not getattr(event, "partial", False):
+            if not parts:
+                return
+            for part in parts:
+                text = getattr(part, "text", None)
+                if not text:
+                    continue
+                state.token_index_by_invocation.setdefault(message_id, 0)
+                state.token_index_by_invocation[message_id] += 1
+                yield {
+                    "version": self.version,
+                    "event_id": str(uuid.uuid4()),
+                    "conversation_id": conversation_id,
+                    "message_id": message_id,
+                    "delta": text,
+                    "index": state.token_index_by_invocation[message_id],
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            return
+
         if not parts:
             return
 

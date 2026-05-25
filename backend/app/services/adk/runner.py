@@ -1,3 +1,4 @@
+import os
 from typing import AsyncGenerator, Optional
 
 from google.adk.agents import LlmAgent
@@ -7,6 +8,7 @@ from google.adk.sessions import InMemorySessionService, BaseSessionService
 from google.genai import types
 
 from app.services.adk.models import get_anthropic_llm, get_litellm
+from app.services.pin_spec_injector import before_model_callback
 
 _DEFAULT_SESSION_SERVICE = InMemorySessionService()
 
@@ -16,12 +18,19 @@ def build_single_chat_agent(
     model_name: Optional[str] = None,
     instruction: str = "You are a helpful assistant.",
 ) -> LlmAgent:
-    provider = model_provider.lower()
+    provider = os.getenv("AGENTHUB_MODEL_PROVIDER", model_provider).lower()
+    env_model = os.getenv("AGENTHUB_MODEL_NAME")
+    resolved_model = model_name or env_model
     if provider in ("anthropic", "anthropicllm", "claude"):
-        model = get_anthropic_llm(model=model_name or "claude-sonnet-4-6")
+        model = get_anthropic_llm(model=resolved_model or "claude-sonnet-4-6")
     else:
-        model = get_litellm(model=model_name or "openai/codex")
-    return LlmAgent(name="agenthub_default", model=model, instruction=instruction)
+        model = get_litellm(model=resolved_model or "openai/codex")
+    return LlmAgent(
+        name="agenthub_default",
+        model=model,
+        instruction=instruction,
+        before_model_callback=before_model_callback,
+    )
 
 
 class AgentHubRunner:
@@ -53,6 +62,7 @@ class AgentHubRunner:
                 parts=[types.Part.from_text(text=message)],
             ),
             run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            state_delta={"conversation_id": session_id},
         ):
             yield event
 
@@ -66,4 +76,3 @@ class AgentHubRunner:
         except Exception:
             # Session may already exist.
             return
-
