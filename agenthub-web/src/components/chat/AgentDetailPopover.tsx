@@ -56,6 +56,20 @@ export function AgentDetailPopover({ agent, position, onClose }: AgentDetailPopo
             ))}
           </div>
         </div>
+        {(() => {
+          const tools = agent.toolConfig?.tools as string[] | undefined;
+          if (tools && tools.length > 0) return (
+            <div>
+              <span className="text-gray-500">工具</span>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {tools.map((t: string) => (
+                  <span key={t} className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700 font-mono text-[11px]">{t}</span>
+                ))}
+              </div>
+            </div>
+          );
+          return null;
+        })()}
         {agent.systemPrompt && (
           <div>
             <span className="text-gray-500">系统提示词</span>

@@ -3,7 +3,8 @@ import { useChatStore } from "@/stores/chatStore";
 import { CardRenderer } from "@/components/cards";
 import { AgentDetailPopover } from "./AgentDetailPopover";
 import { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
-import type { Agent, Message } from "@/types";
+import type { Agent, Message, ThinkingStep } from "@/types";
+import { ThinkingBlock } from "./ThinkingBlock";
 
 function TextBubble({ text }: { text: string }) {
   return <p className="whitespace-pre-wrap">{text}</p>;
@@ -35,6 +36,8 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
     setShowPopover(false);
     setShowMenu(false);
   }, []);
+
+  const thinkingSteps = (message.meta?.thinking_steps as ThinkingStep[] | undefined) ?? [];
 
   const handleAvatarClick = useCallback(() => {
     if (!agent || !avatarRef.current) return;
@@ -82,6 +85,7 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
         {!isUser && <p className="mb-1 text-xs font-medium text-gray-500">{message.senderName || "Agent"}</p>}
         <div className={`inline-block rounded-2xl px-4 py-2 text-sm leading-relaxed ${
           isUser ? "bg-chat-bubble-user text-gray-900" : "bg-chat-bubble-agent text-gray-800"}`}>
+          {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
           {message.content && <TextBubble text={message.content} />}
           {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
         </div>
@@ -101,6 +105,7 @@ function StreamingMessageBubble({ messageId, agentName }: { messageId: string; a
       <div className="max-w-[75%]">
         <p className="mb-1 text-xs font-medium text-gray-500">{agentName || "Agent"}</p>
         <div className="inline-block rounded-2xl px-4 py-2 text-sm leading-relaxed bg-chat-bubble-agent text-gray-800">
+          {sc.thinkingSteps.length > 0 && <ThinkingBlock steps={sc.thinkingSteps} isStreaming />}
           {sc.content && <StreamingTextBubble text={sc.content} />}
           {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
         </div>
