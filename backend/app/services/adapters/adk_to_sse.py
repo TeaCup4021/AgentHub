@@ -130,7 +130,8 @@ class ADKToSSETranslator:
         actions = getattr(event, "actions", None)
         has_action_artifact = bool(actions and getattr(actions, "artifact_delta", None))
         custom_metadata = getattr(event, "custom_metadata", None)
-        has_custom_artifact = isinstance(custom_metadata, dict) and bool(custom_metadata.get("artifact"))
+        custom_artifact = custom_metadata.get("artifact") if isinstance(custom_metadata, dict) else None
+        has_custom_artifact = isinstance(custom_artifact, dict) and bool(custom_artifact)
         if not has_action_artifact and not has_custom_artifact:
             return None
         artifact = self._extract_artifact(event)
@@ -239,7 +240,7 @@ class ADKToSSETranslator:
     def _extract_artifact(self, event: Event) -> dict:
         custom_metadata = getattr(event, "custom_metadata", None) or {}
         artifact = custom_metadata.get("artifact") if isinstance(custom_metadata, dict) else None
-        if artifact:
+        if isinstance(artifact, dict) and artifact:
             return artifact
 
         actions = getattr(event, "actions", None)
