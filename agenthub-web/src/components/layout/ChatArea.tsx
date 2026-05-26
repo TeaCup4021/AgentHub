@@ -76,8 +76,24 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const sendRef = useRef<(convId: string, content: string, mentions: string[]) => void>(null!);
 
   useEffect(() => {
+    disconnectRef.current?.();
+    if (streamMsgIdRef.current) {
+      finalizeStreaming(streamMsgIdRef.current);
+    }
+    streamMsgIdRef.current = null;
+    streamAgentRef.current = "";
+    setIsStreaming(false);
     clearAgentStatuses();
-    return () => disconnectRef.current?.();
+
+    return () => {
+      disconnectRef.current?.();
+      if (streamMsgIdRef.current) {
+        finalizeStreaming(streamMsgIdRef.current);
+        streamMsgIdRef.current = null;
+        streamAgentRef.current = "";
+      }
+      setIsStreaming(false);
+    };
   }, [activeId]);
 
   const executeSend = useCallback((convId: string, content: string, mentions: string[], conv: Conversation | undefined) => {
@@ -199,6 +215,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           useTokenUsageStore.getState().addUsage({
             conversationId: convId,
             conversationTitle: conv.title,
+            agentName: streamAgentRef.current || "Agent",
             inputTokens: data.usage.input_tokens,
             outputTokens: data.usage.output_tokens,
             totalTokens: data.usage.input_tokens + data.usage.output_tokens,
@@ -268,6 +285,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
               if (data.usage && conv) {
                 useTokenUsageStore.getState().addUsage({
                   conversationId: convId, conversationTitle: conv.title,
+                  agentName: streamAgentRef.current || "Agent",
                   inputTokens: data.usage.input_tokens, outputTokens: data.usage.output_tokens,
                   totalTokens: data.usage.input_tokens + data.usage.output_tokens,
                   estimatedCost: estimateCost(data.usage.input_tokens, data.usage.output_tokens, conv.agentIds[0]),
@@ -434,6 +452,52 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         isFetchingMore={isFetchingNextPage}
         onLoadMore={() => fetchNextPage()}
       />
+      {rawMessages.length === 0 && !isStreaming && (
+        <div style={{
+          padding: "0 16px 16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}>
+          <p style={{
+            fontSize: "var(--font-size-sm)",
+            color: "var(--color-text-tertiary)",
+            textAlign: "center",
+            marginBottom: 4,
+          }}>
+            试试这些话题：
+          </p>
+          {["帮我写一个 React 组件", "解释一下这段代码", "帮我设计一个 API 接口"].map((starter) => (
+            <button
+              key={starter}
+              onClick={() => handleSend(starter, [])}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "10px 16px",
+                border: "1px solid var(--color-border-light)",
+                borderRadius: "var(--radius-md)",
+                background: "var(--color-bg-elevated)",
+                fontSize: "var(--font-size-md)",
+                color: "var(--color-text-secondary)",
+                cursor: "pointer",
+                transition: "all var(--duration-fast) var(--ease-out)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-primary)";
+                e.currentTarget.style.color = "var(--color-primary)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-border-light)";
+                e.currentTarget.style.color = "var(--color-text-secondary)";
+              }}
+            >
+              {starter}
+            </button>
+          ))}
+        </div>
+      )}
       <ChatInput key={activeId} onSend={handleSend} disabled={isStreaming} agents={agents} />
 
       {switchData && conversation && (

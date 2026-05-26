@@ -87,6 +87,21 @@
   - `"sse_disconnect"` — SSE 流在中途触发 onConnectionError
 - 均为前端本地模拟，不影响后端实现。后端开发时可参考这些场景做异常测试。
 
+## 17) Agent 删除接口（新增于 2026-05-27 P1 前端）
+
+- **前端调用**：`DELETE /api/v1/agents/{agent_id}`
+- **前端代码**：`lib/api.ts` 的 `agentApi.delete(id)`，返回 `ApiResponse<void>`
+- **后端现状**：`backend/app/api/v1/agents.py` 当前仅有 GET/POST/PATCH/verify 路由，**缺少 DELETE 端点**
+- **期望实现**：标准 REST 删除，返回 `{ code: 200, data: null, message: "ok" }`
+- **前端使用场景**：AgentManageModal 中删除 Agent，使用 `useDeleteAgent`（乐观更新 + 失败回滚）
+
+## 18) Token 用量 agentName 字段（新增于 2026-05-27 P1 前端）
+
+- **前端 Store**：`tokenUsageStore.ts` 的 `TokenUsage` 和 `TokenEvent` 均新增 `agentName: string` 字段
+- **数据来源**：前端本地传入（调用 `addUsage` 时从当前消息 sender.name 获取），不从后端 API 获取
+- **后端影响**：无。当前 `message_end.usage` 仅含 `input_tokens / output_tokens`，前端自行补充 agentName
+- **未来对齐**：若后端在 `message_end.usage` 中增加 `agent_name` 字段，前端可直接消费
+
 ---
 
 ## 来源
@@ -98,5 +113,10 @@
 - `backend/app/schemas/message.py`
 - `agenthub-web/docs/specs/2026-05-24-api-alignment-round2.md`
 - `agenthub-web/src/types/chat.ts`
-- `vibeCodingPlan/AgentHub-前端-Day01-P0核心体验链路.md`（本次）
-- `vibeCodingSummary/2026-05-26-p0-core-experience.md`（本次）
+- `vibeCodingPlan/AgentHub-前端-Day01-P0核心体验链路.md`
+- `vibeCodingSummary/2026-05-26-p0-core-experience.md`
+- `vibeCodingPlan/AgentHub-前端-Day02-完整版-Semi-Design+P0+P1.md`（本次）
+- `vibeCodingSummary/2026-05-27-semi-design-p0-p1-complete.md`（本次）
+- `agenthub-web/src/stores/tokenUsageStore.ts`
+- `agenthub-web/src/lib/api.ts`
+- `backend/app/api/v1/agents.py`

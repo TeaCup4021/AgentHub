@@ -269,6 +269,16 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       }
     }
 
+    // DELETE /agents/:id
+    else if (method === "delete" && /^\/agents\/[^/]+$/.test(url)) {
+      const id = url.split("/").pop()!;
+      await delay();
+      agents = agents.filter((a) => a.id !== id);
+      const [, responseBody] = successResponse(null);
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
     // POST /agents
     else if (method === "post" && url === "/agents") {
       const body = parseBody(config) as unknown as CreateAgentRequest;

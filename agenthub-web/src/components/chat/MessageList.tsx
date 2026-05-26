@@ -6,6 +6,7 @@ import { CardRenderer } from "@/components/cards";
 import { AgentDetailPopover } from "./AgentDetailPopover";
 import { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
 import { MarkdownBubble } from "./MarkdownBubble";
+import { MessageActions } from "./MessageActions";
 import { formatTime, formatFullTime } from "@/lib/formatTime";
 import type { Agent, Message, ThinkingStep } from "@/types";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -136,28 +137,34 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
             {message.senderName || "Agent"}
           </p>
         )}
-        <div style={{
-          display: "inline-block",
-          borderRadius: "var(--radius-lg)",
-          padding: "8px 16px",
-          fontSize: "var(--font-size-md)",
-          lineHeight: 1.6,
-          background: isFailed && isUser
-            ? "var(--color-bg-hover)"
-            : isUser
-              ? "var(--color-bubble-user-bg)"
-              : "var(--color-bubble-agent-bg)",
-          color: isUser ? "var(--color-bubble-user-text)" : "var(--color-text-primary)",
-          border: isFailed && isUser
-            ? "1px solid var(--color-danger)"
-            : !isUser
-              ? "1px solid var(--color-bubble-agent-border)"
-              : "none",
-          boxShadow: !isUser ? "var(--shadow-sm)" : "none",
-        }}>
-          {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
-          {message.content && <MarkdownBubble text={message.content} />}
-          {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+        <div className="message-bubble-wrap" style={{ position: "relative", display: "inline-block" }}>
+          <div style={{
+            borderRadius: "var(--radius-lg)",
+            padding: "8px 16px",
+            fontSize: "var(--font-size-md)",
+            lineHeight: 1.6,
+            background: isFailed && isUser
+              ? "var(--color-bg-hover)"
+              : isUser
+                ? "var(--color-bubble-user-bg)"
+                : "var(--color-bubble-agent-bg)",
+            color: isUser ? "var(--color-bubble-user-text)" : "var(--color-text-primary)",
+            border: isFailed && isUser
+              ? "1px solid var(--color-danger)"
+              : !isUser
+                ? "1px solid var(--color-bubble-agent-border)"
+                : "none",
+            boxShadow: !isUser ? "var(--shadow-sm)" : "none",
+          }}>
+            {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
+            {message.content && <MarkdownBubble text={message.content} />}
+            {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+          </div>
+          <MessageActions
+            message={message}
+            isStreaming={message.status === "streaming"}
+            isFailed={message.status === "failed"}
+          />
         </div>
         {isFailed && isUser && (
           <p style={{ marginTop: 4, fontSize: "var(--font-size-xs)", color: "var(--color-danger)", display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>

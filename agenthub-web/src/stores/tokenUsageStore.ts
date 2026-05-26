@@ -3,14 +3,26 @@ import { create } from "zustand";
 export interface TokenUsage {
   conversationId: string;
   conversationTitle: string;
+  agentName: string;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
   estimatedCost: number;
 }
 
+export interface TokenEvent {
+  timestamp: string;
+  conversationId: string;
+  conversationTitle: string;
+  agentName: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+}
+
 interface TokenUsageState {
   usageMap: Record<string, TokenUsage>;
+  events: TokenEvent[];
   addUsage: (usage: TokenUsage) => void;
   getByConversation: (convId: string) => TokenUsage | undefined;
   getAll: () => TokenUsage[];
@@ -31,11 +43,23 @@ export function estimateCost(inputTokens: number, outputTokens: number, model?: 
 
 export const useTokenUsageStore = create<TokenUsageState>((set, get) => ({
   usageMap: {},
+  events: [],
   addUsage: (usage) =>
     set((s) => {
       const existing = s.usageMap[usage.conversationId];
+      const event: TokenEvent = {
+        timestamp: new Date().toISOString(),
+        conversationId: usage.conversationId,
+        conversationTitle: usage.conversationTitle,
+        agentName: usage.agentName,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        estimatedCost: usage.estimatedCost,
+      };
+
       if (existing) {
         return {
+          events: [...s.events, event],
           usageMap: {
             ...s.usageMap,
             [usage.conversationId]: {
@@ -48,7 +72,10 @@ export const useTokenUsageStore = create<TokenUsageState>((set, get) => ({
           },
         };
       }
-      return { usageMap: { ...s.usageMap, [usage.conversationId]: usage } };
+      return {
+        events: [...s.events, event],
+        usageMap: { ...s.usageMap, [usage.conversationId]: usage },
+      };
     }),
   getByConversation: (convId) => get().usageMap[convId],
   getAll: () => Object.values(get().usageMap),

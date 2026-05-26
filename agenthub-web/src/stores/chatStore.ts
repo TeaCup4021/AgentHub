@@ -18,6 +18,7 @@ interface ChatUIState {
   connectionStatus: ConnectionStatus;
   retryCount: number;
   interruptedMessageId: string | null;
+  pendingQuote: { messageId: string; content: string } | null;
 
   setActiveConversation: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
@@ -33,6 +34,7 @@ interface ChatUIState {
   setConnectionStatus: (status: ConnectionStatus) => void;
   setRetryCount: (n: number) => void;
   setInterruptedMessageId: (id: string | null) => void;
+  setPendingQuote: (quote: { messageId: string; content: string } | null) => void;
 }
 
 export const useChatStore = create<ChatUIState>((set, get) => ({
@@ -44,6 +46,7 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   connectionStatus: 'connected',
   retryCount: 0,
   interruptedMessageId: null,
+  pendingQuote: null,
 
   setActiveConversation: (id) => set({ activeConversationId: id }),
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -126,4 +129,6 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   setRetryCount: (n) => set({ retryCount: n }),
   setInterruptedMessageId: (id) => set({ interruptedMessageId: id }),
+
+  setPendingQuote: (quote) => set({ pendingQuote: quote }),
 }));

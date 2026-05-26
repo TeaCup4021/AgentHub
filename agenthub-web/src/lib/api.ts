@@ -108,6 +108,10 @@ export const agentApi = {
   verify(data: AgentVerifyRequest) {
     return api.post<ApiResponse<{ status: string; message: string }>>("/agents/verify", data);
   },
+
+  delete(id: string) {
+    return api.delete<ApiResponse<void>>(`/agents/${id}`);
+  },
 };
 
 export interface AgentVerifyRequest {

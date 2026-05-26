@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { Card, Typography, Empty } from "@douyinfe/semi-ui";
+import { Card, Typography } from "@douyinfe/semi-ui";
 import { useTokenUsageStore } from "@/stores/tokenUsageStore";
+import { TokenCharts } from "./TokenCharts";
 
 export function TokenUsagePanel() {
   const usageMap = useTokenUsageStore((s) => s.usageMap);
@@ -48,8 +49,8 @@ export function TokenUsagePanel() {
         </Card>
       </div>
 
-      {usages.length > 0 ? (
-        <Card bodyStyle={{ padding: 0 }}>
+      {usages.length > 0 && (
+        <Card bodyStyle={{ padding: 0 }} style={{ marginBottom: 16 }}>
           <div style={{
             display: "grid",
             gridTemplateColumns: "1fr 120px 120px 120px",
@@ -95,9 +96,9 @@ export function TokenUsagePanel() {
               </div>
             ))}
         </Card>
-      ) : (
-        <Empty title="暂无用量数据" description="完成对话后自动统计" />
       )}
+
+      <TokenCharts />
     </section>
   );
 }

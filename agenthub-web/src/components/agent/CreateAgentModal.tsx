@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Modal, Input, Select, TextArea, Tag, Switch } from "@douyinfe/semi-ui";
-import { useCreateAgent } from "@/hooks/useAgents";
+import { useCreateAgent, useUpdateAgent } from "@/hooks/useAgents";
+import type { Agent } from "@/types";
 
 interface CreateAgentModalProps {
   open: boolean;
   onClose: () => void;
+  initialData?: Agent;
 }
 
 const PROVIDERS = [
@@ -27,7 +29,9 @@ const AVAILABLE_TOOLS = [
 
 const CAPABILITY_OPTIONS = ["coding", "docs", "ui", "reasoning", "testing"];
 
-export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
+export function CreateAgentModal({ open, onClose, initialData }: CreateAgentModalProps) {
+  const isEdit = !!initialData;
+
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("anthropic");
   const [model, setModel] = useState("claude-sonnet-4-6");
@@ -36,6 +40,26 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
   const [tools, setTools] = useState<string[]>([]);
 
   const createAgent = useCreateAgent();
+  const updateAgent = useUpdateAgent(initialData?.id ?? "");
+
+  useEffect(() => {
+    if (open && initialData) {
+      setName(initialData.name);
+      setProvider(initialData.provider);
+      setModel(initialData.model);
+      setSystemPrompt(initialData.systemPrompt ?? "");
+      setCapabilities(initialData.capabilities ?? []);
+      const existingTools = (initialData.toolConfig as { tools?: string[] } | undefined)?.tools;
+      setTools(existingTools ?? []);
+    } else if (open && !initialData) {
+      setName("");
+      setSystemPrompt("");
+      setCapabilities([]);
+      setTools([]);
+      setProvider("anthropic");
+      setModel("claude-sonnet-4-6");
+    }
+  }, [open, initialData]);
 
   const toggleCapability = (cap: string) =>
     setCapabilities((prev) =>
@@ -47,45 +71,62 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
       prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool]
     );
 
-  const handleCreate = () => {
+  const resetForm = () => {
+    setName("");
+    setSystemPrompt("");
+    setCapabilities([]);
+    setTools([]);
+    setProvider("anthropic");
+    setModel("claude-sonnet-4-6");
+  };
+
+  const handleSubmit = () => {
     if (!name.trim()) return;
-    createAgent.mutate(
-      {
-        name: name.trim(),
-        avatarUrl: "",
-        provider,
-        model,
-        systemPrompt: systemPrompt.trim(),
-        capabilities,
-        toolConfig: { tools },
-      },
-      {
+
+    const params = {
+      name: name.trim(),
+      avatarUrl: "",
+      provider,
+      model,
+      systemPrompt: systemPrompt.trim(),
+      capabilities,
+      toolConfig: { tools },
+    };
+
+    if (isEdit) {
+      updateAgent.mutate(params, {
+        onSuccess: (data) => {
+          toast.success(`Agent "${data?.name || name.trim()}" 更新成功`);
+          resetForm();
+          onClose();
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : "更新失败，请重试");
+        },
+      });
+    } else {
+      createAgent.mutate(params, {
         onSuccess: (data) => {
           toast.success(`Agent "${data?.name || name.trim()}" 创建成功`);
-          setName("");
-          setSystemPrompt("");
-          setCapabilities([]);
-          setTools([]);
-          setProvider("anthropic");
-          setModel("claude-sonnet-4-6");
+          resetForm();
           onClose();
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : "创建失败，请重试");
         },
-      }
-    );
+      });
+    }
   };
 
   return (
     <Modal
       visible={open}
-      title="创建 Agent"
+      title={isEdit ? "编辑 Agent" : "创建 Agent"}
       onCancel={onClose}
-      onOk={handleCreate}
+      onOk={handleSubmit}
       okButtonProps={{
-        disabled: !name.trim() || createAgent.isPending,
-        loading: createAgent.isPending,
+        disabled: !name.trim() || createAgent.isPending || updateAgent.isPending,
+        loading: createAgent.isPending || updateAgent.isPending,
       }}
       cancelButtonProps={{ theme: "borderless" }}
       maskClosable

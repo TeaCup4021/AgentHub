@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -19,21 +19,24 @@ import {
   IconArchive,
   IconRestore,
   IconUserGroup,
-  IconSetting,
+  IconDownload,
 } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import { useUpdateAnyConversation, useDeleteConversation } from "@/hooks";
 import { formatRelativeTime, truncate } from "@/lib/utils";
-import { CreateAgentModal } from "@/components/agent";
-import type { Agent, Conversation } from "@/types";
+import { CreateAgentModal, AgentManageModal } from "@/components/agent";
+import { ConversationSkeleton } from "@/components/chat/Skeleton";
+import { exportConversation } from "@/lib/exportConversation";
+import type { Agent, Conversation, Message } from "@/types";
 
 interface ConversationListProps {
   conversations: Conversation[];
   agents: Agent[];
+  isLoading?: boolean;
   onCreateConversation: (title: string, type: "single" | "group", agentIds: string[]) => void;
 }
 
-export function ConversationList({ conversations, agents, onCreateConversation }: ConversationListProps) {
+export function ConversationList({ conversations, agents, isLoading, onCreateConversation }: ConversationListProps) {
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newType, setNewType] = useState<"single" | "group">("single");
@@ -44,6 +47,9 @@ export function ConversationList({ conversations, agents, onCreateConversation }
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showCreateAgent, setShowCreateAgent] = useState(false);
+  const [showManageAgents, setShowManageAgents] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const activeId = useChatStore((s) => s.activeConversationId);
   const searchQuery = useChatStore((s) => s.searchQuery);
@@ -130,6 +136,68 @@ export function ConversationList({ conversations, agents, onCreateConversation }
     });
   }, [confirmDeleteId, activeId, qc, deleteConversation]);
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const exitBatchMode = useCallback(() => {
+    setBatchMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  useEffect(() => {
+    if (!batchMode) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") exitBatchMode(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [batchMode, exitBatchMode]);
+
+  const handleBatchArchive = useCallback(() => {
+    let count = 0;
+    for (const id of selectedIds) {
+      updateConversation.mutate({ id, isArchived: true });
+      if (activeId === id) setActiveConversation(null);
+      count++;
+    }
+    toast.success(`已归档 ${count} 个对话`);
+    exitBatchMode();
+  }, [selectedIds, updateConversation, activeId, setActiveConversation, exitBatchMode]);
+
+  const handleBatchDelete = useCallback(() => {
+    let count = 0;
+    for (const id of selectedIds) {
+      deleteConversation.mutate(id);
+      if (activeId === id) setActiveConversation(null);
+      count++;
+    }
+    toast.success(`已删除 ${count} 个对话`);
+    exitBatchMode();
+  }, [selectedIds, deleteConversation, activeId, setActiveConversation, exitBatchMode]);
+
+  const handleExport = useCallback((conv: Conversation) => {
+    const messagesData = qc.getQueryData(["messages", conv.id]);
+    if (!messagesData) {
+      toast.error("暂无消息数据可导出");
+      return;
+    }
+    const pages = (messagesData as { pages?: { items: Message[] }[] }).pages;
+    if (!pages) {
+      toast.error("暂无消息数据可导出");
+      return;
+    }
+    const items = pages.flatMap((p) => p.items).reverse();
+    if (items.length === 0) {
+      toast.error("暂无消息数据可导出");
+      return;
+    }
+    exportConversation(items, conv.title);
+    toast.success("导出成功");
+  }, [qc]);
+
   const renderConversationItem = (conv: Conversation, isArchived: boolean) => {
     return (
       <Dropdown
@@ -147,6 +215,7 @@ export function ConversationList({ conversations, agents, onCreateConversation }
                 { node: "item", name: conv.isPinned ? "取消置顶" : "置顶", icon: <IconMapPin /> },
                 { node: "item", name: "重命名", icon: <IconEdit /> },
                 { node: "item", name: "归档", icon: <IconArchive /> },
+                { node: "item", name: "导出", icon: <IconDownload /> },
                 { node: "divider" },
                 { node: "item", name: "删除", icon: <IconDelete />, className: "semi-dropdown-item-danger" },
               ]
@@ -156,11 +225,15 @@ export function ConversationList({ conversations, agents, onCreateConversation }
           if (item.name === "重命名") handleRenameStart(conv);
           if (item.name === "归档") handleArchive(conv.id);
           if (item.name === "取消归档") handleUnarchive(conv.id);
+          if (item.name === "导出") handleExport(conv);
           if (item.name === "删除") { setConfirmDeleteId(conv.id); }
         }}
       >
         <div
-          onClick={() => { if (!isArchived) setActiveConversation(conv.id); }}
+          onClick={() => {
+            if (batchMode) { toggleSelect(conv.id); return; }
+            if (!isArchived) setActiveConversation(conv.id);
+          }}
           style={{
             display: "flex",
             alignItems: "flex-start",
@@ -168,7 +241,11 @@ export function ConversationList({ conversations, agents, onCreateConversation }
             gap: 8,
             padding: "10px 16px",
             cursor: "pointer",
-            background: conv.id === activeId ? "var(--color-bg-active)" : "transparent",
+            background: selectedIds.has(conv.id)
+              ? "var(--color-bg-active)"
+              : conv.id === activeId && !batchMode
+                ? "var(--color-bg-active)"
+                : "transparent",
             opacity: isArchived ? 0.6 : 1,
             transition: "background var(--duration-fast) var(--ease-out)",
           }}
@@ -179,6 +256,27 @@ export function ConversationList({ conversations, agents, onCreateConversation }
             if (conv.id !== activeId) e.currentTarget.style.background = "transparent";
           }}
         >
+          {batchMode && (
+            <div
+              onClick={(e) => { e.stopPropagation(); toggleSelect(conv.id); }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 18,
+                height: 18,
+                borderRadius: 2,
+                border: `2px solid ${selectedIds.has(conv.id) ? "var(--color-primary)" : "var(--color-border-medium)"}`,
+                background: selectedIds.has(conv.id) ? "var(--color-primary)" : "transparent",
+                color: "#fff",
+                fontSize: 10,
+                flexShrink: 0,
+                marginTop: 3,
+              }}
+            >
+              {selectedIds.has(conv.id) && "✓"}
+            </div>
+          )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {conv.isPinned && !isArchived && (
@@ -212,8 +310,7 @@ export function ConversationList({ conversations, agents, onCreateConversation }
       display: "flex",
       flexDirection: "column",
       height: "100%",
-      width: "var(--conv-list-width)",
-      flexShrink: 0,
+      width: "100%",
       background: "var(--color-bg-sidebar)",
       borderRight: "1px solid var(--color-border-light)",
     }}>
@@ -237,8 +334,19 @@ export function ConversationList({ conversations, agents, onCreateConversation }
           icon={<IconUserGroup />}
           theme="borderless"
           size="small"
-          onClick={() => setShowCreateAgent(true)}
+          onClick={() => setShowManageAgents(true)}
         />
+        <Button
+          theme="borderless"
+          size="small"
+          onClick={() => { setBatchMode(!batchMode); setSelectedIds(new Set()); }}
+          style={{
+            color: batchMode ? "var(--color-primary)" : "var(--color-text-tertiary)",
+            fontWeight: batchMode ? 500 : 400,
+          }}
+        >
+          {batchMode ? "完成" : "批量"}
+        </Button>
       </div>
 
       <div style={{ padding: "0 12px 8px" }}>
@@ -252,7 +360,9 @@ export function ConversationList({ conversations, agents, onCreateConversation }
       </div>
 
       <nav style={{ flex: 1, overflowY: "auto" }}>
-        {active.length === 0 && archived.length === 0 ? (
+        {isLoading ? (
+          Array.from({ length: 5 }).map((_, i) => <ConversationSkeleton key={i} />)
+        ) : active.length === 0 && archived.length === 0 ? (
           <Empty
             title={searchQuery ? "没有找到匹配的对话" : "暂无对话"}
             description={searchQuery ? undefined : "点击 + 创建新对话"}
@@ -284,24 +394,23 @@ export function ConversationList({ conversations, agents, onCreateConversation }
         )}
       </nav>
 
-      <div style={{
-        borderTop: "1px solid var(--color-border-light)",
-        padding: "8px 12px",
-      }}>
-        <Button
-          theme="borderless"
-          block
-          icon={<IconSetting />}
-          onClick={() => window.location.href = "/settings"}
-          style={{
-            justifyContent: "flex-start",
-            fontSize: "var(--font-size-sm)",
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          设置
-        </Button>
-      </div>
+      {batchMode && selectedIds.size > 0 && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "12px 16px",
+          borderTop: "1px solid var(--color-border-light)",
+          background: "var(--color-bg-elevated)",
+        }}>
+          <span style={{ flex: 1, fontSize: "var(--font-size-sm)", color: "var(--color-text-secondary)" }}>
+            已选 {selectedIds.size} 项
+          </span>
+          <Button size="small" onClick={handleBatchArchive}>归档</Button>
+          <Button size="small" type="danger" onClick={handleBatchDelete}>删除</Button>
+          <Button size="small" theme="borderless" onClick={exitBatchMode}>取消</Button>
+        </div>
+      )}
 
       <Modal
         visible={showNewDialog}
@@ -473,6 +582,7 @@ export function ConversationList({ conversations, agents, onCreateConversation }
       </Modal>
 
       <CreateAgentModal open={showCreateAgent} onClose={() => setShowCreateAgent(false)} />
+      <AgentManageModal open={showManageAgents} onClose={() => setShowManageAgents(false)} />
     </div>
   );
 }

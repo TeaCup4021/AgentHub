@@ -118,7 +118,7 @@ export function HighlightedCode({
         {html ? (
           <div
             dangerouslySetInnerHTML={{ __html: html }}
-            className="[&_pre]:!bg-transparent [&_pre]:!p-0 [&_code]:!bg-transparent"
+            className="shiki-code-block [&_pre]:!bg-transparent [&_pre]:!p-0 [&_code]:!bg-transparent [&_.line]:!min-w-0"
           />
         ) : (
           <pre>

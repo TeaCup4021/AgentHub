@@ -12,10 +12,35 @@
   50% { opacity: 0; }
 }
 
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .streaming-cursor::after {
   content: "|";
   animation: blink 1s step-end infinite;
   color: var(--color-primary);
+}
+
+.shiki-code-block code {
+  counter-reset: line 0;
+}
+.shiki-code-block .line {
+  counter-increment: line;
+}
+.shiki-code-block .line::before {
+  content: counter(line);
+  display: inline-block;
+  width: 2.5em;
+  margin-right: 1em;
+  color: #858585;
+  text-align: right;
+  user-select: none;
+}
+
+.message-bubble-wrap:hover .message-actions {
+  opacity: 1 !important;
 }
 
 html, body, #root {
