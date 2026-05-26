@@ -1,3 +1,5 @@
+import { Card, Button } from "@douyinfe/semi-ui";
+import { IconDownload, IconFile } from "@douyinfe/semi-icons";
 import { formatFileSize } from "@/lib/utils";
 import type { Artifact, FileArtifactContent } from "@/types";
 
@@ -8,24 +10,28 @@ interface FileCardProps {
 export function FileCard({ artifact }: FileCardProps) {
   const c = artifact.content as unknown as FileArtifactContent;
   return (
-    <div className="my-2 rounded-md border border-gray-300 bg-white text-left">
+    <Card style={{ margin: "8px 0" }}>
       <a
         href={c.fileUrl}
         download
-        className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors"
+        style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", color: "inherit" }}
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 shrink-0">
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-          <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
-        </svg>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-gray-800 truncate">{c.fileName}</p>
-          <p className="text-[10px] text-gray-500">{formatFileSize(c.fileSize)} · {c.fileType}</p>
+        <IconFile style={{ fontSize: 20, color: "var(--color-text-tertiary)", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {c.fileName}
+          </p>
+          <p style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)", marginTop: 2 }}>
+            {formatFileSize(c.fileSize)} · {c.fileType}
+          </p>
         </div>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400 shrink-0">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-        </svg>
+        <Button
+          theme="borderless"
+          icon={<IconDownload />}
+          size="small"
+          style={{ flexShrink: 0 }}
+        />
       </a>
-    </div>
+    </Card>
   );
 }

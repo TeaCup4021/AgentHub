@@ -1,3 +1,5 @@
+import { Card, Tag, Spin, Button } from "@douyinfe/semi-ui";
+import { IconTickCircle, IconClear } from "@douyinfe/semi-icons";
 import type { Artifact, DeployStatusArtifactContent } from "@/types";
 
 interface DeployStatusCardProps {
@@ -9,45 +11,48 @@ export function DeployStatusCard({ artifact }: DeployStatusCardProps) {
 
   if (c.status === "building") {
     return (
-      <div className="my-2 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-left">
-        <div className="flex items-center gap-2.5">
-          <svg className="h-4 w-4 animate-spin text-yellow-600" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
-            <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
-          </svg>
-          <span className="text-sm font-medium text-yellow-700">构建中...</span>
+      <Card style={{ margin: "8px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Spin size="small" />
+          <span style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)" }}>
+            构建中...
+          </span>
+          <Tag size="small" color="orange" type="solid">构建中</Tag>
         </div>
-      </div>
+      </Card>
     );
   }
 
   if (c.status === "deployed") {
     return (
-      <div className="my-2 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-left">
-        <div className="flex items-center gap-2.5">
-          <svg className="h-4 w-4 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="text-sm font-medium text-green-700">部署成功</span>
+      <Card style={{ margin: "8px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <IconTickCircle style={{ color: "var(--color-success)" }} />
+          <span style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)" }}>
+            部署成功
+          </span>
+          <Tag size="small" color="green" type="solid">已部署</Tag>
         </div>
         {c.url && (
-          <a href={c.url} target="_blank" rel="noopener noreferrer"
-            className="mt-2 inline-block text-sm text-blue-600 underline hover:text-blue-800">
-            {c.url}
-          </a>
+          <div style={{ marginTop: 8 }}>
+            <Button theme="borderless" size="small" onClick={() => window.open(c.url, "_blank", "noopener,noreferrer")}>
+              {c.url}
+            </Button>
+          </div>
         )}
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className="my-2 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-left">
-      <div className="flex items-center gap-2.5">
-        <svg className="h-4 w-4 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span className="text-sm font-medium text-red-700">部署失败</span>
+    <Card style={{ margin: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <IconClear style={{ color: "var(--color-danger)" }} />
+        <span style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)" }}>
+          部署失败
+        </span>
+        <Tag size="small" color="red" type="solid">失败</Tag>
       </div>
-    </div>
+    </Card>
   );
 }

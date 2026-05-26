@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Card, Modal, Button } from "@douyinfe/semi-ui";
 import type { Artifact, PreviewArtifactContent } from "@/types";
 
 interface PreviewCardProps {
@@ -11,57 +12,44 @@ export function PreviewCard({ artifact }: PreviewCardProps) {
 
   return (
     <>
-      <div className="my-2 overflow-hidden rounded-md border border-gray-300 text-left">
-        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100">
-          <span className="text-xs text-gray-600">
+      <Card
+        style={{ margin: "8px 0", overflow: "hidden" }}
+        title={
+          <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-text-primary)" }}>
             {c.title || "预览"} ({c.previewType})
           </span>
-          <button
-            className="text-xs text-blue-600 hover:text-blue-800"
-            onClick={() => setExpanded(true)}
-          >
+        }
+        headerExtraContent={
+          <Button size="small" theme="borderless" onClick={() => setExpanded(true)}>
             展开
-          </button>
-        </div>
-        <div className="h-48 bg-white">
+          </Button>
+        }
+      >
+        <div style={{ height: 192, background: "#fff" }}>
           <iframe
             src={c.url}
             title={c.title || "preview"}
-            className="w-full h-full border-0"
+            style={{ width: "100%", height: "100%", border: "none" }}
             sandbox="allow-scripts allow-same-origin"
           />
         </div>
-      </div>
+      </Card>
 
-      {expanded && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setExpanded(false)}
-        >
-          <div
-            className="w-[90vw] h-[90vh] rounded-lg bg-white shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-2 border-b">
-              <span className="text-sm font-medium">{c.title || "全屏预览"}</span>
-              <button
-                className="text-gray-500 hover:text-gray-800 text-lg"
-                onClick={() => setExpanded(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div className="flex-1">
-              <iframe
-                src={c.url}
-                title={c.title || "preview"}
-                className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin"
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        visible={expanded}
+        fullScreen
+        onCancel={() => setExpanded(false)}
+        footer={null}
+        title={c.title || "全屏预览"}
+        bodyStyle={{ padding: 0, height: "calc(100% - 48px)" }}
+      >
+        <iframe
+          src={c.url}
+          title={c.title || "preview"}
+          style={{ width: "100%", height: "100%", border: "none" }}
+          sandbox="allow-scripts allow-same-origin"
+        />
+      </Modal>
     </>
   );
 }
