@@ -1,6 +1,8 @@
 import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Banner, Button, Empty } from "@douyinfe/semi-ui";
+import { IconComment } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import { useMessages } from "@/hooks/useMessages";
 import { useAgents } from "@/hooks/useAgents";
@@ -379,12 +381,12 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   if (!conversation) {
     return (
-      <div className="flex h-full flex-col items-center justify-center text-gray-400">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mb-4 opacity-40">
-          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-        </svg>
-        <p className="text-lg">选择或创建一个对话开始</p>
-        <p className="mt-1 text-sm">与 AI Agent 协作，生成代码、文档和更多产出</p>
+      <div style={{ display: "flex", height: "100%", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <Empty
+          image={<IconComment style={{ fontSize: 64, color: "var(--color-text-disabled)" }} />}
+          title="选择或创建一个对话开始"
+          description="与 AI Agent 协作，生成代码、文档和更多产出"
+        />
       </div>
     );
   }
@@ -393,27 +395,22 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     <div className="flex h-full flex-col">
       <ChatHeader conversation={conversation} agents={agents} />
       {connectionStatus === 'reconnecting' && (
-        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
-            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-          <span className="flex-1">连接已断开，正在重连... ({retryCount}/3)</span>
-        </div>
+        <Banner
+          type="warning"
+          closeIcon={null}
+          title={`连接已断开，正在重连... (${retryCount}/3)`}
+          style={{ borderRadius: 0 }}
+        />
       )}
       {connectionStatus === 'failed' && (
-        <div className="flex items-center gap-2 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
-            <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-          </svg>
-          <span className="flex-1">连接失败，请检查网络</span>
-          <button onClick={handleManualReconnect} className="rounded px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors">
-            重连
-          </button>
-          <button onClick={handleDismissBanner} className="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-red-100 transition-colors">
-            关闭
-          </button>
-        </div>
+        <Banner
+          type="danger"
+          title="连接失败，请检查网络"
+          style={{ borderRadius: 0 }}
+        >
+          <Button size="small" onClick={handleManualReconnect}>重连</Button>
+          <Button size="small" theme="borderless" onClick={handleDismissBanner} style={{ marginLeft: 8 }}>关闭</Button>
+        </Banner>
       )}
       {conversation.type === "group" && (
         <>

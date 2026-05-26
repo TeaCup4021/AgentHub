@@ -1,6 +1,8 @@
+import { Layout } from "@douyinfe/semi-ui";
 import { useConversations, useCreateConversation, useAgents } from "@/hooks";
 import { useChatStore } from "@/stores/chatStore";
-import { Sidebar } from "./Sidebar";
+import { IconSidebar } from "./IconSidebar";
+import { ConversationList } from "./ConversationList";
 import { ChatArea } from "./ChatArea";
 
 export function AppLayout() {
@@ -11,19 +13,27 @@ export function AppLayout() {
   const setActive = useChatStore((s) => s.setActiveConversation);
 
   return (
-    <div className="flex h-full">
-      <div className="w-80 shrink-0">
-        <Sidebar
-          conversations={conversations}
-          agents={agents}
-          onCreateConversation={(title, type, agentIds) => {
-            createConversation.mutate({ title, type, agentIds }, { onSuccess: (conv) => setActive(conv.id) });
-          }}
-        />
-      </div>
-      <main className="flex-1 bg-chat-bg">
+    <Layout style={{ height: "100%", display: "flex", flexDirection: "row" }}>
+      <IconSidebar />
+      <ConversationList
+        conversations={conversations}
+        agents={agents}
+        onCreateConversation={(title, type, agentIds) => {
+          createConversation.mutate(
+            { title, type, agentIds },
+            { onSuccess: (conv) => setActive(conv.id) },
+          );
+        }}
+      />
+      <Layout.Content style={{
+        flex: 1,
+        background: "var(--color-bg-chat)",
+        display: "flex",
+        flexDirection: "column",
+        minWidth: 0,
+      }}>
         <ChatArea conversations={conversations} />
-      </main>
-    </div>
+      </Layout.Content>
+    </Layout>
   );
 }
