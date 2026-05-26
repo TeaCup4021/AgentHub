@@ -7,12 +7,17 @@ interface StreamingMessage {
   thinkingSteps: ThinkingStep[];
 }
 
+export type ConnectionStatus = 'connected' | 'reconnecting' | 'failed';
+
 interface ChatUIState {
   activeConversationId: string | null;
   searchQuery: string;
   isStreaming: boolean;
   streamingContent: Record<string, StreamingMessage>;
   pendingMention: string | null;
+  connectionStatus: ConnectionStatus;
+  retryCount: number;
+  interruptedMessageId: string | null;
 
   setActiveConversation: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
@@ -25,6 +30,9 @@ interface ChatUIState {
   getStreamingContent: (messageId: string) => StreamingMessage | undefined;
   clearStreamingContent: (messageId: string) => void;
   setPendingMention: (name: string | null) => void;
+  setConnectionStatus: (status: ConnectionStatus) => void;
+  setRetryCount: (n: number) => void;
+  setInterruptedMessageId: (id: string | null) => void;
 }
 
 export const useChatStore = create<ChatUIState>((set, get) => ({
@@ -33,6 +41,9 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   isStreaming: false,
   streamingContent: {},
   pendingMention: null,
+  connectionStatus: 'connected',
+  retryCount: 0,
+  interruptedMessageId: null,
 
   setActiveConversation: (id) => set({ activeConversationId: id }),
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -111,4 +122,8 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
     }),
 
   setPendingMention: (name) => set({ pendingMention: name }),
+
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setRetryCount: (n) => set({ retryCount: n }),
+  setInterruptedMessageId: (id) => set({ interruptedMessageId: id }),
 }));

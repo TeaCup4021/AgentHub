@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { useCreateAgent } from "@/hooks/useAgents";
 
 interface CreateAgentModalProps {
@@ -58,7 +59,8 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
         toolConfig: { tools },
       },
       {
-        onSuccess: () => {
+        onSuccess: (data) => {
+          toast.success(`Agent "${data?.name || name.trim()}" 创建成功`);
           setName("");
           setSystemPrompt("");
           setCapabilities([]);
@@ -66,6 +68,9 @@ export function CreateAgentModal({ open, onClose }: CreateAgentModalProps) {
           setProvider("anthropic");
           setModel("claude-sonnet-4-6");
           onClose();
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : "创建失败，请重试");
         },
       }
     );

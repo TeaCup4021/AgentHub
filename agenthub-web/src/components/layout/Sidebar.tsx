@@ -1,4 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useChatStore } from "@/stores/chatStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useUpdateAnyConversation, useDeleteConversation } from "@/hooks";
@@ -33,6 +35,7 @@ export function Sidebar({ conversations, agents, onCreateConversation }: Sidebar
   const setSearchQuery = useChatStore((s) => s.setSearchQuery);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
 
+  const qc = useQueryClient();
   const updateConversation = useUpdateAnyConversation();
   const deleteConversation = useDeleteConversation();
 
@@ -106,13 +109,25 @@ export function Sidebar({ conversations, agents, onCreateConversation }: Sidebar
     setMenuOpenId(null);
   };
 
-  const handleDeleteConfirm = () => {
-    if (confirmDeleteId) {
-      deleteConversation.mutate(confirmDeleteId);
-      if (activeId === confirmDeleteId) setActiveConversation(null);
-      setConfirmDeleteId(null);
-    }
-  };
+  const handleDeleteConfirm = useCallback(() => {
+    if (!confirmDeleteId) return;
+    const idToDelete = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (activeId === idToDelete) setActiveConversation(null);
+
+    const prevData = qc.getQueryData(["conversations"]);
+
+    qc.setQueryData(["conversations"], (old: Conversation[] | undefined) =>
+      old ? old.filter((c) => c.id !== idToDelete) : old,
+    );
+
+    deleteConversation.mutate(idToDelete, {
+      onError: () => {
+        if (prevData) qc.setQueryData(["conversations"], prevData);
+        toast.error("删除失败，请重试");
+      },
+    });
+  }, [confirmDeleteId, activeId, qc, deleteConversation]);
 
   return (
     <aside className="flex h-full flex-col border-r border-gray-200 bg-sidebar-bg">
@@ -323,6 +338,19 @@ export function Sidebar({ conversations, agents, onCreateConversation }: Sidebar
       )}
 
       <CreateAgentModal open={showCreateAgent} onClose={() => setShowCreateAgent(false)} />
+
+      <div className="border-t border-gray-200 px-3 py-2">
+        <button
+          onClick={() => window.location.href = "/settings"}
+          className="w-full flex items-center gap-2 rounded-md px-3 py-2 text-xs text-gray-600 hover:bg-sidebar-hover"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+          </svg>
+          设置
+        </button>
+      </div>
     </aside>
   );
 

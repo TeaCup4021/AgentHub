@@ -1,0 +1,95 @@
+:root {
+  --color-primary: #3370ff;
+  --color-primary-hover: #4080ff;
+  --color-primary-active: #2b5fd9;
+  --color-primary-light: rgba(51, 112, 255, 0.08);
+
+  --color-success: #00b578;
+  --color-warning: #ff8f1f;
+  --color-danger: #f53f3f;
+  --color-info: #3370ff;
+
+  --color-bg-app: #f5f6f7;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-chat: #f5f6f7;
+  --color-bg-elevated: #ffffff;
+  --color-bg-hover: rgba(0, 0, 0, 0.04);
+  --color-bg-active: rgba(51, 112, 255, 0.08);
+  --color-bg-mask: rgba(0, 0, 0, 0.3);
+
+  --color-bubble-user-bg: #e1edff;
+  --color-bubble-user-text: #1f2329;
+  --color-bubble-agent-bg: #ffffff;
+  --color-bubble-agent-border: #e5e6eb;
+
+  --color-text-primary: #1f2329;
+  --color-text-secondary: #646a73;
+  --color-text-tertiary: #8f959e;
+  --color-text-disabled: #c9cdd4;
+  --color-text-link: #3370ff;
+  --color-text-white: #ffffff;
+
+  --color-border-light: #e5e6eb;
+  --color-border-medium: #d0d3d7;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-round: 50%;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+  --icon-nav-width: 56px;
+  --conv-list-width: 260px;
+}
+
+[theme-mode="dark"] {
+  --color-bg-app: #1a1a1a;
+  --color-bg-sidebar: #1f1f1f;
+  --color-bg-chat: #1a1a1a;
+  --color-bg-elevated: #2a2a2a;
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(51, 112, 255, 0.15);
+  --color-bg-mask: rgba(0, 0, 0, 0.6);
+
+  --color-bubble-user-bg: #1a3a5c;
+  --color-bubble-user-text: #e5e5e5;
+  --color-bubble-agent-bg: #2a2a2a;
+  --color-bubble-agent-border: #3a3a3a;
+
+  --color-text-primary: #e5e5e5;
+  --color-text-secondary: #999999;
+  --color-text-tertiary: #666666;
+  --color-text-disabled: #444444;
+  --color-text-link: #5c8fff;
+
+  --color-border-light: #3a3a3a;
+  --color-border-medium: #4a4a4a;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+}

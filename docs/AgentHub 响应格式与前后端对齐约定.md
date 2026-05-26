@@ -67,6 +67,28 @@
 - **6 类 SSE 事件**：`message_start`, `token`, `artifact`, `agent_status`, `message_end`, `error`。
 - **前端事件结构**：包含 `version`, `event_id`, `conversation_id`, `message_id` 与 ISO 时间戳等字段。
 
+## 14) 消息发送失败状态（新增于 2026-05-26 P0 前端）
+
+- **`status: "failed"`**：前端在消息发送 API 报错时，将乐观插入的消息标记为 `failed`，渲染红色气泡 + "发送失败" 标签。
+- 后端已定义的 `MessageStatus` 包含 `"failed"`，无需新增。
+
+## 15) SSE 流式中断处理（新增于 2026-05-26 P0 前端）
+
+- **中断标记**：SSE 连接断开时，前端会 `finalizeStreaming` 将已收到的部分内容写入消息缓存，并期望后端在持久化该消息时保留已传输的部分内容。
+- **finish_reason 扩展**：建议后端在 `message_end.finish_reason` 中支持 `"interrupted"` 值，前端用于判断是否需要显示"（响应中断）"标记。当前 `finish_reason` 已有 `"completed"` 和 `"plan_draft"`。
+- **连接错误触发**：前端 SSE `fetch` 的 `.catch` 路径会触发 `onConnectionError`，启动指数退避重试（1s/2s/4s，共 3 次）。后端 SSE 端点异常时应返回非 200 状态码以触发此路径。
+
+## 16) Mock 测试辅助（新增于 2026-05-26 P0 前端）
+
+- 前端 Mock 通过 `localStorage.setItem("mock_fail_mode", "<type>")` 模拟失败场景：
+  - `"message"` — POST /messages 返回 500
+  - `"delete"` — DELETE /conversations/:id 返回 500
+  - `"agent"` — POST /agents 返回 500
+  - `"sse_disconnect"` — SSE 流在中途触发 onConnectionError
+- 均为前端本地模拟，不影响后端实现。后端开发时可参考这些场景做异常测试。
+
+---
+
 ## 来源
 
 - `AgentHub-后端开发20天实施计划.md`
@@ -76,3 +98,5 @@
 - `backend/app/schemas/message.py`
 - `agenthub-web/docs/specs/2026-05-24-api-alignment-round2.md`
 - `agenthub-web/src/types/chat.ts`
+- `vibeCodingPlan/AgentHub-前端-Day01-P0核心体验链路.md`（本次）
+- `vibeCodingSummary/2026-05-26-p0-core-experience.md`（本次）

@@ -16,6 +16,15 @@ function delay(ms = 50): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function shouldFail(endpoint: string): string | null {
+  const mode = localStorage.getItem("mock_fail_mode");
+  if (mode === endpoint || mode === "all") {
+    localStorage.removeItem("mock_fail_mode");
+    return mode;
+  }
+  return null;
+}
+
 function paginatedResponse<T>(list: T[], page = 1, pageSize = 20): [200, PaginatedResponse<T>] {
   return [200, { code: 200, data: { list: [...list], total: list.length, page, pageSize }, message: "success" }];
 }
@@ -39,6 +48,19 @@ function parseBody(config: { data?: unknown }): Record<string, unknown> {
 let conversations = [...mockConversations];
 let agents = [...mockAgents];
 const messages: Record<string, Message[]> = { ...mockMessages };
+
+export function getMockAgents(): Agent[] {
+  return agents;
+}
+
+export function getLastUserMessage(conversationId: string): { content: string } | null {
+  const msgs = messages[conversationId];
+  if (!msgs || msgs.length === 0) return null;
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].senderType === "user") return { content: msgs[i].content };
+  }
+  return null;
+}
 
 export function addMockMessage(conversationId: string, message: Message) {
   if (!messages[conversationId]) messages[conversationId] = [];
@@ -135,6 +157,11 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
     else if (method === "delete" && /^\/conversations\/[^/]+$/.test(url)) {
       const id = url.split("/").pop()!;
       await delay();
+      if (shouldFail("delete")) {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 500, data: { code: 500, message: "模拟删除失败" } } });
+        return config;
+      }
       conversations = conversations.filter((c) => c.id !== id);
       const [, responseBody] = successResponse(null);
       config.adapter = () =>
@@ -144,6 +171,12 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
     // POST /conversations/:id/messages
     else if (method === "post" && /^\/conversations\/[^/]+\/messages$/.test(url)) {
       const conversationId = url.split("/")[2];
+      if (shouldFail("message")) {
+        await delay();
+        config.adapter = () =>
+          Promise.reject({ response: { status: 500, data: { code: 500, message: "模拟发送失败" } } });
+        return config;
+      }
       const body = parseBody(config) as unknown as { content: string; contentType?: string; parentMessageId?: string };
       await delay();
       const now = new Date().toISOString();
@@ -239,6 +272,12 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
     // POST /agents
     else if (method === "post" && url === "/agents") {
       const body = parseBody(config) as unknown as CreateAgentRequest;
+      if (shouldFail("agent")) {
+        await delay();
+        config.adapter = () =>
+          Promise.reject({ response: { status: 500, data: { code: 500, message: "模拟创建失败" } } });
+        return config;
+      }
       await delay();
       const now = new Date().toISOString();
       const agent: Agent = {
