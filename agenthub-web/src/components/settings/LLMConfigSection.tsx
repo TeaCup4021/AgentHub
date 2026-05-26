@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Card, Switch, Input, Button, Typography } from "@douyinfe/semi-ui";
+import { IconChevronUpDown } from "@douyinfe/semi-icons";
 
 interface LLMProvider {
   id: string;
@@ -49,67 +51,65 @@ export function LLMConfigSection() {
 
   return (
     <section>
-      <h2 className="text-sm font-semibold text-gray-900 mb-3">LLM 配置</h2>
-      <p className="text-xs text-gray-500 mb-4">
+      <Typography.Title heading={6} style={{ marginBottom: 8, color: "var(--color-text-primary)" }}>
+        LLM 配置
+      </Typography.Title>
+      <Typography.Text type="tertiary" size="small" style={{ display: "block", marginBottom: 16 }}>
         配置 AI 模型服务商的 API Key。按优先级排序，主模型不可用时自动切换备用模型。
-      </p>
-      <div className="space-y-3">
+      </Typography.Text>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {providers.map((provider) => (
-          <div key={provider.id} className="rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={provider.enabled}
-                    onChange={(e) => updateProvider(provider.id, { enabled: e.target.checked })}
-                    className="rounded"
-                  />
-                  <span className="text-sm font-medium text-gray-800">{provider.name}</span>
-                </label>
-                <span className="text-[10px] text-gray-400">
+          <Card key={provider.id}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Switch
+                  size="small"
+                  checked={provider.enabled}
+                  onChange={(checked) => updateProvider(provider.id, { enabled: checked })}
+                />
+                <span style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)" }}>
+                  {provider.name}
+                </span>
+                <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>
                   优先级: {provider.priority}
                 </span>
               </div>
-              <div className="flex items-center gap-1">
-                <button
+              <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <Button
+                  size="small"
+                  theme="borderless"
                   onClick={() => movePriority(provider.id, "up")}
                   disabled={provider.priority <= 1}
-                  className="rounded px-1.5 py-0.5 text-[10px] text-gray-500 hover:bg-gray-100 disabled:opacity-30"
-                >
-                  ↑
-                </button>
-                <button
+                  icon={<IconChevronUpDown style={{ transform: "rotate(180deg)" }} />}
+                />
+                <Button
+                  size="small"
+                  theme="borderless"
                   onClick={() => movePriority(provider.id, "down")}
                   disabled={provider.priority >= providers.length}
-                  className="rounded px-1.5 py-0.5 text-[10px] text-gray-500 hover:bg-gray-100 disabled:opacity-30"
-                >
-                  ↓
-                </button>
+                  icon={<IconChevronUpDown />}
+                />
               </div>
             </div>
 
-            <form className="flex gap-2" onSubmit={(e) => e.preventDefault()}>
-              <div className="flex-1 relative">
-                <input
-                  type={showKey[provider.id] ? "text" : "password"}
-                  value={provider.apiKey}
-                  onChange={(e) => updateProvider(provider.id, { apiKey: e.target.value })}
-                  placeholder={`输入 ${provider.name} API Key...`}
-                  className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-xs outline-none focus:border-blue-400 pr-14"
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setShowKey((s) => ({ ...s, [provider.id]: !s[provider.id] }))
-                  }
-                  className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 hover:text-gray-600 px-2"
+            <Input
+              type={showKey[provider.id] ? "text" : "password"}
+              value={provider.apiKey}
+              onChange={(v) => updateProvider(provider.id, { apiKey: v })}
+              placeholder={`输入 ${provider.name} API Key...`}
+              size="small"
+              suffix={
+                <Button
+                  size="small"
+                  theme="borderless"
+                  onClick={() => setShowKey((s) => ({ ...s, [provider.id]: !s[provider.id] }))}
                 >
                   {showKey[provider.id] ? "隐藏" : "显示"}
-                </button>
-              </div>
-            </form>
-          </div>
+                </Button>
+              }
+            />
+          </Card>
         ))}
       </div>
     </section>

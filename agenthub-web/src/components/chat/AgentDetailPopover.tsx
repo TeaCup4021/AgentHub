@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { Popover, Tag, Button, Space } from "@douyinfe/semi-ui";
 import { useChatStore } from "@/stores/chatStore";
 import type { Agent } from "@/types";
 
@@ -9,81 +9,102 @@ interface AgentDetailPopoverProps {
 }
 
 export function AgentDetailPopover({ agent, position, onClose }: AgentDetailPopoverProps) {
-  const ref = useRef<HTMLDivElement>(null);
   const setPendingMention = useChatStore((s) => s.setPendingMention);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [onClose]);
 
   const handleMention = () => {
     setPendingMention(agent.name);
     onClose();
   };
 
-  return (
-    <div
-      ref={ref}
-      className="fixed z-40 w-64 rounded-lg border border-gray-200 bg-white p-4 shadow-xl"
-      style={{ top: position.top, left: position.left }}
-    >
-      <div className="flex items-center gap-3 mb-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-sm font-medium text-white">
-          {agent.name.charAt(0)}
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{agent.name}</p>
-          <p className="truncate text-xs text-gray-500">{agent.model}</p>
-        </div>
-      </div>
+  const tools = agent.toolConfig?.tools as string[] | undefined;
 
-      <div className="space-y-2 text-xs">
-        <div className="flex items-center justify-between">
-          <span className="text-gray-500">提供商</span>
-          <span className="rounded bg-gray-100 px-2 py-0.5 font-medium">{agent.provider}</span>
-        </div>
-        <div>
-          <span className="text-gray-500">能力</span>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {agent.capabilities.map((c) => (
-              <span key={c} className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">{c}</span>
-            ))}
+  return (
+    <Popover
+      visible
+      trigger="custom"
+      position="bottomLeft"
+      onClickOutSide={onClose}
+      content={
+        <div style={{ width: 260, padding: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              background: "var(--color-success)",
+              color: "#fff",
+              fontSize: "var(--font-size-md)",
+              fontWeight: 500,
+              flexShrink: 0,
+            }}>
+              {agent.name.charAt(0)}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: "var(--font-size-md)", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {agent.name}
+              </p>
+              <p style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>{agent.model}</p>
+            </div>
           </div>
-        </div>
-        {(() => {
-          const tools = agent.toolConfig?.tools as string[] | undefined;
-          if (tools && tools.length > 0) return (
+
+          <Space vertical spacing="tight" style={{ width: "100%" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>提供商</span>
+              <Tag size="small" color="grey">{agent.provider}</Tag>
+            </div>
             <div>
-              <span className="text-gray-500">工具</span>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {tools.map((t: string) => (
-                  <span key={t} className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700 font-mono text-[11px]">{t}</span>
+              <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>能力</span>
+              <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {agent.capabilities.map((c) => (
+                  <Tag key={c} size="small" color="blue" type="ghost">{c}</Tag>
                 ))}
               </div>
             </div>
-          );
-          return null;
-        })()}
-        {agent.systemPrompt && (
-          <div>
-            <span className="text-gray-500">系统提示词</span>
-            <p className="mt-0.5 text-gray-600 line-clamp-3">{agent.systemPrompt}</p>
-          </div>
-        )}
-      </div>
+            {tools && tools.length > 0 && (
+              <div>
+                <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>工具</span>
+                <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {tools.map((t) => (
+                    <Tag key={t} size="small" color="grey" type="ghost">{t}</Tag>
+                  ))}
+                </div>
+              </div>
+            )}
+            {agent.systemPrompt && (
+              <div>
+                <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>系统提示词</span>
+                <p style={{
+                  marginTop: 4,
+                  fontSize: "var(--font-size-xs)",
+                  color: "var(--color-text-secondary)",
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: "vertical",
+                }}>
+                  {agent.systemPrompt}
+                </p>
+              </div>
+            )}
+          </Space>
 
-      <button
-        onClick={handleMention}
-        className="mt-3 w-full rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-      >
-        提及此 Agent
-      </button>
-    </div>
+          <Button
+            block
+            theme="solid"
+            type="primary"
+            size="small"
+            onClick={handleMention}
+            style={{ marginTop: 12 }}
+          >
+            提及此 Agent
+          </Button>
+        </div>
+      }
+    >
+      <div style={{ position: "fixed", top: position.top, left: position.left, width: 0, height: 0 }} />
+    </Popover>
   );
 }

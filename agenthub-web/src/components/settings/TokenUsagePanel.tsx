@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Card, Typography, Empty } from "@douyinfe/semi-ui";
 import { useTokenUsageStore } from "@/stores/tokenUsageStore";
 
 export function TokenUsagePanel() {
@@ -19,39 +20,50 @@ export function TokenUsagePanel() {
 
   return (
     <section>
-      <h2 className="text-sm font-semibold text-gray-900 mb-3">Token 用量</h2>
-      <p className="text-xs text-gray-500 mb-4">
+      <Typography.Title heading={6} style={{ marginBottom: 8, color: "var(--color-text-primary)" }}>
+        Token 用量
+      </Typography.Title>
+      <Typography.Text type="tertiary" size="small" style={{ display: "block", marginBottom: 16 }}>
         统计各会话的 Token 消耗和预估成本。数据从每次会话完成后累积。
-      </p>
+      </Typography.Text>
 
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="rounded-lg border border-gray-200 p-3 text-center">
-          <p className="text-[10px] text-gray-500 mb-1">输入 Token</p>
-          <p className="text-lg font-semibold text-gray-800">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <Card style={{ textAlign: "center" }}>
+          <Typography.Text type="tertiary" size="small">输入 Token</Typography.Text>
+          <Typography.Title heading={4} style={{ margin: "4px 0 0", color: "var(--color-text-primary)" }}>
             {(totalInput / 1000).toFixed(1)}k
-          </p>
-        </div>
-        <div className="rounded-lg border border-gray-200 p-3 text-center">
-          <p className="text-[10px] text-gray-500 mb-1">输出 Token</p>
-          <p className="text-lg font-semibold text-gray-800">
+          </Typography.Title>
+        </Card>
+        <Card style={{ textAlign: "center" }}>
+          <Typography.Text type="tertiary" size="small">输出 Token</Typography.Text>
+          <Typography.Title heading={4} style={{ margin: "4px 0 0", color: "var(--color-text-primary)" }}>
             {(totalOutput / 1000).toFixed(1)}k
-          </p>
-        </div>
-        <div className="rounded-lg border border-gray-200 p-3 text-center">
-          <p className="text-[10px] text-gray-500 mb-1">预估成本</p>
-          <p className="text-lg font-semibold text-gray-800">
+          </Typography.Title>
+        </Card>
+        <Card style={{ textAlign: "center" }}>
+          <Typography.Text type="tertiary" size="small">预估成本</Typography.Text>
+          <Typography.Title heading={4} style={{ margin: "4px 0 0", color: "var(--color-text-primary)" }}>
             ${totalCost.toFixed(4)}
-          </p>
-        </div>
+          </Typography.Title>
+        </Card>
       </div>
 
       {usages.length > 0 ? (
-        <div className="rounded-lg border border-gray-200 overflow-hidden">
-          <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-gray-50 text-[10px] font-medium text-gray-500">
+        <Card bodyStyle={{ padding: 0 }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 120px 120px 120px",
+            gap: 8,
+            padding: "8px 16px",
+            background: "var(--color-bg-hover)",
+            fontSize: "var(--font-size-xs)",
+            fontWeight: 500,
+            color: "var(--color-text-tertiary)",
+          }}>
             <span>会话</span>
-            <span className="text-right">输入</span>
-            <span className="text-right">输出</span>
-            <span className="text-right">成本</span>
+            <span style={{ textAlign: "right" }}>输入</span>
+            <span style={{ textAlign: "right" }}>输出</span>
+            <span style={{ textAlign: "right" }}>成本</span>
           </div>
           {usages
             .slice()
@@ -59,25 +71,32 @@ export function TokenUsagePanel() {
             .map((u) => (
               <div
                 key={u.conversationId}
-                className="grid grid-cols-4 gap-2 px-3 py-2 border-t border-gray-100 text-xs"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 120px 120px 120px",
+                  gap: 8,
+                  padding: "8px 16px",
+                  borderTop: "1px solid var(--color-border-light)",
+                  fontSize: "var(--font-size-sm)",
+                }}
               >
-                <span className="text-gray-800 truncate">{u.conversationTitle}</span>
-                <span className="text-right text-gray-500">
+                <span style={{ color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {u.conversationTitle}
+                </span>
+                <span style={{ textAlign: "right", color: "var(--color-text-tertiary)" }}>
                   {(u.inputTokens / 1000).toFixed(1)}k
                 </span>
-                <span className="text-right text-gray-500">
+                <span style={{ textAlign: "right", color: "var(--color-text-tertiary)" }}>
                   {(u.outputTokens / 1000).toFixed(1)}k
                 </span>
-                <span className="text-right text-gray-600">
+                <span style={{ textAlign: "right", color: "var(--color-text-secondary)" }}>
                   ${u.estimatedCost.toFixed(4)}
                 </span>
               </div>
             ))}
-        </div>
+        </Card>
       ) : (
-        <p className="text-xs text-gray-400 py-4 text-center">
-          暂无用量数据，完成对话后自动统计
-        </p>
+        <Empty title="暂无用量数据" description="完成对话后自动统计" />
       )}
     </section>
   );

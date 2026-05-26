@@ -1,22 +1,38 @@
+import { Layout, Button, Typography } from "@douyinfe/semi-ui";
+import { IconArrowLeft } from "@douyinfe/semi-icons";
+import { useNavigate } from "react-router-dom";
 import { LLMConfigSection } from "./LLMConfigSection";
 import { TokenUsagePanel } from "./TokenUsagePanel";
 
 export function SettingsPage() {
+  const navigate = useNavigate();
+
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4 space-y-8">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => window.history.back()}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-        <h1 className="text-xl font-bold text-gray-900">设置</h1>
-      </div>
-      <LLMConfigSection />
-      <TokenUsagePanel />
-    </div>
+    <Layout style={{ height: "100%" }}>
+      <Layout.Header style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        padding: "0 24px",
+        background: "var(--color-bg-sidebar)",
+        borderBottom: "1px solid var(--color-border-light)",
+        height: 56,
+      }}>
+        <Button
+          icon={<IconArrowLeft />}
+          theme="borderless"
+          onClick={() => navigate("/")}
+        />
+        <Typography.Title heading={5} style={{ margin: 0, color: "var(--color-text-primary)" }}>
+          设置
+        </Typography.Title>
+      </Layout.Header>
+      <Layout.Content style={{ padding: 24, overflow: "auto", background: "var(--color-bg-app)" }}>
+        <div style={{ maxWidth: 672, margin: "0 auto", display: "flex", flexDirection: "column", gap: 32 }}>
+          <LLMConfigSection />
+          <TokenUsagePanel />
+        </div>
+      </Layout.Content>
+    </Layout>
   );
 }
