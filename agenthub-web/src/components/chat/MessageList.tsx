@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useLayoutEffect } from "react";
 import { Spin, Badge } from "@douyinfe/semi-ui";
+import { motion } from "framer-motion";
 import { useChatStore } from "@/stores/chatStore";
 import { CardRenderer } from "@/components/cards";
 import { AgentDetailPopover } from "./AgentDetailPopover";
@@ -378,16 +379,29 @@ export function MessageList({
         const needSeparator = !prevTime
           || new Date(msg.createdAt).getTime() - new Date(prevTime).getTime() > FIVE_MINUTES;
         return (
-          <div key={msg.id}>
+          <motion.div
+            key={msg.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
+          >
             {needSeparator && <TimeSeparator time={msg.createdAt} />}
             <MessageBubble message={msg} agents={agents} />
-          </div>
+          </motion.div>
         );
       })}
       {streamingMessageId && streamingAgentName && (
         <StreamingMessageBubble messageId={streamingMessageId} agentName={streamingAgentName} />
       )}
-      {isWaiting && !streamingMessageId && <PendingMessageBubble />}
+      {isWaiting && !streamingMessageId && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
+        >
+          <PendingMessageBubble />
+        </motion.div>
+      )}
       <div ref={bottomSentinelRef} style={{ height: 1 }} />
       {!isAtBottom && unreadCount > 0 && (
         <div style={{ position: "sticky", bottom: 24, display: "flex", justifyContent: "flex-end", paddingRight: 16, zIndex: 10 }}>
