@@ -1,4 +1,4 @@
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEMessageEnd, Artifact } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, Artifact } from "@/types";
 import { mockAgents, mockConversations } from "./data";
 import { addMockMessage } from "./handlers";
 import { generateId } from "@/lib/utils";
@@ -8,6 +8,7 @@ interface MockSSEOptions {
   onToken?: (data: SSEToken) => void;
   onArtifact?: (data: SSEArtifact) => void;
   onAgentStatus?: (data: SSEAgentStatus) => void;
+  onThinking?: (data: SSEThinking) => void;
   onMessageEnd?: (data: SSEMessageEnd) => void;
   onConnectionError?: (error: Event) => void;
 }
@@ -45,6 +46,12 @@ const mockResponseTexts: Record<string, { text: string; fileName?: string; langu
   ],
 };
 
+const mockThinkingSteps: Array<{ phase: "thought" | "action" | "observation"; text: string; tool_name?: string }> = [
+  { phase: "thought", text: "我先分析一下用户的需求，理解他想要达成的目标。" },
+  { phase: "action", text: "根据需求分析结果，调用相应的工具来生成代码。", tool_name: "code_generator" },
+  { phase: "observation", text: "工具返回了可用的代码模板，现在基于模板为用户定制实现。" },
+];
+
 export function createMockSSEStream(
   conversationId: string,
   callbacks: MockSSEOptions,
@@ -77,6 +84,9 @@ export function createMockSSEStream(
         break;
       case "agent_status":
         callbacks.onAgentStatus?.(data as SSEAgentStatus);
+        break;
+      case "thinking":
+        callbacks.onThinking?.(data as SSEThinking);
         break;
       case "message_end":
         callbacks.onMessageEnd?.(data as SSEMessageEnd);
@@ -189,6 +199,46 @@ export function createMockSSEStream(
   }, baseDelay);
 
   let delay = baseDelay + 100;
+
+  const accumulatedThinkingSteps: Array<{ phase: "thought" | "action" | "observation"; text: string; tool_name?: string; status: "done" }> = [];
+
+  for (const step of mockThinkingSteps) {
+    const stepIndex = mockThinkingSteps.indexOf(step);
+    setTimeout(() => {
+      if (cancelled) return;
+      sendEvent("thinking", {
+        version: "v1",
+        event_id: `evt-${generateId()}`,
+        conversation_id: conversationId,
+        message_id: messageId,
+        phase: step.phase,
+        text: step.text,
+        tool_name: step.tool_name,
+        status: "running",
+        step_index: stepIndex,
+        timestamp: new Date().toISOString(),
+      });
+    }, delay);
+    delay += 120;
+    setTimeout(() => {
+      if (cancelled) return;
+      accumulatedThinkingSteps.push({ ...step, status: "done" });
+      sendEvent("thinking", {
+        version: "v1",
+        event_id: `evt-${generateId()}`,
+        conversation_id: conversationId,
+        message_id: messageId,
+        phase: step.phase,
+        text: step.text,
+        tool_name: step.tool_name,
+        status: "done",
+        step_index: stepIndex,
+        timestamp: new Date().toISOString(),
+      });
+    }, delay);
+    delay += 50;
+  }
+
   for (const block of blocks) {
     if (block.code) {
       const artifactId = `art-${generateId()}`;
@@ -299,7 +349,7 @@ export function createMockSSEStream(
       content: accumulatedText,
       artifacts: accumulatedArtifacts,
       status: "done",
-      meta: null,
+      meta: { thinking_steps: accumulatedThinkingSteps },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

@@ -1,9 +1,10 @@
 import { create } from "zustand";
-import type { Artifact } from "@/types";
+import type { Artifact, ThinkingStep } from "@/types";
 
 interface StreamingMessage {
   content: string;
   artifacts: Artifact[];
+  thinkingSteps: ThinkingStep[];
 }
 
 interface ChatUIState {
@@ -19,6 +20,7 @@ interface ChatUIState {
   initStreamingMessage: (messageId: string) => void;
   appendStreamToken: (messageId: string, delta: string) => void;
   appendStreamArtifact: (messageId: string, artifact: Artifact) => void;
+  appendThinkingStep: (messageId: string, step: ThinkingStep) => void;
   finalizeStreamingMessage: (messageId: string) => void;
   getStreamingContent: (messageId: string) => StreamingMessage | undefined;
   clearStreamingContent: (messageId: string) => void;
@@ -41,7 +43,7 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
       isStreaming: true,
       streamingContent: {
         ...s.streamingContent,
-        [messageId]: { content: "", artifacts: [] },
+        [messageId]: { content: "", artifacts: [], thinkingSteps: [] },
       },
     })),
 
@@ -68,6 +70,28 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
             ...entry,
             artifacts: [...entry.artifacts, artifact],
           },
+        },
+      };
+    }),
+
+  appendThinkingStep: (messageId, step) =>
+    set((s) => {
+      const entry = s.streamingContent[messageId];
+      if (!entry) return s;
+      const existingIdx = entry.thinkingSteps.findIndex(
+        (st) => st.phase === step.phase && st.text === step.text,
+      );
+      let updatedSteps: ThinkingStep[];
+      if (existingIdx >= 0) {
+        updatedSteps = [...entry.thinkingSteps];
+        updatedSteps[existingIdx] = step;
+      } else {
+        updatedSteps = [...entry.thinkingSteps, step];
+      }
+      return {
+        streamingContent: {
+          ...s.streamingContent,
+          [messageId]: { ...entry, thinkingSteps: updatedSteps },
         },
       };
     }),

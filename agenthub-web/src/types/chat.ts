@@ -41,13 +41,27 @@ export interface DeployStatusContent {
   url?: string;
 }
 
+export interface ThinkingStep {
+  phase: "thought" | "action" | "observation";
+  text: string;
+  toolName?: string;
+  status?: "pending" | "running" | "done" | "error";
+}
+
+export interface ThinkingContent {
+  type: "thinking";
+  title: string;
+  steps: ThinkingStep[];
+}
+
 export type MessageContent =
   | TextContent
   | CodeContent
   | DiffContent
   | PreviewContent
   | FileContent
-  | DeployStatusContent;
+  | DeployStatusContent
+  | ThinkingContent;
 
 // ========== 消息 ==========
 
@@ -165,6 +179,7 @@ export type SSEEventType =
   | "token"
   | "artifact"
   | "agent_status"
+  | "thinking"
   | "message_end"
   | "error";
 
@@ -205,6 +220,19 @@ export interface SSEAgentStatus {
   agent: { id: string; name: string };
   status: "queued" | "running" | "success" | "failed" | "timeout";
   progress: number;
+  timestamp: string;
+}
+
+export interface SSEThinking {
+  version: string;
+  event_id: string;
+  conversation_id: string;
+  message_id: string;
+  phase: "thought" | "action" | "observation";
+  text: string;
+  tool_name?: string;
+  status: "pending" | "running" | "done" | "error";
+  step_index: number;
   timestamp: string;
 }
 

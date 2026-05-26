@@ -11,7 +11,7 @@ import { AgentProgressBar } from "@/components/chat/AgentProgressBar";
 import { MentionSwitchDialog } from "@/components/chat/MentionSwitchDialog";
 import type { AgentProgress } from "@/components/chat/AgentProgressBar";
 import type { InfiniteData } from "@tanstack/react-query";
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEMessageEnd, SSEError, Conversation, Message, MessageListData } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, SSEError, Conversation, Message, MessageListData } from "@/types";
 
 interface ChatAreaProps {
   conversations: Conversation[];
@@ -24,6 +24,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const initStreaming = useChatStore((s) => s.initStreamingMessage);
   const appendToken = useChatStore((s) => s.appendStreamToken);
   const appendArtifact = useChatStore((s) => s.appendStreamArtifact);
+  const appendThinkingStep = useChatStore((s) => s.appendThinkingStep);
   const finalizeStreaming = useChatStore((s) => s.finalizeStreamingMessage);
 
   const disconnectRef = useRef<(() => void) | null>(null);
@@ -133,6 +134,16 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           return [...prev, entry];
         });
       },
+      onThinking: (data: SSEThinking) => {
+        if (streamMsgIdRef.current) {
+          appendThinkingStep(streamMsgIdRef.current, {
+            phase: data.phase,
+            text: data.text,
+            toolName: data.tool_name,
+            status: data.status,
+          });
+        }
+      },
       onMessageEnd: (_data: SSEMessageEnd) => {
         if (streamMsgIdRef.current) {
           finalizeStreaming(streamMsgIdRef.current);
@@ -153,7 +164,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         setIsStreaming(false);
       },
     });
-  }, [activeId, qc, setIsStreaming, initStreaming, appendToken, appendArtifact, finalizeStreaming]);
+  }, [activeId, qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming]);
 
   sendRef.current = (convId: string, content: string, mentions: string[]) => {
     const conv = conversations.find((c) => c.id === convId);

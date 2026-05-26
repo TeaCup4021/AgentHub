@@ -3,6 +3,7 @@ import type {
   SSEToken,
   SSEArtifact,
   SSEAgentStatus,
+  SSEThinking,
   SSEMessageEnd,
   SSEError,
 } from "@/types";
@@ -12,6 +13,7 @@ export interface SSECallbacks {
   onToken?: (data: SSEToken) => void;
   onArtifact?: (data: SSEArtifact) => void;
   onAgentStatus?: (data: SSEAgentStatus) => void;
+  onThinking?: (data: SSEThinking) => void;
   onMessageEnd?: (data: SSEMessageEnd) => void;
   onError?: (data: SSEError) => void;
   onConnectionError?: (error: Event) => void;
@@ -39,6 +41,7 @@ export function createSSEStream(
     token: (d) => callbacks.onToken?.(d as SSEToken),
     artifact: (d) => callbacks.onArtifact?.(d as SSEArtifact),
     agent_status: (d) => callbacks.onAgentStatus?.(d as SSEAgentStatus),
+    thinking: (d) => callbacks.onThinking?.(d as SSEThinking),
     message_end: (d) => callbacks.onMessageEnd?.(d as SSEMessageEnd),
     error: (d) => callbacks.onError?.(d as SSEError),
   };

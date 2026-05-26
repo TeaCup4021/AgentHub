@@ -13,9 +13,25 @@ function getPlainText(root: HTMLElement): string {
   return root.textContent ?? "";
 }
 
-function insertMentionChip(agent: Agent) {
+function createMentionChip(agent: Agent): HTMLSpanElement {
+  const chip = document.createElement("span");
+  chip.textContent = `@${agent.name}`;
+  chip.className = "inline rounded bg-blue-100 px-0.5 text-blue-700 font-medium whitespace-nowrap";
+  chip.contentEditable = "false";
+  chip.setAttribute("data-mention-id", agent.id);
+  chip.setAttribute("data-mention-name", agent.name);
+  return chip;
+}
+
+function insertMentionChip(agent: Agent, container?: HTMLElement) {
   const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return;
+  if (!sel || sel.rangeCount === 0) {
+    if (container) {
+      container.appendChild(createMentionChip(agent));
+      container.appendChild(document.createTextNode(" "));
+    }
+    return;
+  }
 
   const range = sel.getRangeAt(0);
 
@@ -29,13 +45,7 @@ function insertMentionChip(agent: Agent) {
       const beforeText = text.slice(0, start);
       const afterText = text.slice(offset);
 
-      const chip = document.createElement("span");
-      chip.textContent = `@${agent.name}`;
-      chip.className = "inline rounded bg-blue-100 px-0.5 text-blue-700 font-medium whitespace-nowrap";
-      chip.contentEditable = "false";
-      chip.setAttribute("data-mention-id", agent.id);
-      chip.setAttribute("data-mention-name", agent.name);
-
+      const chip = createMentionChip(agent);
       const space = document.createTextNode(" ");
 
       const afterNode = document.createTextNode(afterText);
@@ -56,12 +66,7 @@ function insertMentionChip(agent: Agent) {
   }
 
   range.deleteContents();
-  const chip = document.createElement("span");
-  chip.textContent = `@${agent.name}`;
-  chip.className = "inline rounded bg-blue-100 px-0.5 text-blue-700 font-medium whitespace-nowrap";
-  chip.contentEditable = "false";
-  chip.setAttribute("data-mention-id", agent.id);
-  chip.setAttribute("data-mention-name", agent.name);
+  const chip = createMentionChip(agent);
   const space = document.createTextNode(" ");
   range.insertNode(space);
   range.insertNode(chip);
@@ -153,7 +158,7 @@ export function ChatInput({ onSend, disabled, agents }: ChatInputProps) {
     const el = editorRef.current;
     if (el) {
       el.focus();
-      insertMentionChip(agent);
+      insertMentionChip(agent, el);
     }
     setPendingMention(null);
   }, [pendingMention, agents, setPendingMention]);
