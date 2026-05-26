@@ -3,12 +3,13 @@ from typing import Optional, AsyncGenerator
 from datetime import datetime, timezone
 import asyncio
 import json
+import logging
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
+from app.core.database import get_db, async_session_maker
 from app.schemas.conversation import ConversationCreate, ConversationUpdate, ConversationResponse, PinMessageRequest
 from app.schemas.base import Page
 from app.models.conversation import Conversation
@@ -16,6 +17,7 @@ from app.models.message_pin import MessagePin
 from app.services.conversation import ConversationService
 from app.services.adapters.adk_to_sse import ADKToSSETranslator
 from app.services.adk.runner import AgentHubRunner, build_single_chat_agent
+from app.services.artifact import ArtifactService
 
 # Assuming we have a dependency to get the current user ID
 # For now, we will mock it or expect it in requests. Assuming there's some `get_current_user`
@@ -32,6 +34,7 @@ def _use_adk_stream() -> bool:
     return flag in {"1", "true", "yes"}
 
 router = APIRouter()
+logger = logging.getLogger("agenthub.stream")
 
 
 def _format_sse(event_name: str, data: dict) -> str:
@@ -92,6 +95,36 @@ async def _mock_sse_stream(conv_id: UUID):
         await asyncio.sleep(0.05)
 
 
+async def _persist_artifact_from_sse_payload(conv_id: UUID, payload: str) -> None:
+    if not payload.startswith("event: artifact"):
+        return
+
+    try:
+        data_line = next((line for line in payload.splitlines() if line.startswith("data: ")), None)
+        if not data_line:
+            return
+        data = json.loads(data_line[len("data: "):])
+        artifact = data.get("artifact") if isinstance(data, dict) else None
+        message_id_raw = data.get("message_id") if isinstance(data, dict) else None
+        if not isinstance(artifact, dict) or not message_id_raw:
+            return
+
+        message_id = UUID(str(message_id_raw))
+        event_id = data.get("event_id") if isinstance(data.get("event_id"), str) else None
+
+        async with async_session_maker() as db:
+            await ArtifactService.append_version(
+                db=db,
+                conversation_id=conv_id,
+                message_id=message_id,
+                artifact_payload=artifact,
+                event_id=event_id,
+            )
+            await db.commit()
+    except Exception:
+        logger.exception("persist artifact failed")
+
+
 async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -> AsyncGenerator[str, None]:
     prompt_text = (prompt or "Hello from AgentHub").strip()
     agent = build_single_chat_agent()
@@ -107,6 +140,10 @@ async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -
         conversation_id=str(conv_id),
     ):
         yield payload
+        try:
+            await _persist_artifact_from_sse_payload(conv_id, payload)
+        except Exception:
+            logger.exception("persist artifact failed")
 
 @router.get("", response_model=Page[ConversationResponse])
 async def get_conversations(
