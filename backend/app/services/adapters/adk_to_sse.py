@@ -127,22 +127,32 @@ class ADKToSSETranslator:
             }
 
     def _to_artifact(self, event: Event, conversation_id: str, message_id: str) -> Optional[dict]:
+
+    # 获取事件中的actions属性，如果没有则设为None
         actions = getattr(event, "actions", None)
+    # 检查是否存在artifact_delta
         has_action_artifact = bool(actions and getattr(actions, "artifact_delta", None))
+    # 获取事件的custom_metadata属性
         custom_metadata = getattr(event, "custom_metadata", None)
+    # 如果custom_metadata是字典类型，则获取其中的artifact值
         custom_artifact = custom_metadata.get("artifact") if isinstance(custom_metadata, dict) else None
+    # 检查是否存在自定义工件
         has_custom_artifact = isinstance(custom_artifact, dict) and bool(custom_artifact)
+    # 如果既没有动作工件也没有自定义工件，则返回None
         if not has_action_artifact and not has_custom_artifact:
             return None
+    # 提取工件数据
         artifact = self._extract_artifact(event)
+    # 如果提取的工件为空，则返回None
         if not artifact:
             return None
+    # 返回格式化后的工件字典
         return {
-            "version": self.version,
-            "event_id": str(uuid.uuid4()),
-            "conversation_id": conversation_id,
-            "message_id": message_id,
-            "artifact": artifact,
+            "version": self.version,  # 工件版本
+            "event_id": str(uuid.uuid4()),  # 唯一事件ID
+            "conversation_id": conversation_id,  # 对话ID
+            "message_id": message_id,  # 消息ID
+            "artifact": artifact,  # 工件数据
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
