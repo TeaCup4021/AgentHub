@@ -1,7 +1,7 @@
 import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Banner, Button, Empty } from "@douyinfe/semi-ui";
+import { Banner, Button, Empty, Skeleton } from "@douyinfe/semi-ui";
 import { IconComment } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import { useMessages } from "@/hooks/useMessages";
@@ -35,6 +35,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const disconnectRef = useRef<(() => void) | null>(null);
   const streamMsgIdRef = useRef<string | null>(null);
   const streamAgentRef = useRef<string>("");
+  const lastPromptRef = useRef<string>("");
   const retryRef = useRef({ count: 0, timeoutId: null as ReturnType<typeof setTimeout> | null });
 
   const connectionStatus = useChatStore((s) => s.connectionStatus);
@@ -54,6 +55,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     data: messagesData,
     hasNextPage,
     isFetchingNextPage,
+    isLoading,
     fetchNextPage,
   } = useMessages(activeId ?? "");
   const messageSearch = useChatStore((s) => s.messageSearch);
@@ -210,7 +212,23 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
     const msgMode = conv?.type === "group" ? "auto_orchestrate" : "direct";
     const optimisticId = optimisticMsg.id;
-    messageApi.send(convId, { content, mentions, mode: msgMode }).catch(() => {
+    messageApi.send(convId, { content, mentions, mode: msgMode }).then((response) => {
+      const realMsg = response.data?.data as Message | undefined;
+      if (!realMsg) return;
+      qc.setQueryData(
+        ["messages", activeId ?? convId],
+        (old: InfiniteData<MessageListData> | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.map((m) => (m.id === optimisticId ? realMsg : m)),
+            })),
+          };
+        },
+      );
+    }).catch(() => {
       qc.setQueryData(
         ["messages", activeId ?? convId],
         (old: InfiniteData<MessageListData> | undefined) => {
@@ -232,6 +250,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
     disconnectRef.current?.();
     setIsStreaming(true);
+    lastPromptRef.current = content;
 
     const onConnectionError = () => {
       const MAX_RETRIES = 3;
@@ -265,14 +284,14 @@ export function ChatArea({ conversations }: ChatAreaProps) {
             if (streamMsgIdRef.current) { finalizeStreaming(streamMsgIdRef.current); streamMsgIdRef.current = null; }
             qc.invalidateQueries({ queryKey: ["messages", convId] });
           },
-        });
+        }, lastPromptRef.current);
       }, delay);
     };
 
     disconnectRef.current = createSSEStream(convId, {
       ...buildCallbacks(convId, conv),
       onConnectionError,
-    });
+    }, content);
   }, [activeId, qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
 
   sendRef.current = (convId: string, content: string, mentions: string[]) => {
@@ -280,38 +299,30 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     executeSend(convId, content, mentions, conv);
   };
 
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const { messageId, conversationId } = (e as CustomEvent).detail as {
-        messageId: string;
-        conversationId: string;
-      };
-      const messagesData = qc.getQueryData(["messages", conversationId]) as
-        | { pages?: { items: Message[] }[] }
-        | undefined;
-      const allMessages = messagesData?.pages?.flatMap((p) => p.items) ?? [];
-      const failedMsg = allMessages.find((m) => m.id === messageId);
-      if (!failedMsg) return;
+  const handleRegenerate = useCallback((convId: string, msgId: string) => {
+    const messagesData = qc.getQueryData(["messages", convId]) as
+      | { pages?: { items: Message[] }[] }
+      | undefined;
+    const allMessages = messagesData?.pages?.flatMap((p) => p.items) ?? [];
+    const failedMsg = allMessages.find((m) => m.id === msgId);
+    if (!failedMsg) return;
 
-      const parentUserMsg = allMessages.find(
-        (m) => m.senderType === "user" && m.id === failedMsg.parentMessageId,
-      );
+    const parentUserMsg = allMessages.find(
+      (m) => m.senderType === "user" && m.id === failedMsg.parentMessageId,
+    );
 
-      if (parentUserMsg) {
-        if (conversationId !== useChatStore.getState().activeConversationId) {
-          useChatStore.getState().setActiveConversation(conversationId);
-          setTimeout(() => {
-            sendRef.current?.(conversationId, parentUserMsg.content, []);
-          }, 100);
-        } else {
-          sendRef.current?.(conversationId, parentUserMsg.content, []);
-        }
+    if (parentUserMsg) {
+      const conv = conversations.find((c) => c.id === convId);
+      if (convId !== activeId) {
+        useChatStore.getState().setActiveConversation(convId);
+        setTimeout(() => {
+          executeSend(convId, parentUserMsg.content, [], conv);
+        }, 100);
+      } else {
+        executeSend(convId, parentUserMsg.content, [], conv);
       }
-    };
-
-    window.addEventListener("regenerate-message", handler);
-    return () => window.removeEventListener("regenerate-message", handler);
-  }, [qc]);
+    }
+  }, [qc, activeId, conversations, executeSend]);
 
   const handleSend = useCallback(async (content: string, mentions: string[]) => {
     if (!activeId || !conversation) return;
@@ -423,6 +434,17 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex h-full flex-col">
+        <ChatHeader conversation={conversation} agents={agents} />
+        <div style={{ flex: 1, padding: 24 }}>
+          <Skeleton placeholder={<Skeleton.Paragraph rows={8} />} loading={true} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
       <ChatHeader conversation={conversation} agents={agents} />
@@ -466,6 +488,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         isFetchingMore={isFetchingNextPage}
         onLoadMore={() => fetchNextPage()}
         searchText={messageSearch}
+        onRegenerate={handleRegenerate}
       />
       {filteredMessages.length === 0 && !isStreaming && (
         <div style={{

@@ -31,7 +31,7 @@ const TimeSeparator = memo(function TimeSeparator({ time }: { time: string }) {
   );
 });
 
-const MessageBubble = memo(function MessageBubble({ message, agents, searchText }: { message: Message; agents: Agent[]; searchText?: string }) {
+const MessageBubble = memo(function MessageBubble({ message, agents, searchText, onRegenerate }: { message: Message; agents: Agent[]; searchText?: string; onRegenerate?: (convId: string, msgId: string) => void }) {
   const isUser = message.senderType === "user";
   const isOrchestrator = message.senderType === "orchestrator";
   const agent = !isUser && !isOrchestrator && message.senderId
@@ -176,6 +176,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText 
             message={message}
             isStreaming={message.status === "streaming"}
             isFailed={message.status === "failed"}
+            onRegenerate={onRegenerate}
           />
         </div>
         {isFailed && isUser && (
@@ -311,11 +312,12 @@ interface MessageListProps {
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
   searchText?: string;
+  onRegenerate?: (convId: string, msgId: string) => void;
 }
 
 export function MessageList({
   messages, agents, streamingMessageId, streamingAgentName,
-  isWaiting, hasMore, isFetchingMore, onLoadMore, searchText,
+  isWaiting, hasMore, isFetchingMore, onLoadMore, searchText, onRegenerate,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -414,7 +416,7 @@ export function MessageList({
             transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
           >
             {needSeparator && <TimeSeparator time={msg.createdAt} />}
-            <MessageBubble message={msg} agents={agents} searchText={searchText} />
+            <MessageBubble message={msg} agents={agents} searchText={searchText} onRegenerate={onRegenerate} />
           </motion.div>
         );
       })}

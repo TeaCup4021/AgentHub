@@ -127,8 +127,7 @@ export interface MessageListData {
 
 export type ArtifactType = "code" | "diff" | "preview" | "file" | "deploy_status";
 
-// 注意：后端 SSE mock 当前 artifact 对象写的是 "type" 而非 "artifactType"，
-// 这是后端的 bug，需通知后端同学在 SSE 流中也改为 artifactType 以与 REST schema (ArtifactBrief.artifact_type) 保持一致。
+// artifactType via SSE is now normalized by ADKToSSETranslator._normalize_artifact_fields
 
 export interface Artifact {
   id: string;

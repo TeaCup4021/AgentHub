@@ -24,7 +24,7 @@ class ConversationService:
         page_size: int = 10, 
         keyword: Optional[str] = None
     ) -> Page:
-        query = select(Conversation).where(Conversation.owner_id == user_id)
+        query = select(Conversation).where(Conversation.owner_id == user_id, Conversation.is_deleted == False)
         
         if keyword:
             query = query.where(Conversation.title.ilike(f"%{keyword}%"))
@@ -99,7 +99,7 @@ class ConversationService:
         
     @staticmethod
     async def get_conversation(db: AsyncSession, conv_id: UUID):
-        query = select(Conversation).where(Conversation.id == conv_id)
+        query = select(Conversation).where(Conversation.id == conv_id, Conversation.is_deleted == False)
         result = await db.execute(query)
         conv = result.scalar_one_or_none()
         if not conv:
@@ -127,12 +127,12 @@ class ConversationService:
 
     @staticmethod
     async def update_conversation(db: AsyncSession, user_id: UUID, conv_id: UUID, data: ConversationUpdate):
-        query = select(Conversation).where(Conversation.id == conv_id, Conversation.owner_id == user_id)
+        query = select(Conversation).where(Conversation.id == conv_id, Conversation.owner_id == user_id, Conversation.is_deleted == False)
         result = await db.execute(query)
         conv = result.scalar_one_or_none()
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-            
+
         if data.title is not None:
             conv.title = data.title
         if data.is_archived is not None:
@@ -161,51 +161,14 @@ class ConversationService:
 
     @staticmethod
     async def delete_conversation(db: AsyncSession, user_id: UUID, conv_id: UUID):
-        query = select(Conversation).where(Conversation.id == conv_id, Conversation.owner_id == user_id)
+        query = select(Conversation).where(
+            Conversation.id == conv_id, Conversation.owner_id == user_id, Conversation.is_deleted == False
+        )
         result = await db.execute(query)
         conv = result.scalar_one_or_none()
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-
-        # Collect related message IDs for cascade cleanup
-        msg_query = select(Message.id).where(Message.conversation_id == conv_id)
-        msg_result = await db.execute(msg_query)
-        message_ids = [row[0] for row in msg_result.fetchall()]
-
-        # 1. Delete orchestrator_subtasks (FK → orchestrator_tasks, messages)
-        if message_ids:
-            await db.execute(delete(OrchestratorSubtask).where(
-                OrchestratorSubtask.task_id.in_(
-                    select(OrchestratorTask.id).where(OrchestratorTask.conversation_id == conv_id)
-                )
-            ))
-            # Also delete subtasks referencing messages in this conversation
-            await db.execute(delete(OrchestratorSubtask).where(
-                OrchestratorSubtask.output_message_id.in_(message_ids)
-            ))
-
-        # 2. Delete orchestrator_tasks (FK → conversations, messages)
-        await db.execute(delete(OrchestratorTask).where(OrchestratorTask.conversation_id == conv_id))
-
-        # 3. Delete message_mentions (FK → messages)
-        if message_ids:
-            await db.execute(delete(MessageMention).where(MessageMention.message_id.in_(message_ids)))
-
-        # 4. Delete artifacts (FK → conversations, messages)
-        await db.execute(delete(Artifact).where(Artifact.conversation_id == conv_id))
-
-        # 5. Delete message_pins (FK → conversations, messages)
-        await db.execute(delete(MessagePin).where(MessagePin.conversation_id == conv_id))
-
-        # 6. Delete messages (FK → conversations)
-        await db.execute(delete(Message).where(Message.conversation_id == conv_id))
-
-        # 7. Delete conversation_participants (FK → conversations)
-        await db.execute(delete(ConversationParticipant).where(
-            ConversationParticipant.conversation_id == conv_id
-        ))
-
-        # 8. Delete conversation
-        await db.execute(delete(Conversation).where(Conversation.id == conv_id))
+        conv.is_deleted = True
+        conv.deleted_at = datetime.now(timezone.utc)
         await db.commit()
 

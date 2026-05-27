@@ -52,6 +52,19 @@ class ADKToSSETranslator:
             if error_payload:
                 yield self._format_sse("error", error_payload)
 
+        # Fallback: emit message_end for any started invocation that didn't receive one
+        for mid in state.seen_invocations:
+            if mid not in state.ended_invocations:
+                yield self._format_sse("message_end", {
+                    "version": self.version,
+                    "event_id": str(uuid.uuid4()),
+                    "conversation_id": conversation_id,
+                    "message_id": mid,
+                    "finish_reason": "completed",
+                    "usage": {"input_tokens": 0, "output_tokens": 0},
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+
     def _to_message_start(
         self,
         event: Event,
@@ -87,8 +100,12 @@ class ADKToSSETranslator:
     ) -> AsyncGenerator[dict, None]:
         content = getattr(event, "content", None)
         parts = getattr(content, "parts", None) if content else None
+        if not parts:
+            return
+
+        # Skip non-partial (complete) text if we already streamed partial tokens
         if not getattr(event, "partial", False):
-            if not parts:
+            if message_id in state.token_index_by_invocation:
                 return
             for part in parts:
                 text = getattr(part, "text", None)
@@ -105,9 +122,6 @@ class ADKToSSETranslator:
                     "index": state.token_index_by_invocation[message_id],
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
-            return
-
-        if not parts:
             return
 
         for part in parts:
@@ -146,6 +160,8 @@ class ADKToSSETranslator:
     # 如果提取的工件为空，则返回None
         if not artifact:
             return None
+    # 规范化字段名
+        artifact = self._normalize_artifact_fields(artifact)
     # 返回格式化后的工件字典
         return {
             "version": self.version,  # 工件版本
@@ -256,6 +272,15 @@ class ADKToSSETranslator:
         actions = getattr(event, "actions", None)
         artifact_delta = getattr(actions, "artifact_delta", None) if actions else None
         return artifact_delta if isinstance(artifact_delta, dict) else {}
+
+    @staticmethod
+    def _normalize_artifact_fields(artifact: dict) -> dict:
+        normalized = dict(artifact)
+        if "type" in normalized and "artifactType" not in normalized:
+            normalized["artifactType"] = normalized.pop("type")
+        if "artifact_type" in normalized and "artifactType" not in normalized:
+            normalized["artifactType"] = normalized.pop("artifact_type")
+        return normalized
 
     def _extract_usage(self, event: Event) -> dict:
         usage = getattr(event, "usage_metadata", None)

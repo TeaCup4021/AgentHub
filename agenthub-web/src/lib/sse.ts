@@ -30,6 +30,7 @@ export function setMockSSE(factory: SSEFactory | null) {
 export function createSSEStream(
   conversationId: string,
   callbacks: SSECallbacks,
+  prompt?: string,
 ): () => void {
   if (mockSSE) return mockSSE(conversationId, callbacks);
 
@@ -47,7 +48,8 @@ export function createSSEStream(
   };
 
   // [后端对接] SSE 流式端点，事件类型: message_start / token / artifact / agent_status / thinking / message_end / error
-  fetch(`/api/v1/conversations/${conversationId}/stream`, {
+  const streamUrl = `/api/v1/conversations/${conversationId}/stream${prompt ? `?prompt=${encodeURIComponent(prompt)}` : ""}`;
+  fetch(streamUrl, {
     headers: {
       Accept: "text/event-stream",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
