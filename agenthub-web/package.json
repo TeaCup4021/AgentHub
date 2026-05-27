@@ -15,7 +15,6 @@
     "@shikijs/transformers": "^4.1.0",
     "@tanstack/react-query": "^5.100.11",
     "axios": "^1.16.1",
-    "docx": "^9.7.0",
     "framer-motion": "^12.40.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

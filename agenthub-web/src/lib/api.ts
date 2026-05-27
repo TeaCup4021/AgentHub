@@ -21,6 +21,7 @@ import type {
   Message,
 } from "@/types";
 
+// [后端对接] Vite 代理 /api → localhost:8080，见 vite.config.ts
 const api: AxiosInstance = axios.create({
   baseURL: "/api/v1",
   timeout: 30000,
@@ -29,6 +30,7 @@ const api: AxiosInstance = axios.create({
   },
 });
 
+// [后端对接] Token 从 localStorage 读取，存的时候用 localStorage.setItem("token", "xxx")
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -48,7 +50,6 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       localStorage.removeItem("token");
-      window.location.href = "/login";
     }
     return Promise.reject(error);
   },
@@ -120,13 +121,13 @@ export interface AgentVerifyRequest {
   systemPrompt?: string;
 }
 
+// [后端对接] mode: direct(单聊) / auto_orchestrate(群聊) / confirm_plan(确认计划)
 export interface SendMessageRequest {
   content: string;
   contentType?: string;
   mentions?: string[];
   parentMessageId?: string;
-  // mode 字段暂未对接后端，为 Orchestrator 功能预留
-  mode?: "auto_orchestrate" | "direct";
+  mode?: "auto_orchestrate" | "direct" | "confirm_plan";
 }
 
 export interface SendMessageResponse extends ApiResponse<Message> {}

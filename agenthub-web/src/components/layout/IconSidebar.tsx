@@ -7,6 +7,7 @@ export function IconSidebar() {
   const location = useLocation();
 
   const isSettings = location.pathname === "/settings";
+  const isMock = import.meta.env.VITE_USE_MOCK !== "false";
 
   return (
     <div style={{
@@ -47,6 +48,22 @@ export function IconSidebar() {
           }}
           footer={{ collapseButton: false }}
         />
+        <div
+          title={isMock ? "Mock 模式" : "真实 API 模式"}
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            padding: "8px 0 12px",
+          }}
+        >
+          <div style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: isMock ? "var(--color-warning)" : "var(--color-success)",
+            boxShadow: `0 0 6px ${isMock ? "var(--color-warning)" : "var(--color-success)"}`,
+          }} />
+        </div>
       </div>
     </div>
   );

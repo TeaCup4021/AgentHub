@@ -1,12 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
-import { ConfigProvider } from "@douyinfe/semi-ui";
+import { ConfigProvider, Spin } from "@douyinfe/semi-ui";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { SettingsPage } from "@/components/settings";
 import { useUIStore } from "@/stores/uiStore";
+
+const SettingsPage = lazy(() =>
+  import("@/components/settings").then((m) => ({ default: m.SettingsPage })),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -152,7 +155,11 @@ function AnimatedRoutes() {
         style={{ height: "100%" }}
       >
         <Routes location={location}>
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={
+            <Suspense fallback={<div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}><Spin size="large" /></div>}>
+              <SettingsPage />
+            </Suspense>
+          } />
           <Route path="/*" element={<AppLayout />} />
         </Routes>
       </motion.div>

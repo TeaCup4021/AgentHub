@@ -4,6 +4,7 @@ import { PreviewCard } from "./PreviewCard";
 import { FileCard } from "./FileCard";
 import { DeployStatusCard } from "./DeployStatusCard";
 import type { Artifact } from "@/types";
+import { memo } from "react";
 import type { FC } from "react";
 
 interface CardRendererProps {
@@ -18,8 +19,8 @@ const cardRenderers: Record<string, FC<CardRendererProps>> = {
   deploy_status: DeployStatusCard,
 };
 
-export function CardRenderer({ artifact }: CardRendererProps) {
+export const CardRenderer = memo(function CardRenderer({ artifact }: CardRendererProps) {
   const Renderer = cardRenderers[artifact.artifactType];
   if (!Renderer) return null;
   return <Renderer artifact={artifact} />;
-}
+});

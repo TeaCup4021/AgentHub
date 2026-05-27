@@ -21,12 +21,14 @@ interface UIState {
   sidebarWidth: number;
   previewPanelOpen: boolean;
   theme: Theme;
+  newConvTrigger: number;
 
   toggleSidebar: () => void;
   setSidebarWidth: (w: number) => void;
   openPreview: () => void;
   closePreview: () => void;
   setTheme: (theme: Theme) => void;
+  triggerNewConv: () => void;
 }
 
 function loadSidebarWidth(): number {
@@ -45,6 +47,7 @@ export const useUIStore = create<UIState>((set) => ({
   sidebarWidth: loadSidebarWidth(),
   previewPanelOpen: false,
   theme: loadTheme(),
+  newConvTrigger: 0,
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarWidth: (w) => set({ sidebarWidth: w }),
@@ -54,4 +57,5 @@ export const useUIStore = create<UIState>((set) => ({
     persistTheme(theme);
     set({ theme });
   },
+  triggerNewConv: () => set((s) => ({ newConvTrigger: s.newConvTrigger + 1 })),
 }));

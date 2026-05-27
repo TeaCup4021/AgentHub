@@ -22,12 +22,35 @@ import {
   IconDownload,
 } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useUpdateAnyConversation, useDeleteConversation } from "@/hooks";
 import { formatRelativeTime, truncate } from "@/lib/utils";
 import { CreateAgentModal, AgentManageModal } from "@/components/agent";
 import { ConversationSkeleton } from "@/components/chat/Skeleton";
 import { exportConversation } from "@/lib/exportConversation";
 import type { Agent, Conversation, Message } from "@/types";
+
+const pinIcon = <IconMapPin />;
+const editIcon = <IconEdit />;
+const archiveIcon = <IconArchive />;
+const downloadIcon = <IconDownload />;
+const deleteIcon = <IconDelete />;
+
+const activeMenuItems = [
+  { node: "item" as const, name: "置顶" as const, icon: pinIcon },
+  { node: "item" as const, name: "取消置顶" as const, icon: pinIcon },
+  { node: "item" as const, name: "重命名", icon: editIcon },
+  { node: "item" as const, name: "归档", icon: archiveIcon },
+  { node: "item" as const, name: "导出", icon: downloadIcon },
+  { node: "divider" as const },
+  { node: "item" as const, name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger" },
+];
+
+const archivedMenuItems = [
+  { node: "item" as const, name: "取消归档", icon: <IconRestore /> },
+  { node: "divider" as const },
+  { node: "item" as const, name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger" },
+];
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -156,6 +179,11 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
     return () => window.removeEventListener("keydown", onKey);
   }, [batchMode, exitBatchMode]);
 
+  const newConvTrigger = useUIStore((s) => s.newConvTrigger);
+  useEffect(() => {
+    if (newConvTrigger > 0) openNewDialog();
+  }, [newConvTrigger]);
+
   const handleBatchArchive = useCallback(() => {
     let count = 0;
     for (const id of selectedIds) {
@@ -206,19 +234,12 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
         position="right"
         menu={
           isArchived
-            ? [
-                { node: "item", name: "取消归档", icon: <IconRestore /> },
-                { node: "divider" },
-                { node: "item", name: "删除", icon: <IconDelete />, className: "semi-dropdown-item-danger" },
-              ]
-            : [
-                { node: "item", name: conv.isPinned ? "取消置顶" : "置顶", icon: <IconMapPin /> },
-                { node: "item", name: "重命名", icon: <IconEdit /> },
-                { node: "item", name: "归档", icon: <IconArchive /> },
-                { node: "item", name: "导出", icon: <IconDownload /> },
-                { node: "divider" },
-                { node: "item", name: "删除", icon: <IconDelete />, className: "semi-dropdown-item-danger" },
-              ]
+            ? archivedMenuItems
+            : activeMenuItems.filter((item) => {
+                if (item.name === "置顶") return !conv.isPinned;
+                if (item.name === "取消置顶") return conv.isPinned;
+                return true;
+              })
         }
         onClick={(item: { name: string }) => {
           if (item.name === "置顶" || item.name === "取消置顶") handlePin(conv);

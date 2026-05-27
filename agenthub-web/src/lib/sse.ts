@@ -46,6 +46,7 @@ export function createSSEStream(
     error: (d) => callbacks.onError?.(d as SSEError),
   };
 
+  // [后端对接] SSE 流式端点，事件类型: message_start / token / artifact / agent_status / thinking / message_end / error
   fetch(`/api/v1/conversations/${conversationId}/stream`, {
     headers: {
       Accept: "text/event-stream",
