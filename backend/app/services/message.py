@@ -59,6 +59,9 @@ class MessageService:
         if not conv or conv.owner_id != user_id:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
+        if not data.content.strip():
+            raise HTTPException(status_code=400, detail="content is required")
+
         now = datetime.now(timezone.utc)
         msg = Message(
             conversation_id=conv_id,

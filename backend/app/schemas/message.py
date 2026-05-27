@@ -6,11 +6,13 @@ from app.schemas.base import BaseSchema
 
 
 class MessageCreate(BaseSchema):
-    content: str = Field(..., min_length=1)
-    content_type: str = "text"  # text / markdown
+    content: str = Field(default="")
+    content_type: str = "text"
     mentions: List[UUID] = []
     parent_message_id: Optional[UUID] = None
-    mode: Optional[str] = None  # "auto_orchestrate" | "direct"
+    mode: Optional[str] = None  # "direct" | "auto_orchestrate" | "confirm_plan"
+    plan_id: Optional[UUID] = None  # confirm_plan mode
+    plan: Optional[List[dict]] = None  # confirm_plan mode: [{ subtask_id, agent_id, instruction }]
 
 
 class ArtifactBrief(BaseSchema):

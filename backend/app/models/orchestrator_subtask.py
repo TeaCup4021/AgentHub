@@ -9,7 +9,7 @@ class OrchestratorSubtask(Base, UUIDMixin, TimestampMixin):
     task_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('orchestrator_tasks.id'), nullable=False)
     agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('agents.id'), nullable=False)
     instruction: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default='queued')
+    status: Mapped[str] = mapped_column(String(50), nullable=False, server_default='queued')
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0')
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=True)
     output_message_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('messages.id'), nullable=True)

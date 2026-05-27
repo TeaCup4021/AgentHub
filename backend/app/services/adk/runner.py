@@ -66,6 +66,25 @@ class AgentHubRunner:
         ):
             yield event
 
+    async def run_single_turn(
+        self,
+        user_id: str,
+        session_id: str,
+        message: str,
+    ) -> list:
+        await self._ensure_session(user_id=user_id, session_id=session_id)
+        events = []
+        async for event in self.runner.run_async(
+            user_id=user_id,
+            session_id=session_id,
+            new_message=types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=message)],
+            ),
+        ):
+            events.append(event)
+        return events
+
     async def _ensure_session(self, user_id: str, session_id: str) -> None:
         try:
             await self.session_service.create_session(

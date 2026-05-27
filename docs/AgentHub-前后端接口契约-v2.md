@@ -213,8 +213,6 @@ POST /api/v1/conversations/{conversation_id}/branch
 
 **后端行为：** 创建新会话，将 `source_message_id` 之前的所有消息复制/引用到新会话上下文窗口。
 
----
-
 ## 3. 消息 API
 
 ### 3.1 发送消息
@@ -436,7 +434,7 @@ POST /api/v1/agents/verify
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | string | 唯一标识 |
-| artifactType | string | `"code"` / `"diff"` / `"preview"` / `"file"` / `"deploy_status"` |
+| artifactType | string | `"code"` / `"diff"` / `"preview"` / `"file"` / `"deploy_status"` / `"plan"` |
 | title | string? | 产物标题/文件名 |
 | content | object | 按 artifactType 不同结构（见下） |
 | storageKey | string? | 对象存储 key |
@@ -472,6 +470,19 @@ POST /api/v1/agents/verify
 { "status": "deployed", "url": "https://..." }
 ```
 `status` 取值：`"building"` / `"deployed"` / `"failed"`
+
+**plan (`"plan"` 类型的 artifact，Day09 新增)：**
+```json
+{
+  "subtasks": [
+    {
+      "agentId": "ecc221ac-...",
+      "agentName": "Claude Code",
+      "instruction": "编写登录页面 React 组件"
+    }
+  ]
+}
+```
 
 ---
 
@@ -838,3 +849,4 @@ interface Artifact {
 |------|------|---------|
 | v2.0 | 2026-05-26 | 整合所有接口：新增分支 API、confirm_plan mode、task_hints、verify Agent、DELETE Agent、Orchestrator 完整契约、thinking SSE 事件、message_start.meta 扩展、message_end.usage |
 | v1.0 | 2026-05-24 | 初版：基础 REST + SSE 协议 |
+

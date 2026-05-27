@@ -14,6 +14,8 @@ from app.schemas.conversation import ConversationCreate, ConversationUpdate, Con
 from app.schemas.base import Page
 from app.models.conversation import Conversation
 from app.models.message_pin import MessagePin
+from app.models.orchestrator_task import OrchestratorTask
+from app.models.message_mention import MessageMention
 from app.services.conversation import ConversationService
 from app.services.adapters.adk_to_sse import ADKToSSETranslator
 from app.services.adk.runner import AgentHubRunner, build_single_chat_agent
@@ -324,12 +326,133 @@ async def unpin_message(
     return
 
 
+async def _orchestrator_plan_stream(
+    conv_id: UUID,
+    orch_task: OrchestratorTask,
+    db: AsyncSession,
+) -> AsyncGenerator[str, None]:
+    from app.services.adk.planner import OrchestratorPlanner
+    from app.models.message import Message as MsgModel
+    from app.models.artifact import Artifact
+
+    try:
+        user_msg = await db.get(MsgModel, orch_task.trigger_message_id)
+        mention_result = await db.execute(
+            select(MessageMention).where(MessageMention.message_id == user_msg.id)
+        )
+        mentions = [m.agent_id for m in mention_result.scalars().all()]
+
+        planner = OrchestratorPlanner()
+        result = await planner.plan(
+            db=db,
+            user_message=user_msg.content,
+            agent_ids=mentions,
+            conversation_id=conv_id,
+        )
+    except Exception:
+        yield _format_sse("error", {
+            "version": "v1",
+            "event_id": str(uuid4()),
+            "conversation_id": str(conv_id),
+            "message_id": "",
+            "code": "PLANNER_ERROR",
+            "message": "任务拆解失败，请重试",
+            "retryable": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        orch_task.status = "failed"
+        await db.commit()
+        return
+
+    plan_msg = MsgModel(
+        conversation_id=conv_id,
+        sender_type="orchestrator",
+        content=result.raw_text,
+        status="done",
+    )
+    db.add(plan_msg)
+    await db.flush()
+
+    plan_dict = result.plan.model_dump(mode="json")
+    artifact = Artifact(
+        conversation_id=conv_id,
+        message_id=plan_msg.id,
+        artifact_type="plan",
+        content=plan_dict,
+    )
+    db.add(artifact)
+
+    orch_task.status = "awaiting_confirmation"
+    orch_task.plan = plan_dict
+    await db.commit()
+
+    plan_array = [
+        {
+            "subtask_id": str(st.subtask_id),
+            "agent": {"id": str(st.agent_id), "name": st.agent_name},
+            "instruction": st.instruction,
+            "priority": i + 1,
+        }
+        for i, st in enumerate(result.plan.subtasks)
+    ]
+    yield _format_sse("message_start", {
+        "version": "v1",
+        "event_id": str(uuid4()),
+        "conversation_id": str(conv_id),
+        "message_id": str(plan_msg.id),
+        "sender": {"type": "orchestrator", "id": "", "name": "Orchestrator"},
+        "meta": {"plan": plan_array},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    chars = list(result.raw_text)
+    for i, ch in enumerate(chars):
+        yield _format_sse("token", {
+            "version": "v1",
+            "event_id": str(uuid4()),
+            "conversation_id": str(conv_id),
+            "message_id": str(plan_msg.id),
+            "delta": ch,
+            "index": i,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        await asyncio.sleep(0.02)
+
+    yield _format_sse("message_end", {
+        "version": "v1",
+        "event_id": str(uuid4()),
+        "conversation_id": str(conv_id),
+        "message_id": str(plan_msg.id),
+        "finish_reason": "plan_draft",
+        "usage": {},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+
 @router.get("/{conv_id}/stream")
 async def stream_conversation(
     conv_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
     prompt: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
 ):
+    result = await db.execute(
+        select(OrchestratorTask)
+        .where(
+            OrchestratorTask.conversation_id == conv_id,
+            OrchestratorTask.status == "planning",
+        )
+        .order_by(OrchestratorTask.created_at.desc())
+        .limit(1)
+    )
+    orch_task = result.scalar_one_or_none()
+
+    if orch_task:
+        return StreamingResponse(
+            _orchestrator_plan_stream(conv_id, orch_task, db),
+            media_type="text/event-stream",
+        )
+
     if _use_adk_stream():
         return StreamingResponse(
             _adk_sse_stream(conv_id, user_id, prompt),
