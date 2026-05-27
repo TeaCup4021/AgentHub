@@ -1,3 +1,4 @@
+import { Card, Tag } from "@douyinfe/semi-ui";
 import type { Artifact, DiffArtifactContent } from "@/types";
 
 interface DiffCardProps {
@@ -7,21 +8,43 @@ interface DiffCardProps {
 export function DiffCard({ artifact }: DiffCardProps) {
   const c = artifact.content as unknown as DiffArtifactContent;
   return (
-    <div className="my-2 overflow-hidden rounded-md border border-gray-300 text-left">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-100">
-        <span className="text-xs text-gray-600">{c.fileName || "diff"}</span>
-        <span className="text-xs text-gray-400">{c.language}</span>
-      </div>
-      <div className="grid grid-cols-2 divide-x divide-gray-200 text-xs">
-        <div className="bg-red-50 px-3 py-2 font-mono whitespace-pre-wrap text-gray-700">
-          <div className="mb-1 text-[10px] text-red-500 font-semibold">旧版本</div>
+    <Card
+      style={{ margin: "8px 0", overflow: "hidden" }}
+      title={
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: "var(--font-size-sm)", color: "var(--color-text-primary)" }}>
+            {c.fileName || "diff"}
+          </span>
+          {c.language && <Tag size="small" color="grey">{c.language}</Tag>}
+        </div>
+      }
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, fontSize: "var(--font-size-sm)" }}>
+        <div style={{
+          background: "rgba(245, 63, 63, 0.06)",
+          padding: "8px 12px",
+          fontFamily: "monospace",
+          whiteSpace: "pre-wrap",
+          color: "var(--color-text-primary)",
+        }}>
+          <div style={{ marginBottom: 4, fontSize: "var(--font-size-xs)", color: "var(--color-danger)", fontWeight: 600 }}>
+            旧版本
+          </div>
           {c.oldCode}
         </div>
-        <div className="bg-green-50 px-3 py-2 font-mono whitespace-pre-wrap text-gray-700">
-          <div className="mb-1 text-[10px] text-green-600 font-semibold">新版本</div>
+        <div style={{
+          background: "rgba(0, 181, 120, 0.06)",
+          padding: "8px 12px",
+          fontFamily: "monospace",
+          whiteSpace: "pre-wrap",
+          color: "var(--color-text-primary)",
+        }}>
+          <div style={{ marginBottom: 4, fontSize: "var(--font-size-xs)", color: "var(--color-success)", fontWeight: 600 }}>
+            新版本
+          </div>
           {c.newCode}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

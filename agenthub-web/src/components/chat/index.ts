@@ -7,3 +7,5 @@ export { AgentDetailPopover } from "./AgentDetailPopover";
 export { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
 export { MentionSwitchDialog } from "./MentionSwitchDialog";
 export { ThinkingBlock } from "./ThinkingBlock";
+export { AgentDashboard } from "./AgentDashboard";
+export { MessageActions } from "./MessageActions";

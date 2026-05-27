@@ -7,15 +7,22 @@ interface StreamingMessage {
   thinkingSteps: ThinkingStep[];
 }
 
+export type ConnectionStatus = 'connected' | 'reconnecting' | 'failed';
+
 interface ChatUIState {
   activeConversationId: string | null;
   searchQuery: string;
   isStreaming: boolean;
   streamingContent: Record<string, StreamingMessage>;
   pendingMention: string | null;
+  connectionStatus: ConnectionStatus;
+  retryCount: number;
+  pendingQuote: { messageId: string; content: string } | null;
+  messageSearch: string;
 
   setActiveConversation: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
+  setMessageSearch: (query: string) => void;
   setIsStreaming: (v: boolean) => void;
   initStreamingMessage: (messageId: string) => void;
   appendStreamToken: (messageId: string, delta: string) => void;
@@ -25,6 +32,9 @@ interface ChatUIState {
   getStreamingContent: (messageId: string) => StreamingMessage | undefined;
   clearStreamingContent: (messageId: string) => void;
   setPendingMention: (name: string | null) => void;
+  setConnectionStatus: (status: ConnectionStatus) => void;
+  setRetryCount: (n: number) => void;
+  setPendingQuote: (quote: { messageId: string; content: string } | null) => void;
 }
 
 export const useChatStore = create<ChatUIState>((set, get) => ({
@@ -33,9 +43,14 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   isStreaming: false,
   streamingContent: {},
   pendingMention: null,
+  connectionStatus: 'connected',
+  retryCount: 0,
+  pendingQuote: null,
+  messageSearch: "",
 
   setActiveConversation: (id) => set({ activeConversationId: id }),
   setSearchQuery: (q) => set({ searchQuery: q }),
+  setMessageSearch: (q) => set({ messageSearch: q }),
   setIsStreaming: (v) => set({ isStreaming: v }),
 
   initStreamingMessage: (messageId) =>
@@ -111,4 +126,9 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
     }),
 
   setPendingMention: (name) => set({ pendingMention: name }),
+
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setRetryCount: (n) => set({ retryCount: n }),
+
+  setPendingQuote: (quote) => set({ pendingQuote: quote }),
 }));

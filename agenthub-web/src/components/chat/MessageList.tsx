@@ -1,25 +1,37 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useLayoutEffect, memo } from "react";
+import { Spin, Badge } from "@douyinfe/semi-ui";
+import { motion } from "framer-motion";
 import { useChatStore } from "@/stores/chatStore";
 import { CardRenderer } from "@/components/cards";
 import { AgentDetailPopover } from "./AgentDetailPopover";
 import { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
+import { MarkdownBubble } from "./MarkdownBubble";
+import { MessageActions } from "./MessageActions";
+import { formatTime, formatFullTime } from "@/lib/formatTime";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Agent, Message, ThinkingStep } from "@/types";
 import { ThinkingBlock } from "./ThinkingBlock";
 
-function TextBubble({ text }: { text: string }) {
-  return <p className="whitespace-pre-wrap">{text}</p>;
-}
+const FIVE_MINUTES = 5 * 60 * 1000;
 
-function StreamingTextBubble({ text }: { text: string }) {
+const TimeSeparator = memo(function TimeSeparator({ time }: { time: string }) {
   return (
-    <p className="whitespace-pre-wrap">
-      {text}
-      <span className="ml-0.5 inline-block w-1.5 h-4 bg-blue-500 animate-pulse align-text-bottom" />
-    </p>
+    <div style={{ display: "flex", justifyContent: "center", padding: "4px 0" }} title={formatFullTime(time)}>
+      <span style={{
+        fontSize: "var(--font-size-xs)",
+        color: "var(--color-text-tertiary)",
+        background: "var(--color-bg-elevated)",
+        padding: "2px 12px",
+        borderRadius: "var(--radius-round)",
+        boxShadow: "var(--shadow-sm)",
+      }}>
+        {formatTime(time)}
+      </span>
+    </div>
   );
-}
+});
 
-function MessageBubble({ message, agents }: { message: Message; agents: Agent[] }) {
+const MessageBubble = memo(function MessageBubble({ message, agents, searchText }: { message: Message; agents: Agent[]; searchText?: string }) {
   const isUser = message.senderType === "user";
   const isOrchestrator = message.senderType === "orchestrator";
   const agent = !isUser && !isOrchestrator && message.senderId
@@ -55,24 +67,63 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
     setShowPopover(false);
   }, [agent]);
 
-  const avatarCursor = agent ? "cursor-pointer" : "";
+  const isFailed = message.status === "failed";
+  const avatarCursor = agent ? "pointer" : "";
 
   return (
-    <div className={`flex gap-3 px-4 py-3 ${isUser ? "flex-row-reverse" : ""}`}>
-      <div
-        ref={avatarRef}
-        onClick={handleAvatarClick}
-        onContextMenu={handleAvatarContextMenu}
-        onMouseDown={(e) => {
-          if (showPopover || showMenu) e.stopPropagation();
-        }}
-        className={`relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white select-none ${
-          isUser ? "bg-blue-500" : "bg-emerald-500"
-        } ${avatarCursor}`}
-        title={agent ? `${agent.name} - ${agent.model}` : undefined}
-      >
-        {isUser ? "我" : (message.senderName || "A").charAt(0)}
-      </div>
+    <div
+      style={{
+        display: "flex",
+        gap: 12,
+        padding: "12px 16px",
+        flexDirection: isUser ? "row-reverse" : "row",
+      }}
+      title={formatFullTime(message.createdAt)}
+    >
+      {isFailed ? (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 32,
+          height: 32,
+          borderRadius: "50%",
+          background: "var(--color-bg-hover)",
+          color: "var(--color-danger)",
+          fontSize: "var(--font-size-md)",
+          fontWeight: "bold",
+          flexShrink: 0,
+        }}>
+          !
+        </div>
+      ) : (
+        <div
+          ref={avatarRef}
+          onClick={handleAvatarClick}
+          onContextMenu={handleAvatarContextMenu}
+          onMouseDown={(e) => {
+            if (showPopover || showMenu) e.stopPropagation();
+          }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            fontSize: "var(--font-size-xs)",
+            fontWeight: 500,
+            color: "#fff",
+            flexShrink: 0,
+            background: isUser ? "var(--color-primary)" : "var(--color-success)",
+            cursor: avatarCursor,
+            userSelect: "none",
+          }}
+          title={agent ? `${agent.name} - ${agent.model}` : undefined}
+        >
+          {isUser ? "我" : (message.senderName || "A").charAt(0)}
+        </div>
+      )}
 
       {showPopover && agent && (
         <AgentDetailPopover agent={agent} position={popoverPos} onClose={closeAll} />
@@ -81,54 +132,173 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
         <AgentAvatarContextMenu agentName={agent.name} position={menuPos} onClose={closeAll} />
       )}
 
-      <div className={`max-w-[75%] ${isUser ? "text-right" : ""}`}>
-        {!isUser && <p className="mb-1 text-xs font-medium text-gray-500">{message.senderName || "Agent"}</p>}
-        <div className={`inline-block rounded-2xl px-4 py-2 text-sm leading-relaxed ${
-          isUser ? "bg-chat-bubble-user text-gray-900" : "bg-chat-bubble-agent text-gray-800"}`}>
-          {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
-          {message.content && <TextBubble text={message.content} />}
-          {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+      <div style={{ maxWidth: "75%", textAlign: isUser ? "right" : "left" }}>
+        {!isUser && (
+          <p style={{ marginBottom: 4, fontSize: "var(--font-size-xs)", fontWeight: 500, color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
+            {message.senderName || "Agent"}
+            {isFailed && (
+              <span style={{ color: "var(--color-danger)", fontWeight: 400 }}>
+                响应失败
+              </span>
+            )}
+          </p>
+        )}
+        <div className="message-bubble-wrap" style={{ position: "relative", display: "inline-block" }}>
+          <div style={{
+            borderRadius: "var(--radius-lg)",
+            padding: "8px 16px",
+            fontSize: "var(--font-size-md)",
+            lineHeight: 1.6,
+            background: isFailed
+              ? "var(--color-bg-hover)"
+              : isUser
+                ? "var(--color-bubble-user-bg)"
+                : "var(--color-bubble-agent-bg)",
+            color: isUser ? "var(--color-bubble-user-text)" : "var(--color-text-primary)",
+            border: isFailed
+              ? "1px solid var(--color-danger)"
+              : !isUser
+                ? "1px solid var(--color-bubble-agent-border)"
+                : "none",
+            boxShadow: !isUser ? "var(--shadow-sm)" : "none",
+          }}>
+            <ErrorBoundary label="消息渲染">
+              {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
+              {message.content && (
+                <MarkdownBubble
+                  text={searchText ? highlightText(message.content, searchText) : message.content}
+                />
+              )}
+              {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+            </ErrorBoundary>
+          </div>
+          <MessageActions
+            message={message}
+            isStreaming={message.status === "streaming"}
+            isFailed={message.status === "failed"}
+          />
         </div>
+        {isFailed && isUser && (
+          <p style={{ marginTop: 4, fontSize: "var(--font-size-xs)", color: "var(--color-danger)", display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+            </svg>
+            发送失败
+          </p>
+        )}
       </div>
     </div>
   );
-}
+});
 
-function StreamingMessageBubble({ messageId, agentName }: { messageId: string; agentName: string }) {
+const StreamingMessageBubble = memo(function StreamingMessageBubble({ messageId, agentName }: { messageId: string; agentName: string }) {
   const sc = useChatStore((s) => s.getStreamingContent(messageId));
   if (!sc) return null;
   return (
-    <div className="flex gap-3 px-4 py-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-medium text-white">
+    <div style={{ display: "flex", gap: 12, padding: "12px 16px" }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: "var(--color-success)",
+        color: "#fff",
+        fontSize: "var(--font-size-xs)",
+        fontWeight: 500,
+        flexShrink: 0,
+      }}>
         {(agentName || "A").charAt(0)}
       </div>
-      <div className="max-w-[75%]">
-        <p className="mb-1 text-xs font-medium text-gray-500">{agentName || "Agent"}</p>
-        <div className="inline-block rounded-2xl px-4 py-2 text-sm leading-relaxed bg-chat-bubble-agent text-gray-800">
-          {sc.thinkingSteps.length > 0 && <ThinkingBlock steps={sc.thinkingSteps} isStreaming />}
-          {sc.content && <StreamingTextBubble text={sc.content} />}
-          {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+      <div style={{ maxWidth: "75%" }}>
+        <p style={{ marginBottom: 4, fontSize: "var(--font-size-xs)", fontWeight: 500, color: "var(--color-text-secondary)" }}>
+          {agentName || "Agent"}
+        </p>
+        <div style={{
+          display: "inline-block",
+          borderRadius: "var(--radius-lg)",
+          padding: "8px 16px",
+          fontSize: "var(--font-size-md)",
+          lineHeight: 1.6,
+          background: "var(--color-bubble-agent-bg)",
+          color: "var(--color-text-primary)",
+          border: "1px solid var(--color-bubble-agent-border)",
+          boxShadow: "var(--shadow-sm)",
+        }}>
+          <ErrorBoundary label="流式消息渲染">
+            {sc.thinkingSteps.length > 0 && <ThinkingBlock steps={sc.thinkingSteps} isStreaming />}
+            {sc.content && <MarkdownBubble text={sc.content} isStreaming />}
+            {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+          </ErrorBoundary>
         </div>
       </div>
     </div>
   );
-}
+});
 
-function PendingMessageBubble() {
+const PendingMessageBubble = memo(function PendingMessageBubble() {
   return (
-    <div className="flex gap-3 px-4 py-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-medium text-white">A</div>
-      <div className="max-w-[75%]">
-        <div className="inline-block rounded-2xl px-4 py-2 bg-chat-bubble-agent">
-          <span className="inline-flex gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+    <div style={{ display: "flex", gap: 12, padding: "12px 16px" }}>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: "var(--color-success)",
+        color: "#fff",
+        fontSize: "var(--font-size-xs)",
+        fontWeight: 500,
+        flexShrink: 0,
+      }}>
+        A
+      </div>
+      <div style={{ maxWidth: "75%" }}>
+        <div style={{
+          display: "inline-block",
+          borderRadius: "var(--radius-lg)",
+          padding: "12px 20px",
+          background: "var(--color-bubble-agent-bg)",
+          border: "1px solid var(--color-bubble-agent-border)",
+        }}>
+          <span style={{ display: "inline-flex", gap: 4 }}>
+            <span style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "var(--color-text-tertiary)",
+              animation: "bounce 1.4s infinite",
+              animationDelay: "0ms",
+            }} />
+            <span style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "var(--color-text-tertiary)",
+              animation: "bounce 1.4s infinite",
+              animationDelay: "150ms",
+            }} />
+            <span style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "var(--color-text-tertiary)",
+              animation: "bounce 1.4s infinite",
+              animationDelay: "300ms",
+            }} />
           </span>
         </div>
       </div>
     </div>
   );
+});
+
+function highlightText(text: string, query: string): string {
+  if (!query) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(new RegExp(`(${escaped})`, "gi"), "<mark>$1</mark>");
 }
 
 interface MessageListProps {
@@ -140,14 +310,53 @@ interface MessageListProps {
   hasMore?: boolean;
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
+  searchText?: string;
 }
 
 export function MessageList({
   messages, agents, streamingMessageId, streamingAgentName,
-  isWaiting, hasMore, isFetchingMore, onLoadMore,
+  isWaiting, hasMore, isFetchingMore, onLoadMore, searchText,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const prevVisibleCountRef = useRef(0);
+  const firstMsgIdRef = useRef<string | null>(null);
+
+  const visibleCount =
+    messages.length + (streamingMessageId ? 1 : 0) + (isWaiting ? 1 : 0);
+
+  const scrollToBottom = useCallback(() => {
+    bottomSentinelRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (messages.length > 0 && firstMsgIdRef.current !== null && messages[0].id !== firstMsgIdRef.current) {
+      setUnreadCount(0);
+      setIsAtBottom(true);
+      prevVisibleCountRef.current = 0;
+    }
+    firstMsgIdRef.current = messages.length > 0 ? messages[0].id : null;
+  }, [messages]);
+
+  useLayoutEffect(() => {
+    if (prevVisibleCountRef.current === 0) {
+      prevVisibleCountRef.current = visibleCount;
+      requestAnimationFrame(() => scrollToBottom());
+      return;
+    }
+    if (visibleCount > prevVisibleCountRef.current) {
+      const delta = visibleCount - prevVisibleCountRef.current;
+      if (isAtBottom) {
+        scrollToBottom();
+      } else {
+        setUnreadCount((c) => c + delta);
+      }
+    }
+    prevVisibleCountRef.current = visibleCount;
+  }, [visibleCount, isAtBottom, scrollToBottom]);
 
   useEffect(() => {
     const sentinel = topSentinelRef.current;
@@ -164,24 +373,94 @@ export function MessageList({
     return () => observer.disconnect();
   }, [hasMore, isFetchingMore, onLoadMore]);
 
+  useEffect(() => {
+    const sentinel = bottomSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsAtBottom(entry.isIntersecting);
+        if (entry.isIntersecting) setUnreadCount(0);
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto">
-      {onLoadMore && <div ref={topSentinelRef} className="h-1" />}
+    <div ref={containerRef} style={{ flex: 1, overflowY: "auto", position: "relative", background: "var(--color-bg-chat)" }}>
+      {onLoadMore && <div ref={topSentinelRef} style={{ height: 1 }} />}
       {isFetchingMore && (
-        <div className="flex justify-center py-2">
-          <span className="text-xs text-gray-400">加载历史消息...</span>
+        <div style={{ display: "flex", justifyContent: "center", padding: 8 }}>
+          <Spin size="small" />
         </div>
       )}
       {!hasMore && messages.length > 0 && onLoadMore && (
-        <div className="flex justify-center py-2">
-          <span className="text-xs text-gray-300">已加载全部消息</span>
+        <div style={{ display: "flex", justifyContent: "center", padding: 8 }}>
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-disabled)" }}>
+            已加载全部消息
+          </span>
         </div>
       )}
-      {messages.map((msg) => <MessageBubble key={msg.id} message={msg} agents={agents} />)}
+      {messages.map((msg, i) => {
+        const prevTime = i > 0 ? messages[i - 1].createdAt : null;
+        const needSeparator = !prevTime
+          || new Date(msg.createdAt).getTime() - new Date(prevTime).getTime() > FIVE_MINUTES;
+        return (
+          <motion.div
+            key={msg.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
+          >
+            {needSeparator && <TimeSeparator time={msg.createdAt} />}
+            <MessageBubble message={msg} agents={agents} searchText={searchText} />
+          </motion.div>
+        );
+      })}
       {streamingMessageId && streamingAgentName && (
         <StreamingMessageBubble messageId={streamingMessageId} agentName={streamingAgentName} />
       )}
-      {isWaiting && !streamingMessageId && <PendingMessageBubble />}
+      {isWaiting && !streamingMessageId && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
+        >
+          <PendingMessageBubble />
+        </motion.div>
+      )}
+      <div ref={bottomSentinelRef} style={{ height: 1 }} />
+      {!isAtBottom && unreadCount > 0 && (
+        <div style={{ position: "sticky", bottom: 24, display: "flex", justifyContent: "flex-end", paddingRight: 16, zIndex: 10 }}>
+          <Badge count={unreadCount > 99 ? "99+" : unreadCount}>
+            <button
+              onClick={scrollToBottom}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 40,
+                height: 40,
+                borderRadius: "50%",
+                background: "var(--color-primary)",
+                color: "#fff",
+                fontSize: "var(--font-size-xs)",
+                fontWeight: 700,
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "var(--shadow-md)",
+                transition: "all var(--duration-fast) var(--ease-out)",
+                animation: "slide-up 200ms ease-out",
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+          </Badge>
+        </div>
+      )}
     </div>
   );
 }

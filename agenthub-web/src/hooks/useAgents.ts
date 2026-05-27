@@ -47,3 +47,15 @@ export function useUpdateAgent(id: string) {
     },
   });
 }
+
+export function useDeleteAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await agentApi.delete(id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}

@@ -1,10 +1,13 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useChatStore } from "@/stores/chatStore";
+import { Button, Popover, Avatar } from "@douyinfe/semi-ui";
+import { IconSend, IconClose } from "@douyinfe/semi-icons";
 import { mentionsFromText } from "@/lib/mentionParser";
 import type { Agent } from "@/types";
 
 interface ChatInputProps {
   onSend: (content: string, mentions: string[]) => void;
+  onStop?: () => void;
   disabled?: boolean;
   agents: Agent[];
 }
@@ -16,7 +19,7 @@ function getPlainText(root: HTMLElement): string {
 function createMentionChip(agent: Agent): HTMLSpanElement {
   const chip = document.createElement("span");
   chip.textContent = `@${agent.name}`;
-  chip.className = "inline rounded bg-blue-100 px-0.5 text-blue-700 font-medium whitespace-nowrap";
+  chip.style.cssText = "display:inline;border-radius:4px;background:var(--color-bg-active);padding:0 4px;color:var(--color-primary);font-weight:500;white-space:nowrap;";
   chip.contentEditable = "false";
   chip.setAttribute("data-mention-id", agent.id);
   chip.setAttribute("data-mention-name", agent.name);
@@ -105,7 +108,7 @@ function getMentionQuery(): { query: string } | null {
   return { query: afterAt };
 }
 
-export function ChatInput({ onSend, disabled, agents }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) {
   const editorRef = useRef<HTMLDivElement>(null);
 
   const [mentionActive, setMentionActive] = useState(false);
@@ -114,6 +117,8 @@ export function ChatInput({ onSend, disabled, agents }: ChatInputProps) {
 
   const pendingMention = useChatStore((s) => s.pendingMention);
   const setPendingMention = useChatStore((s) => s.setPendingMention);
+  const pendingQuote = useChatStore((s) => s.pendingQuote);
+  const setPendingQuote = useChatStore((s) => s.setPendingQuote);
 
   const [isEmptyState, setIsEmptyState] = useState(true);
   const isEmpty = useCallback(() => {
@@ -232,62 +237,278 @@ export function ChatInput({ onSend, disabled, agents }: ChatInputProps) {
     editorRef.current?.focus();
   }, []);
 
+  const [charCount, setCharCount] = useState(0);
+  const charLimit = 8000;
+
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const observer = new MutationObserver(() => {
+      setCharCount(getPlainText(el).length);
+    });
+    observer.observe(el, { childList: true, characterData: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const charRatio = charCount / charLimit;
+  const charColor = charRatio > 1 ? "var(--color-danger)" : charRatio > 0.8 ? "var(--color-warning)" : "var(--color-text-tertiary)";
+
+  const [dragOver, setDragOver] = useState(false);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const el = editorRef.current;
+          if (!el) return;
+          el.focus();
+          const img = el.ownerDocument.createElement("img");
+          img.src = reader.result as string;
+          img.style.maxWidth = "320px";
+          img.style.maxHeight = "200px";
+          img.style.borderRadius = "var(--radius-md)";
+          img.style.margin = "4px 0";
+
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            range.insertNode(img);
+            range.setStartAfter(img);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          } else {
+            el.appendChild(img);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+
+    const files = e.dataTransfer?.files;
+    if (!files) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith("image/")) continue;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const el = editorRef.current;
+        if (!el) return;
+        el.focus();
+        const img = el.ownerDocument.createElement("img");
+        img.src = reader.result as string;
+        img.style.maxWidth = "320px";
+        img.style.maxHeight = "200px";
+        img.style.borderRadius = "var(--radius-md)";
+        img.style.margin = "4px 0";
+
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(img);
+          range.setStartAfter(img);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } else {
+          el.appendChild(img);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  }, []);
+
   return (
-    <div className="relative border-t border-gray-200 p-4">
-      <div className="flex items-end gap-2">
-        <div className="relative flex-1">
-          {isEmptyState && (
-            <div className="absolute inset-0 pointer-events-none px-4 py-2.5 text-sm text-gray-400" style={{ lineHeight: "1.5" }}>
-              输入消息... (Enter 发送, Shift+Enter 换行, @ 提及 Agent)
-            </div>
-          )}
-          <div
-            ref={editorRef}
-            contentEditable={!disabled}
-            suppressContentEditableWarning
-            onInput={handleInput}
-            onKeyDown={handleKeyDown}
-            onKeyUp={handleKeyUp}
-            className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-blue-400 disabled:bg-gray-100 overflow-y-auto"
-            style={{ minHeight: "42px", maxHeight: "200px", lineHeight: "1.5", color: "#1e293b" }}
+    <div style={{
+      borderTop: "1px solid var(--color-border-light)",
+      padding: "12px 16px",
+      background: "var(--color-bg-elevated)",
+    }}>
+      {pendingQuote && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 8,
+          padding: "6px 12px",
+          borderRadius: "var(--radius-md)",
+          background: "var(--color-bg-hover)",
+          fontSize: "var(--font-size-sm)",
+          color: "var(--color-text-secondary)",
+          borderLeft: "3px solid var(--color-primary)",
+        }}>
+          <span style={{
+            flex: 1,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}>
+            {pendingQuote.content.slice(0, 120)}
+          </span>
+          <Button
+            size="small"
+            theme="borderless"
+            icon={<IconClose />}
+            onClick={() => setPendingQuote(null)}
           />
         </div>
-
-        <button onClick={handleSend} disabled={disabled || isEmptyState}
-          className="shrink-0 rounded-lg bg-blue-600 p-2.5 text-white hover:bg-blue-700 disabled:opacity-50">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-          </svg>
-        </button>
-      </div>
-
-      {mentionActive && (
-        <div className="absolute bottom-full left-4 right-16 mb-1">
-          <div className="rounded-lg border border-gray-200 bg-white shadow-lg max-h-48 overflow-y-auto">
-            {matchedAgents.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-gray-400">无匹配的 Agent</div>
-            ) : (
-              matchedAgents.map((agent, i) => (
-                <button
+      )}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+        <Popover
+          visible={mentionActive && matchedAgents.length > 0}
+          trigger="custom"
+          position="topLeft"
+          content={
+            <div style={{ maxHeight: 192, overflowY: "auto", minWidth: 200 }}>
+              {matchedAgents.map((agent, i) => (
+                <Button
                   key={agent.id}
-                  type="button"
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm ${i === mentionIndex ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}
+                  theme="borderless"
+                  block
+                  style={{
+                    justifyContent: "flex-start",
+                    background: i === mentionIndex ? "var(--color-bg-active)" : "transparent",
+                    borderRadius: "var(--radius-sm)",
+                  }}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     handleSelectMention(agent);
                   }}
                 >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-medium text-white">
+                  <Avatar size="extra-small" style={{ marginRight: 8 }}>
                     {agent.name.charAt(0)}
-                  </span>
+                  </Avatar>
                   <span>{agent.name}</span>
-                  <span className="ml-auto text-xs text-gray-400">{agent.provider}</span>
-                </button>
-              ))
+                  <span style={{
+                    marginLeft: "auto",
+                    fontSize: "var(--font-size-xs)",
+                    color: "var(--color-text-tertiary)",
+                  }}>
+                    {agent.provider}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          }
+        >
+          <div style={{ position: "relative", flex: 1 }}>
+            {isEmptyState && (
+              <div style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                padding: "10px 16px",
+                fontSize: "var(--font-size-md)",
+                color: "var(--color-text-disabled)",
+                lineHeight: 1.5,
+              }}>
+                输入消息... (Enter 发送, @ 提及 Agent)
+              </div>
             )}
+            <div
+              ref={editorRef}
+              contentEditable={!disabled}
+              suppressContentEditableWarning
+              onInput={handleInput}
+              onKeyDown={handleKeyDown}
+              onKeyUp={handleKeyUp}
+              onPaste={handlePaste}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{
+                borderRadius: "var(--radius-md)",
+                border: `1px solid ${dragOver ? "var(--color-primary)" : "var(--color-border-medium)"}`,
+                padding: "10px 16px",
+                fontSize: "var(--font-size-md)",
+                outline: "none",
+                background: dragOver
+                  ? "var(--color-bg-active)"
+                  : disabled
+                    ? "var(--color-bg-hover)"
+                    : "var(--color-bg-elevated)",
+                overflowY: "auto",
+                minHeight: 44,
+                maxHeight: 200,
+                lineHeight: 1.5,
+                color: "var(--color-text-primary)",
+                transition: "border-color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out)",
+              }}
+            />
           </div>
-        </div>
-      )}
+        </Popover>
+
+        {disabled ? (
+          <Button
+            theme="solid"
+            type="danger"
+            icon={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+              </svg>
+            }
+            onClick={onStop}
+            style={{
+              borderRadius: "var(--radius-md)",
+              flexShrink: 0,
+              height: 44,
+              width: 44,
+              animation: "pulse 2s infinite",
+            }}
+          />
+        ) : (
+          <Button
+            theme="solid"
+            type="primary"
+            icon={<IconSend />}
+            disabled={isEmptyState || charCount > charLimit}
+            onClick={handleSend}
+            style={{
+              borderRadius: "var(--radius-md)",
+              flexShrink: 0,
+              height: 44,
+              width: 44,
+            }}
+          />
+        )}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>
+          {disabled && "正在生成..."}
+        </span>
+        {charCount > 0 && (
+          <span style={{ fontSize: "var(--font-size-xs)", color: charColor }}>
+            {charCount.toLocaleString()} / {charLimit.toLocaleString()}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

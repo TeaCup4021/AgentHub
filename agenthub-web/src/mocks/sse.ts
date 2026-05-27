@@ -1,6 +1,6 @@
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, Artifact } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, Artifact, Message } from "@/types";
 import { mockAgents, mockConversations } from "./data";
-import { addMockMessage } from "./handlers";
+import { addMockMessage, getLastUserMessage, getMockAgents } from "./handlers";
 import { generateId } from "@/lib/utils";
 
 interface MockSSEOptions {
@@ -62,8 +62,9 @@ export function createMockSSEStream(
   const conversation = mockConversations.find((c) => c.id === conversationId);
   const isGroup = conversation?.type === "group";
   const agentIds = conversation?.agentIds || [];
+  const liveAgents = getMockAgents();
   const agents = agentIds
-    .map((id) => mockAgents.find((a) => a.id === id))
+    .map((id) => liveAgents.find((a) => a.id === id) || mockAgents.find((a) => a.id === id))
     .filter(Boolean) as typeof mockAgents;
 
   if (agents.length === 0) {
@@ -94,93 +95,29 @@ export function createMockSSEStream(
     }
   };
 
-  const emitAgentStatuses = (startDelay: number) => {
-    if (!isGroup || agents.length <= 1) return startDelay;
-
-    let delay = startDelay;
-
-    for (const agent of agents) {
-      setTimeout(() => {
-        if (cancelled) return;
-        sendEvent("agent_status", {
-          version: "v1",
-          event_id: `evt-${generateId()}`,
-          conversation_id: conversationId,
-          message_id: messageId,
-          subtask_id: `sub-${generateId()}`,
-          agent: { id: agent.id, name: agent.name },
-          status: "queued",
-          progress: 0,
-          timestamp: new Date().toISOString(),
-        });
-      }, delay);
-
-      delay += 50;
-
-      setTimeout(() => {
-        if (cancelled) return;
-        sendEvent("agent_status", {
-          version: "v1",
-          event_id: `evt-${generateId()}`,
-          conversation_id: conversationId,
-          message_id: messageId,
-          subtask_id: `sub-${generateId()}`,
-          agent: { id: agent.id, name: agent.name },
-          status: "running",
-          progress: 30,
-          timestamp: new Date().toISOString(),
-        });
-      }, delay);
-
-      delay += 80;
-
-      setTimeout(() => {
-        if (cancelled) return;
-        sendEvent("agent_status", {
-          version: "v1",
-          event_id: `evt-${generateId()}`,
-          conversation_id: conversationId,
-          message_id: messageId,
-          subtask_id: `sub-${generateId()}`,
-          agent: { id: agent.id, name: agent.name },
-          status: "running",
-          progress: 70,
-          timestamp: new Date().toISOString(),
-        });
-      }, delay);
-
-      delay += 60;
-
-      setTimeout(() => {
-        if (cancelled) return;
-        sendEvent("agent_status", {
-          version: "v1",
-          event_id: `evt-${generateId()}`,
-          conversation_id: conversationId,
-          message_id: messageId,
-          subtask_id: `sub-${generateId()}`,
-          agent: { id: agent.id, name: agent.name },
-          status: "success",
-          progress: 100,
-          timestamp: new Date().toISOString(),
-        });
-      }, delay);
-
-      delay += 40;
-    }
-
-    return delay;
-  };
-
   const primaryAgent = agents[0];
-  const blocks = mockResponseTexts[primaryAgent.id] || mockResponseTexts["agent-claude-code"];
+
+  let blocks = mockResponseTexts[primaryAgent.id];
+  if (!blocks) {
+    const lastMsg = getLastUserMessage(conversationId);
+    const userContent = lastMsg?.content || "帮我处理";
+    blocks = [
+      { text: `好的，我来处理你的请求：「${userContent}」\n\n` },
+      { text: "分析结果如下：\n\n" },
+      {
+        text: "这是一个示例实现：\n",
+        fileName: "result.ts",
+        language: "typescript",
+        code: `// 针对请求 "${userContent.slice(0, 40)}" 的处理方案\n\ninterface Input {\n  raw: string;\n}\n\ninterface Result {\n  processed: string;\n  length: number;\n}\n\nfunction process(input: Input): Result {\n  const processed = input.raw.trim();\n  return {\n    processed,\n    length: processed.length,\n  };\n}\n\n// 用法示例\nconst output = process({ raw: "${userContent.slice(0, 20)}" });\nconsole.log(output);`,
+      },
+      { text: "\n\n以上是基于你输入内容的处理方案。实际业务逻辑可根据具体需求进一步扩展。" },
+    ];
+  }
   let accumulatedText = "";
   const accumulatedArtifacts: Artifact[] = [];
   let tokenIndex = 0;
 
-  let baseDelay = 100;
-  const minStartDelay = emitAgentStatuses(baseDelay);
-  baseDelay = Math.max(baseDelay, minStartDelay);
+  const baseDelay = 100;
 
   setTimeout(() => {
     if (cancelled) return;
@@ -199,6 +136,71 @@ export function createMockSSEStream(
   }, baseDelay);
 
   let delay = baseDelay + 100;
+
+  // Concurrent agent status: fire alongside thinking + text for visibility
+  if (isGroup && agents.length > 1) {
+    let agentDelay = delay + 100;
+    // Stagger each agent's lifecycle over ~1.5s, overlapping with text streaming
+    agents.forEach((agent, i) => {
+      const lifeStart = agentDelay + i * 600;
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("agent_status", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          subtask_id: `sub-${generateId()}`,
+          agent: { id: agent.id, name: agent.name },
+          status: "queued",
+          progress: 0,
+          timestamp: new Date().toISOString(),
+        });
+      }, lifeStart);
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("agent_status", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          subtask_id: `sub-${generateId()}`,
+          agent: { id: agent.id, name: agent.name },
+          status: "running",
+          progress: 30,
+          timestamp: new Date().toISOString(),
+        });
+      }, lifeStart + 200);
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("agent_status", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          subtask_id: `sub-${generateId()}`,
+          agent: { id: agent.id, name: agent.name },
+          status: "running",
+          progress: 70,
+          timestamp: new Date().toISOString(),
+        });
+      }, lifeStart + 600);
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("agent_status", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          subtask_id: `sub-${generateId()}`,
+          agent: { id: agent.id, name: agent.name },
+          status: "success",
+          progress: 100,
+          timestamp: new Date().toISOString(),
+        });
+      }, lifeStart + 1000);
+    });
+  }
 
   const accumulatedThinkingSteps: Array<{ phase: "thought" | "action" | "observation"; text: string; tool_name?: string; status: "done" }> = [];
 
@@ -287,6 +289,32 @@ export function createMockSSEStream(
       }, delay);
       delay += 3 + Math.random() * 8;
     }
+  }
+
+  const shouldDisconnect = localStorage.getItem("mock_fail_mode") === "sse_disconnect";
+  if (shouldDisconnect) {
+    localStorage.removeItem("mock_fail_mode");
+    const disconnectAt = baseDelay + Math.min(delay - baseDelay, 800);
+    setTimeout(() => {
+      if (cancelled) return;
+      callbacks.onConnectionError?.(new Event("mock_disconnect"));
+      const msg: Message = {
+        id: messageId,
+        conversationId,
+        senderType: isGroup ? "orchestrator" : "agent",
+        senderId: isGroup ? "orchestrator" : primaryAgent.id,
+        senderName: isGroup ? "Orchestrator" : primaryAgent.name,
+        contentType: "text",
+        content: accumulatedText + "（响应中断）",
+        artifacts: accumulatedArtifacts,
+        status: "failed",
+        meta: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      addMockMessage(conversationId, msg);
+    }, disconnectAt);
+    return () => { cancelled = true; };
   }
 
   const deployArtifact: Artifact = {
