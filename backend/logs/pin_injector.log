@@ -1,0 +1,10 @@
+2026-05-25 19:24:00,742 INFO agenthub.pin_spec_injector pin_spec_injector: missing conversation_id in state
+2026-05-25 19:25:37,347 INFO agenthub.pin_spec_injector pin_spec_injector: missing conversation_id in state; session_id=38f72197-81e5-40d9-9469-6cd1635d0961 state_keys=['_value', '_delta', '_schema'] session_type=Session
+2026-05-25 19:25:37,356 INFO agenthub.pin_spec_injector pin_spec_injector: loaded pinned=2 spec_rules=False for conversation_id=38f72197-81e5-40d9-9469-6cd1635d0961
+2026-05-25 19:25:37,356 INFO agenthub.pin_spec_injector pin_spec_injector: injecting 133 chars for conversation_id=38f72197-81e5-40d9-9469-6cd1635d0961
+2026-05-25 19:26:31,013 INFO agenthub.pin_spec_injector pin_spec_injector: missing conversation_id in state; session_id=38f72197-81e5-40d9-9469-6cd1635d0961 state_keys=['_value', '_delta', '_schema'] session_type=Session
+2026-05-25 19:26:31,024 INFO agenthub.pin_spec_injector pin_spec_injector: loaded pinned=2 spec_rules=False for conversation_id=38f72197-81e5-40d9-9469-6cd1635d0961
+2026-05-25 19:26:31,025 INFO agenthub.pin_spec_injector pin_spec_injector: injecting 133 chars for conversation_id=38f72197-81e5-40d9-9469-6cd1635d0961
+2026-05-25 19:58:27,763 INFO agenthub.pin_spec_injector pin_spec_injector: missing conversation_id in state; session_id=38f72197-81e5-40d9-9469-6cd1635d0961 state_keys=['_value', '_delta', '_schema'] session_type=Session
+2026-05-25 19:58:27,773 INFO agenthub.pin_spec_injector pin_spec_injector: loaded pinned=2 spec_rules=False for conversation_id=38f72197-81e5-40d9-9469-6cd1635d0961
+2026-05-25 19:58:27,773 INFO agenthub.pin_spec_injector pin_spec_injector: injected 191 chars for conversation_id=38f72197-81e5-40d9-9469-6cd1635d0961
