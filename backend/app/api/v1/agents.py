@@ -52,16 +52,6 @@ async def update_agent(
     agent = await AgentService.update_agent(db, db_agent, agent_in)
     return agent
 
-@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_agent(
-    agent_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
-):
-    db_agent = await AgentService.get_agent(db, agent_id)
-    if not db_agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    await AgentService.delete_agent(db, db_agent)
-
 @router.post("/verify")
 async def verify_agent_model(request: AgentVerifyRequest):
     success = await AgentService.verify_model(

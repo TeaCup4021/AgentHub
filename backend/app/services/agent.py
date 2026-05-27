@@ -37,11 +37,6 @@ class AgentService:
         return db_agent
 
     @staticmethod
-    async def delete_agent(db: AsyncSession, db_agent: Agent) -> None:
-        await db.delete(db_agent)
-        await db.commit()
-
-    @staticmethod
     async def update_agent(db: AsyncSession, db_agent: Agent, agent_in: AgentUpdate) -> Agent:
         update_data = agent_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():

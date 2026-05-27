@@ -9,7 +9,6 @@ from sqlalchemy import select
 from app.core.database import async_session_maker
 from app.models.message import Message
 from app.models.message_pin import MessagePin
-from app.services.spec_manager import get_spec_manager
 
 logger = logging.getLogger("agenthub.pin_spec_injector")
 if os.getenv("AGENTHUB_PIN_INJECTOR_LOG", "0").strip().lower() in {"1", "true", "yes"}:
@@ -27,33 +26,30 @@ if os.getenv("AGENTHUB_PIN_INJECTOR_LOG", "0").strip().lower() in {"1", "true", 
     logger.propagate = False
 
 
-async def _load_spec_rules(conversation_id: str) -> Optional[str]:
-    return get_spec_manager().get_rules_for_conversation(conversation_id)
+async def _load_spec_rules(_: str) -> Optional[str]:
+    return None
 
 
-async def _load_pinned_messages(conversation_id: UUID, limit: Optional[int] = None) -> list[str]:
-    if limit is None:
-        limit = int(os.getenv("AGENTHUB_MAX_PINNED_CONTEXT", "10"))
+async def _load_pinned_messages(conversation_id: UUID) -> list[str]:
     async with async_session_maker() as db:
         result = await db.execute(
             select(Message.content)
             .join(MessagePin, Message.id == MessagePin.message_id)
             .where(MessagePin.conversation_id == conversation_id)
-            .order_by(MessagePin.created_at.desc())
-            .limit(limit)
+            .order_by(MessagePin.created_at.asc())
         )
     return [row[0] for row in result.all() if row[0]]
 
 
-def _build_injection_text(pinned_messages: list[str], spec_rules: Optional[str], pinned_limit: int = 10) -> Optional[str]:
+def _build_injection_text(pinned_messages: list[str], spec_rules: Optional[str]) -> Optional[str]:
     parts: list[str] = []
+
+    if spec_rules:
+        parts.append(f"Spec/Rules:\n{spec_rules}")
 
     if pinned_messages:
         joined = "\n".join(f"- {item}" for item in pinned_messages)
-        parts.append(f"=== Pinned Messages (most recent {pinned_limit}) ===\n{joined}")
-
-    if spec_rules:
-        parts.append(f"=== Spec / Rules ===\n{spec_rules}")
+        parts.append(f"Pinned messages:\n{joined}")
 
     if not parts:
         return None
@@ -94,8 +90,7 @@ async def before_model_callback(callback_context, llm_request):
         logger.info("pin_spec_injector: invalid conversation_id=%s", conversation_id_raw)
         return None
 
-    pinned_limit = int(os.getenv("AGENTHUB_MAX_PINNED_CONTEXT", "10"))
-    pinned_messages = await _load_pinned_messages(conversation_id, pinned_limit)
+    pinned_messages = await _load_pinned_messages(conversation_id)
     spec_rules = await _load_spec_rules(str(conversation_id))
     logger.info(
         "pin_spec_injector: loaded pinned=%s spec_rules=%s for conversation_id=%s",
@@ -103,7 +98,7 @@ async def before_model_callback(callback_context, llm_request):
         bool(spec_rules),
         conversation_id,
     )
-    injection_text = _build_injection_text(pinned_messages, spec_rules, pinned_limit)
+    injection_text = _build_injection_text(pinned_messages, spec_rules)
 
     if not injection_text:
         logger.info("pin_spec_injector: no injection text for conversation_id=%s", conversation_id)
