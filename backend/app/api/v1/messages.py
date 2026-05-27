@@ -1,11 +1,13 @@
 from uuid import UUID
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.schemas.message import ArtifactBrief, MessageCreate, MessageResponse, MessageListResponse
+from app.models.agent import Agent
 from app.models.message import Message
 from app.models.artifact import Artifact
 from app.services.message import MessageService
@@ -38,7 +40,75 @@ async def create_message(
     db: AsyncSession = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    return await MessageService.create_message(db=db, conv_id=conv_id, user_id=user_id, data=data)
+    # confirm_plan: handle before message creation (does not create a Message)
+    if data.mode == "confirm_plan":
+        if not data.plan_id or not data.plan:
+            raise HTTPException(status_code=400, detail="plan_id and plan are required for confirm_plan mode")
+
+        from app.models.orchestrator_task import OrchestratorTask
+
+        result = await db.execute(
+            select(OrchestratorTask)
+            .where(
+                OrchestratorTask.conversation_id == conv_id,
+                OrchestratorTask.status == "awaiting_confirmation",
+            )
+            .order_by(OrchestratorTask.created_at.desc())
+            .limit(1)
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            existing = await db.execute(
+                select(OrchestratorTask).where(OrchestratorTask.conversation_id == conv_id).limit(1)
+            )
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail="Plan already confirmed or executed")
+            raise HTTPException(status_code=404, detail="No pending plan found")
+
+        agent_ids_in_plan = [UUID(item["agent_id"]) for item in data.plan]
+        agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids_in_plan)))
+        agent_map = {str(a.id): a.name for a in agents_result.scalars().all()}
+
+        new_plan_dict = {"subtasks": [
+            {**item, "agent_name": agent_map.get(item["agent_id"], "Unknown")}
+            for item in data.plan
+        ]}
+        from app.schemas.orchestrator import OrchestratorPlan, SubTaskPlan
+        plan_obj = OrchestratorPlan(subtasks=[
+            SubTaskPlan(
+                subtask_id=item["subtask_id"],
+                agent_id=UUID(item["agent_id"]),
+                agent_name=agent_map.get(item["agent_id"], "Unknown"),
+                instruction=item["instruction"],
+            )
+            for item in data.plan
+        ])
+
+        if new_plan_dict["subtasks"] != task.plan.get("subtasks", []) if task.plan else True:
+            task.plan = new_plan_dict
+            from app.services.adk.workflow_builder import WorkflowBuilder
+            WorkflowBuilder().build(plan_obj)
+
+        task.status = "confirmed"
+        task.result_summary = {"state_delta": {"plan_confirmed": True}}
+        await db.commit()
+        return JSONResponse(content={"code": 200, "data": None, "message": "ok"})
+
+    user_msg = await MessageService.create_message(db=db, conv_id=conv_id, user_id=user_id, data=data)
+
+    if data.mode == "auto_orchestrate" and data.mentions:
+        from app.models.orchestrator_task import OrchestratorTask
+
+        orch_task = OrchestratorTask(
+            conversation_id=conv_id,
+            trigger_message_id=user_msg["id"],
+            status="planning",
+            plan={},
+        )
+        db.add(orch_task)
+        await db.commit()
+
+    return user_msg
 
 
 @messages_router.post("/{message_id}/regenerate", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
