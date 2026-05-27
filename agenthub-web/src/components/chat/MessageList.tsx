@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useCallback, useEffect, useRef, useLayoutEffect, memo } from "react";
 import { Spin, Badge } from "@douyinfe/semi-ui";
 import { motion } from "framer-motion";
 import { useChatStore } from "@/stores/chatStore";
@@ -8,12 +8,13 @@ import { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
 import { MarkdownBubble } from "./MarkdownBubble";
 import { MessageActions } from "./MessageActions";
 import { formatTime, formatFullTime } from "@/lib/formatTime";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Agent, Message, ThinkingStep } from "@/types";
 import { ThinkingBlock } from "./ThinkingBlock";
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
-function TimeSeparator({ time }: { time: string }) {
+const TimeSeparator = memo(function TimeSeparator({ time }: { time: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "4px 0" }} title={formatFullTime(time)}>
       <span style={{
@@ -28,9 +29,9 @@ function TimeSeparator({ time }: { time: string }) {
       </span>
     </div>
   );
-}
+});
 
-function MessageBubble({ message, agents }: { message: Message; agents: Agent[] }) {
+const MessageBubble = memo(function MessageBubble({ message, agents, searchText, onRegenerate }: { message: Message; agents: Agent[]; searchText?: string; onRegenerate?: (convId: string, msgId: string) => void }) {
   const isUser = message.senderType === "user";
   const isOrchestrator = message.senderType === "orchestrator";
   const agent = !isUser && !isOrchestrator && message.senderId
@@ -79,7 +80,7 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
       }}
       title={formatFullTime(message.createdAt)}
     >
-      {isFailed && isUser ? (
+      {isFailed ? (
         <div style={{
           display: "flex",
           alignItems: "center",
@@ -133,8 +134,13 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
 
       <div style={{ maxWidth: "75%", textAlign: isUser ? "right" : "left" }}>
         {!isUser && (
-          <p style={{ marginBottom: 4, fontSize: "var(--font-size-xs)", fontWeight: 500, color: "var(--color-text-secondary)" }}>
+          <p style={{ marginBottom: 4, fontSize: "var(--font-size-xs)", fontWeight: 500, color: "var(--color-text-secondary)", display: "flex", alignItems: "center", gap: 6 }}>
             {message.senderName || "Agent"}
+            {isFailed && (
+              <span style={{ color: "var(--color-danger)", fontWeight: 400 }}>
+                响应失败
+              </span>
+            )}
           </p>
         )}
         <div className="message-bubble-wrap" style={{ position: "relative", display: "inline-block" }}>
@@ -143,27 +149,34 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
             padding: "8px 16px",
             fontSize: "var(--font-size-md)",
             lineHeight: 1.6,
-            background: isFailed && isUser
+            background: isFailed
               ? "var(--color-bg-hover)"
               : isUser
                 ? "var(--color-bubble-user-bg)"
                 : "var(--color-bubble-agent-bg)",
             color: isUser ? "var(--color-bubble-user-text)" : "var(--color-text-primary)",
-            border: isFailed && isUser
+            border: isFailed
               ? "1px solid var(--color-danger)"
               : !isUser
                 ? "1px solid var(--color-bubble-agent-border)"
                 : "none",
             boxShadow: !isUser ? "var(--shadow-sm)" : "none",
           }}>
-            {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
-            {message.content && <MarkdownBubble text={message.content} />}
-            {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+            <ErrorBoundary label="消息渲染">
+              {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
+              {message.content && (
+                <MarkdownBubble
+                  text={searchText ? highlightText(message.content, searchText) : message.content}
+                />
+              )}
+              {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+            </ErrorBoundary>
           </div>
           <MessageActions
             message={message}
             isStreaming={message.status === "streaming"}
             isFailed={message.status === "failed"}
+            onRegenerate={onRegenerate}
           />
         </div>
         {isFailed && isUser && (
@@ -177,9 +190,9 @@ function MessageBubble({ message, agents }: { message: Message; agents: Agent[] 
       </div>
     </div>
   );
-}
+});
 
-function StreamingMessageBubble({ messageId, agentName }: { messageId: string; agentName: string }) {
+const StreamingMessageBubble = memo(function StreamingMessageBubble({ messageId, agentName }: { messageId: string; agentName: string }) {
   const sc = useChatStore((s) => s.getStreamingContent(messageId));
   if (!sc) return null;
   return (
@@ -214,16 +227,18 @@ function StreamingMessageBubble({ messageId, agentName }: { messageId: string; a
           border: "1px solid var(--color-bubble-agent-border)",
           boxShadow: "var(--shadow-sm)",
         }}>
-          {sc.thinkingSteps.length > 0 && <ThinkingBlock steps={sc.thinkingSteps} isStreaming />}
-          {sc.content && <MarkdownBubble text={sc.content} isStreaming />}
-          {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+          <ErrorBoundary label="流式消息渲染">
+            {sc.thinkingSteps.length > 0 && <ThinkingBlock steps={sc.thinkingSteps} isStreaming />}
+            {sc.content && <MarkdownBubble text={sc.content} isStreaming />}
+            {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+          </ErrorBoundary>
         </div>
       </div>
     </div>
   );
-}
+});
 
-function PendingMessageBubble() {
+const PendingMessageBubble = memo(function PendingMessageBubble() {
   return (
     <div style={{ display: "flex", gap: 12, padding: "12px 16px" }}>
       <div style={{
@@ -279,6 +294,12 @@ function PendingMessageBubble() {
       </div>
     </div>
   );
+});
+
+function highlightText(text: string, query: string): string {
+  if (!query) return text;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(new RegExp(`(${escaped})`, "gi"), "<mark>$1</mark>");
 }
 
 interface MessageListProps {
@@ -290,11 +311,13 @@ interface MessageListProps {
   hasMore?: boolean;
   isFetchingMore?: boolean;
   onLoadMore?: () => void;
+  searchText?: string;
+  onRegenerate?: (convId: string, msgId: string) => void;
 }
 
 export function MessageList({
   messages, agents, streamingMessageId, streamingAgentName,
-  isWaiting, hasMore, isFetchingMore, onLoadMore,
+  isWaiting, hasMore, isFetchingMore, onLoadMore, searchText, onRegenerate,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -393,7 +416,7 @@ export function MessageList({
             transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
           >
             {needSeparator && <TimeSeparator time={msg.createdAt} />}
-            <MessageBubble message={msg} agents={agents} />
+            <MessageBubble message={msg} agents={agents} searchText={searchText} onRegenerate={onRegenerate} />
           </motion.div>
         );
       })}

@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from "react";
 import { Layout, Button } from "@douyinfe/semi-ui";
 import { IconMenu } from "@douyinfe/semi-icons";
-import { useConversations, useCreateConversation, useAgents } from "@/hooks";
+import { useConversations, useCreateConversation, useAgents, useKeyboardShortcut } from "@/hooks";
 import { useChatStore } from "@/stores/chatStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IconSidebar } from "./IconSidebar";
 import { ConversationList } from "./ConversationList";
 import { ChatArea } from "./ChatArea";
@@ -18,6 +19,24 @@ export function AppLayout() {
 
   const isMobile = useMediaQuery("(max-width: 767px)");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+
+  const triggerNewConv = useUIStore((s) => s.triggerNewConv);
+
+  useKeyboardShortcut("n", triggerNewConv, { ctrl: true, meta: true });
+  useKeyboardShortcut("f", () => {
+    const wrapper = document.querySelector<HTMLElement>("[data-search-input-wrapper]");
+    if (wrapper) {
+      const input = wrapper.querySelector("input");
+      input?.focus();
+    } else {
+      const toggleBtn = document.querySelector<HTMLElement>("[data-search-toggle]");
+      toggleBtn?.click();
+      setTimeout(() => {
+        const w = document.querySelector<HTMLElement>("[data-search-input-wrapper]");
+        w?.querySelector("input")?.focus();
+      }, 50);
+    }
+  }, { ctrl: true, meta: true });
 
   const dragRef = useRef<HTMLDivElement>(null);
   const convListWidth = useUIStore((s) => s.sidebarWidth);
@@ -45,17 +64,19 @@ export function AppLayout() {
   }, [convListWidth, setConvListWidth]);
 
   const conversationListEl = (
-    <ConversationList
-      conversations={conversations}
-      agents={agents}
-      isLoading={isLoading}
-      onCreateConversation={(title, type, agentIds) => {
-        createConversation.mutate(
-          { title, type, agentIds },
-          { onSuccess: (conv) => { setActive(conv.id); setMobileDrawerOpen(false); } },
-        );
-      }}
-    />
+    <ErrorBoundary label="对话列表">
+      <ConversationList
+        conversations={conversations}
+        agents={agents}
+        isLoading={isLoading}
+        onCreateConversation={(title, type, agentIds) => {
+          createConversation.mutate(
+            { title, type, agentIds },
+            { onSuccess: (conv) => { setActive(conv.id); setMobileDrawerOpen(false); } },
+          );
+        }}
+      />
+    </ErrorBoundary>
   );
 
   return (
@@ -109,7 +130,9 @@ export function AppLayout() {
                 onClick={() => setMobileDrawerOpen(true)}
               />
             </div>
-            <ChatArea conversations={conversations} />
+            <ErrorBoundary label="聊天区域">
+              <ChatArea conversations={conversations} />
+            </ErrorBoundary>
           </Layout.Content>
         </>
       ) : (
@@ -140,7 +163,9 @@ export function AppLayout() {
             flexDirection: "column",
             minWidth: 0,
           }}>
-            <ChatArea conversations={conversations} />
+            <ErrorBoundary label="聊天区域">
+              <ChatArea conversations={conversations} />
+            </ErrorBoundary>
           </Layout.Content>
         </>
       )}

@@ -4,27 +4,52 @@ import { IconSearch, IconClose } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import type { Conversation, Agent } from "@/types";
 
+type SearchMode = "off" | "conv" | "msg";
+
 interface ChatHeaderProps {
   conversation: Conversation;
   agents: Agent[];
 }
 
 export function ChatHeader({ conversation, agents }: ChatHeaderProps) {
-  const [showSearch, setShowSearch] = useState(false);
+  const [searchMode, setSearchMode] = useState<SearchMode>("off");
   const [searchText, setSearchText] = useState("");
   const searchQuery = useChatStore((s) => s.searchQuery);
   const setSearchQuery = useChatStore((s) => s.setSearchQuery);
+  const messageSearch = useChatStore((s) => s.messageSearch);
+  const setMessageSearch = useChatStore((s) => s.setMessageSearch);
 
   const handleSearchChange = useCallback((v: string) => {
     setSearchText(v);
-    setSearchQuery(v);
-  }, [setSearchQuery]);
+    if (searchMode === "msg") {
+      setMessageSearch(v);
+    } else {
+      setSearchQuery(v);
+    }
+  }, [searchMode, setSearchQuery, setMessageSearch]);
 
   const handleCloseSearch = useCallback(() => {
-    setShowSearch(false);
+    setSearchMode("off");
     setSearchText("");
     setSearchQuery("");
-  }, [setSearchQuery]);
+    setMessageSearch("");
+  }, [setSearchQuery, setMessageSearch]);
+
+  const cycleSearch = useCallback(() => {
+    if (searchMode === "off") {
+      setSearchMode("msg");
+      setMessageSearch("");
+    } else if (searchMode === "msg") {
+      setSearchMode("conv");
+      setMessageSearch("");
+      setSearchQuery("");
+      setSearchText("");
+    } else {
+      handleCloseSearch();
+    }
+  }, [searchMode, handleCloseSearch, setSearchQuery, setMessageSearch]);
+
+  const isSearchActive = searchQuery || messageSearch;
 
   return (
     <div style={{
@@ -47,11 +72,12 @@ export function ChatHeader({ conversation, agents }: ChatHeaderProps) {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <Button
+            data-search-toggle
             icon={<IconSearch />}
             theme="borderless"
             size="small"
-            onClick={() => setShowSearch(!showSearch)}
-            type={searchQuery ? "primary" : "tertiary"}
+            onClick={cycleSearch}
+            type={isSearchActive ? "primary" : "tertiary"}
           />
           {conversation.agentIds.map((aid) => {
             const agent = agents.find((a) => a.id === aid);
@@ -63,16 +89,30 @@ export function ChatHeader({ conversation, agents }: ChatHeaderProps) {
           })}
         </div>
       </div>
-      {showSearch && (
-        <div style={{ padding: "0 16px 10px" }}>
+      {searchMode !== "off" && (
+        <div data-search-input-wrapper style={{ padding: "0 16px 10px", display: "flex", gap: 8 }}>
           <Input
             prefix={<IconSearch />}
             suffix={searchText ? <Button icon={<IconClose />} theme="borderless" size="small" onClick={handleCloseSearch} /> : null}
-            placeholder="搜索消息..."
+            placeholder={searchMode === "msg" ? "搜索消息内容..." : "搜索对话标题..."}
             value={searchText}
             onChange={handleSearchChange}
             size="small"
+            style={{ flex: 1 }}
           />
+          <Button
+            size="small"
+            theme="light"
+            onClick={() => {
+              const next: SearchMode = searchMode === "msg" ? "conv" : "msg";
+              setSearchMode(next);
+              setSearchText("");
+              if (next === "msg") setSearchQuery("");
+              else setMessageSearch("");
+            }}
+          >
+            {searchMode === "msg" ? "消息" : "对话"}
+          </Button>
         </div>
       )}
     </div>

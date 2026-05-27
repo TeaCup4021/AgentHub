@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, memo } from "react";
 import { toast } from "sonner";
 import { Button } from "@douyinfe/semi-ui";
 import { IconCopy, IconQuote, IconRefresh } from "@douyinfe/semi-icons";
@@ -9,9 +9,10 @@ interface MessageActionsProps {
   message: Message;
   isStreaming?: boolean;
   isFailed?: boolean;
+  onRegenerate?: (convId: string, msgId: string) => void;
 }
 
-export function MessageActions({ message, isStreaming, isFailed }: MessageActionsProps) {
+export const MessageActions = memo(function MessageActions({ message, isStreaming, isFailed, onRegenerate }: MessageActionsProps) {
   const setPendingQuote = useChatStore((s) => s.setPendingQuote);
 
   const handleCopy = useCallback(() => {
@@ -39,11 +40,8 @@ export function MessageActions({ message, isStreaming, isFailed }: MessageAction
           icon={<IconRefresh />}
           onClick={() => {
             const { activeConversationId } = useChatStore.getState();
-            if (activeConversationId) {
-              const event = new CustomEvent("regenerate-message", {
-                detail: { messageId: message.id, conversationId: activeConversationId },
-              });
-              window.dispatchEvent(event);
+            if (activeConversationId && onRegenerate) {
+              onRegenerate(activeConversationId, message.id);
             }
           }}
         >
@@ -83,4 +81,4 @@ export function MessageActions({ message, isStreaming, isFailed }: MessageAction
       />
     </div>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
@@ -92,7 +92,7 @@ interface MarkdownBubbleProps {
   isStreaming?: boolean;
 }
 
-export function MarkdownBubble({ text, isStreaming }: MarkdownBubbleProps) {
+export const MarkdownBubble = memo(function MarkdownBubble({ text, isStreaming }: MarkdownBubbleProps) {
   const body = useMemo(() => {
     if (!text) return null;
     return (
@@ -114,4 +114,4 @@ export function MarkdownBubble({ text, isStreaming }: MarkdownBubbleProps) {
       )}
     </div>
   );
-}
+});

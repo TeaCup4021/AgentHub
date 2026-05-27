@@ -11,6 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // [后端对接] 前端 /api 请求代理到后端 8080 端口
     proxy: {
       "/api": {
         target: "http://localhost:8080",

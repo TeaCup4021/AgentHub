@@ -7,6 +7,7 @@ import type { Agent } from "@/types";
 
 interface ChatInputProps {
   onSend: (content: string, mentions: string[]) => void;
+  onStop?: () => void;
   disabled?: boolean;
   agents: Agent[];
 }
@@ -107,7 +108,7 @@ function getMentionQuery(): { query: string } | null {
   return { query: afterAt };
 }
 
-export function ChatInput({ onSend, disabled, agents }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) {
   const editorRef = useRef<HTMLDivElement>(null);
 
   const [mentionActive, setMentionActive] = useState(false);
@@ -463,28 +464,51 @@ export function ChatInput({ onSend, disabled, agents }: ChatInputProps) {
           </div>
         </Popover>
 
-        <Button
-          theme="solid"
-          type="primary"
-          icon={<IconSend />}
-          disabled={disabled || isEmptyState || charCount > charLimit}
-          onClick={handleSend}
-          style={{
-            borderRadius: "var(--radius-md)",
-            flexShrink: 0,
-            height: 44,
-            width: 44,
-          }}
-        />
+        {disabled ? (
+          <Button
+            theme="solid"
+            type="danger"
+            icon={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+              </svg>
+            }
+            onClick={onStop}
+            style={{
+              borderRadius: "var(--radius-md)",
+              flexShrink: 0,
+              height: 44,
+              width: 44,
+              animation: "pulse 2s infinite",
+            }}
+          />
+        ) : (
+          <Button
+            theme="solid"
+            type="primary"
+            icon={<IconSend />}
+            disabled={isEmptyState || charCount > charLimit}
+            onClick={handleSend}
+            style={{
+              borderRadius: "var(--radius-md)",
+              flexShrink: 0,
+              height: 44,
+              width: 44,
+            }}
+          />
+        )}
       </div>
 
-      {charCount > 0 && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>
+          {disabled && "正在生成..."}
+        </span>
+        {charCount > 0 && (
           <span style={{ fontSize: "var(--font-size-xs)", color: charColor }}>
             {charCount.toLocaleString()} / {charLimit.toLocaleString()}
           </span>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

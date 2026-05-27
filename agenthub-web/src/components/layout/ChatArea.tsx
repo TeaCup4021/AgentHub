@@ -1,7 +1,7 @@
 import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Banner, Button, Empty } from "@douyinfe/semi-ui";
+import { Banner, Button, Empty, Skeleton } from "@douyinfe/semi-ui";
 import { IconComment } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import { useMessages } from "@/hooks/useMessages";
@@ -35,6 +35,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const disconnectRef = useRef<(() => void) | null>(null);
   const streamMsgIdRef = useRef<string | null>(null);
   const streamAgentRef = useRef<string>("");
+  const lastPromptRef = useRef<string>("");
   const retryRef = useRef({ count: 0, timeoutId: null as ReturnType<typeof setTimeout> | null });
 
   const connectionStatus = useChatStore((s) => s.connectionStatus);
@@ -54,12 +55,19 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     data: messagesData,
     hasNextPage,
     isFetchingNextPage,
+    isLoading,
     fetchNextPage,
   } = useMessages(activeId ?? "");
+  const messageSearch = useChatStore((s) => s.messageSearch);
   const rawMessages = useMemo(
     () => messagesData?.pages.flatMap((p) => p.items).reverse() ?? [],
     [messagesData],
   );
+  const filteredMessages = useMemo(() => {
+    if (!messageSearch) return rawMessages;
+    const q = messageSearch.toLowerCase();
+    return rawMessages.filter((m) => m.content.toLowerCase().includes(q));
+  }, [rawMessages, messageSearch]);
   const { data: agents = [] } = useAgents();
   const createConversation = useCreateConversation();
   const updateConversation = useUpdateAnyConversation();
@@ -95,6 +103,73 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       setIsStreaming(false);
     };
   }, [activeId]);
+
+  const buildCallbacks = useCallback((convId: string, conv: Conversation | undefined) => ({
+    onMessageStart: (data: SSEMessageStart) => {
+      if (useChatStore.getState().connectionStatus === 'reconnecting') {
+        setConnectionStatus('connected');
+        setRetryCount(0);
+        retryRef.current.count = 0;
+      }
+      streamMsgIdRef.current = data.message_id;
+      streamAgentRef.current = data.sender.name;
+      initStreaming(data.message_id);
+    },
+    onToken: (data: SSEToken) => {
+      if (streamMsgIdRef.current) appendToken(streamMsgIdRef.current, data.delta);
+    },
+    onArtifact: (data: SSEArtifact) => {
+      if (streamMsgIdRef.current) appendArtifact(streamMsgIdRef.current, data.artifact);
+    },
+    onAgentStatus: (data: SSEAgentStatus) => {
+      updateAgentStatus({
+        agentId: data.agent.id,
+        agentName: data.agent.name,
+        status: data.status,
+        progress: data.progress,
+      });
+    },
+    onThinking: (data: SSEThinking) => {
+      if (streamMsgIdRef.current) {
+        appendThinkingStep(streamMsgIdRef.current, {
+          phase: data.phase,
+          text: data.text,
+          toolName: data.tool_name,
+          status: data.status,
+        });
+      }
+    },
+    onMessageEnd: (data: SSEMessageEnd) => {
+      if (streamMsgIdRef.current) {
+        finalizeStreaming(streamMsgIdRef.current);
+        streamMsgIdRef.current = null;
+      }
+      setIsStreaming(false);
+      qc.invalidateQueries({ queryKey: ["messages", convId] });
+      if (useDashboardStore.getState().allDone()) {
+        clearAgentStatuses();
+      }
+      if (retryRef.current.timeoutId) {
+        clearTimeout(retryRef.current.timeoutId);
+        retryRef.current.timeoutId = null;
+      }
+      if (data.usage && conv) {
+        useTokenUsageStore.getState().addUsage({
+          conversationId: convId,
+          conversationTitle: conv.title,
+          agentName: streamAgentRef.current || "Agent",
+          inputTokens: data.usage.input_tokens,
+          outputTokens: data.usage.output_tokens,
+          totalTokens: data.usage.input_tokens + data.usage.output_tokens,
+          estimatedCost: estimateCost(data.usage.input_tokens, data.usage.output_tokens, conv.agentIds[0]),
+        });
+      }
+    },
+    onError: (data: SSEError) => {
+      toast.error(data.message || "Agent 响应出错");
+      setIsStreaming(false);
+    },
+  }), [qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
 
   const executeSend = useCallback((convId: string, content: string, mentions: string[], conv: Conversation | undefined) => {
     setConnectionStatus('connected');
@@ -137,7 +212,23 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
     const msgMode = conv?.type === "group" ? "auto_orchestrate" : "direct";
     const optimisticId = optimisticMsg.id;
-    messageApi.send(convId, { content, mentions, mode: msgMode }).catch(() => {
+    messageApi.send(convId, { content, mentions, mode: msgMode }).then((response) => {
+      const realMsg = response.data?.data as Message | undefined;
+      if (!realMsg) return;
+      qc.setQueryData(
+        ["messages", activeId ?? convId],
+        (old: InfiniteData<MessageListData> | undefined) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.map((m) => (m.id === optimisticId ? realMsg : m)),
+            })),
+          };
+        },
+      );
+    }).catch(() => {
       qc.setQueryData(
         ["messages", activeId ?? convId],
         (old: InfiniteData<MessageListData> | undefined) => {
@@ -159,159 +250,79 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
     disconnectRef.current?.();
     setIsStreaming(true);
+    lastPromptRef.current = content;
 
-    disconnectRef.current = createSSEStream(convId, {
-      onMessageStart: (data: SSEMessageStart) => {
-        if (useChatStore.getState().connectionStatus === 'reconnecting') {
-          setConnectionStatus('connected');
-          setRetryCount(0);
-          retryRef.current.count = 0;
-        }
-        streamMsgIdRef.current = data.message_id;
-        streamAgentRef.current = data.sender.name;
-        initStreaming(data.message_id);
-      },
-      onToken: (data: SSEToken) => {
-        if (streamMsgIdRef.current) appendToken(streamMsgIdRef.current, data.delta);
-      },
-      onArtifact: (data: SSEArtifact) => {
-        if (streamMsgIdRef.current) {
-          appendArtifact(streamMsgIdRef.current, data.artifact);
-        }
-      },
-      onAgentStatus: (data: SSEAgentStatus) => {
-        updateAgentStatus({
-          agentId: data.agent.id,
-          agentName: data.agent.name,
-          status: data.status,
-          progress: data.progress,
-        });
-      },
-      onThinking: (data: SSEThinking) => {
-        if (streamMsgIdRef.current) {
-          appendThinkingStep(streamMsgIdRef.current, {
-            phase: data.phase,
-            text: data.text,
-            toolName: data.tool_name,
-            status: data.status,
-          });
-        }
-      },
-      onMessageEnd: (data: SSEMessageEnd) => {
+    const onConnectionError = () => {
+      const MAX_RETRIES = 3;
+      const delays = [1000, 2000, 4000];
+      const attempt = retryRef.current.count;
+
+      if (attempt >= MAX_RETRIES) {
+        setConnectionStatus('failed');
+        setIsStreaming(false);
         if (streamMsgIdRef.current) {
           finalizeStreaming(streamMsgIdRef.current);
           streamMsgIdRef.current = null;
         }
-        setIsStreaming(false);
         qc.invalidateQueries({ queryKey: ["messages", convId] });
-        if (useDashboardStore.getState().allDone()) {
-          clearAgentStatuses();
-        }
-        if (retryRef.current.timeoutId) {
-          clearTimeout(retryRef.current.timeoutId);
-          retryRef.current.timeoutId = null;
-        }
-        if (data.usage && conv) {
-          useTokenUsageStore.getState().addUsage({
-            conversationId: convId,
-            conversationTitle: conv.title,
-            agentName: streamAgentRef.current || "Agent",
-            inputTokens: data.usage.input_tokens,
-            outputTokens: data.usage.output_tokens,
-            totalTokens: data.usage.input_tokens + data.usage.output_tokens,
-            estimatedCost: estimateCost(data.usage.input_tokens, data.usage.output_tokens, conv.agentIds[0]),
-          });
-        }
-      },
-      onError: (data: SSEError) => {
-        toast.error(data.message || "Agent 响应出错");
-        setIsStreaming(false);
-      },
-      onConnectionError: () => {
-        const MAX_RETRIES = 3;
-        const delays = [1000, 2000, 4000];
-        const attempt = retryRef.current.count;
+        return;
+      }
 
-        if (attempt >= MAX_RETRIES) {
-          setConnectionStatus('failed');
-          setIsStreaming(false);
-          if (streamMsgIdRef.current) {
-            finalizeStreaming(streamMsgIdRef.current);
-            streamMsgIdRef.current = null;
-          }
-          qc.invalidateQueries({ queryKey: ["messages", convId] });
-          return;
-        }
+      setConnectionStatus('reconnecting');
+      setRetryCount(attempt + 1);
+      retryRef.current.count = attempt + 1;
 
-        setConnectionStatus('reconnecting');
-        setRetryCount(attempt + 1);
-        retryRef.current.count = attempt + 1;
+      const delay = delays[attempt];
+      retryRef.current.timeoutId = setTimeout(() => {
+        disconnectRef.current?.();
+        const reconnectCallbacks = buildCallbacks(convId, conv);
+        disconnectRef.current = createSSEStream(convId, {
+          ...reconnectCallbacks,
+          onConnectionError: () => {
+            setConnectionStatus('failed');
+            setIsStreaming(false);
+            if (streamMsgIdRef.current) { finalizeStreaming(streamMsgIdRef.current); streamMsgIdRef.current = null; }
+            qc.invalidateQueries({ queryKey: ["messages", convId] });
+          },
+        }, lastPromptRef.current);
+      }, delay);
+    };
 
-        const delay = delays[attempt];
-        retryRef.current.timeoutId = setTimeout(() => {
-          disconnectRef.current?.();
-          disconnectRef.current = createSSEStream(convId, {
-            onMessageStart: (data: SSEMessageStart) => {
-              setConnectionStatus('connected');
-              setRetryCount(0);
-              retryRef.current.count = 0;
-              streamMsgIdRef.current = data.message_id;
-              streamAgentRef.current = data.sender.name;
-              initStreaming(data.message_id);
-            },
-            onToken: (data: SSEToken) => {
-              if (streamMsgIdRef.current) appendToken(streamMsgIdRef.current, data.delta);
-            },
-            onArtifact: (data: SSEArtifact) => {
-              if (streamMsgIdRef.current) appendArtifact(streamMsgIdRef.current, data.artifact);
-            },
-            onAgentStatus: (data: SSEAgentStatus) => {
-              updateAgentStatus({ agentId: data.agent.id, agentName: data.agent.name, status: data.status, progress: data.progress });
-            },
-            onThinking: (data: SSEThinking) => {
-              if (streamMsgIdRef.current) {
-                appendThinkingStep(streamMsgIdRef.current, { phase: data.phase, text: data.text, toolName: data.tool_name, status: data.status });
-              }
-            },
-            onMessageEnd: (data: SSEMessageEnd) => {
-              if (streamMsgIdRef.current) {
-                finalizeStreaming(streamMsgIdRef.current);
-                streamMsgIdRef.current = null;
-              }
-              setIsStreaming(false);
-              qc.invalidateQueries({ queryKey: ["messages", convId] });
-              if (useDashboardStore.getState().allDone()) clearAgentStatuses();
-              if (retryRef.current.timeoutId) { clearTimeout(retryRef.current.timeoutId); retryRef.current.timeoutId = null; }
-              if (data.usage && conv) {
-                useTokenUsageStore.getState().addUsage({
-                  conversationId: convId, conversationTitle: conv.title,
-                  agentName: streamAgentRef.current || "Agent",
-                  inputTokens: data.usage.input_tokens, outputTokens: data.usage.output_tokens,
-                  totalTokens: data.usage.input_tokens + data.usage.output_tokens,
-                  estimatedCost: estimateCost(data.usage.input_tokens, data.usage.output_tokens, conv.agentIds[0]),
-                });
-              }
-            },
-            onError: (data: SSEError) => {
-              toast.error(data.message || "Agent 响应出错");
-              setIsStreaming(false);
-            },
-            onConnectionError: () => {
-              setConnectionStatus('failed');
-              setIsStreaming(false);
-              if (streamMsgIdRef.current) { finalizeStreaming(streamMsgIdRef.current); streamMsgIdRef.current = null; }
-              qc.invalidateQueries({ queryKey: ["messages", convId] });
-            },
-          });
-        }, delay);
-      },
-    });
-  }, [activeId, qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming]);
+    disconnectRef.current = createSSEStream(convId, {
+      ...buildCallbacks(convId, conv),
+      onConnectionError,
+    }, content);
+  }, [activeId, qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
 
   sendRef.current = (convId: string, content: string, mentions: string[]) => {
     const conv = conversations.find((c) => c.id === convId);
     executeSend(convId, content, mentions, conv);
   };
+
+  const handleRegenerate = useCallback((convId: string, msgId: string) => {
+    const messagesData = qc.getQueryData(["messages", convId]) as
+      | { pages?: { items: Message[] }[] }
+      | undefined;
+    const allMessages = messagesData?.pages?.flatMap((p) => p.items) ?? [];
+    const failedMsg = allMessages.find((m) => m.id === msgId);
+    if (!failedMsg) return;
+
+    const parentUserMsg = allMessages.find(
+      (m) => m.senderType === "user" && m.id === failedMsg.parentMessageId,
+    );
+
+    if (parentUserMsg) {
+      const conv = conversations.find((c) => c.id === convId);
+      if (convId !== activeId) {
+        useChatStore.getState().setActiveConversation(convId);
+        setTimeout(() => {
+          executeSend(convId, parentUserMsg.content, [], conv);
+        }, 100);
+      } else {
+        executeSend(convId, parentUserMsg.content, [], conv);
+      }
+    }
+  }, [qc, activeId, conversations, executeSend]);
 
   const handleSend = useCallback(async (content: string, mentions: string[]) => {
     if (!activeId || !conversation) return;
@@ -397,6 +408,20 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     setRetryCount(0);
   }, [setConnectionStatus, setRetryCount]);
 
+  const handleStop = useCallback(() => {
+    disconnectRef.current?.();
+    if (streamMsgIdRef.current) {
+      finalizeStreaming(streamMsgIdRef.current);
+      streamMsgIdRef.current = null;
+    }
+    setIsStreaming(false);
+    clearAgentStatuses();
+    if (retryRef.current.timeoutId) {
+      clearTimeout(retryRef.current.timeoutId);
+      retryRef.current.timeoutId = null;
+    }
+  }, [finalizeStreaming, setIsStreaming, clearAgentStatuses]);
+
   if (!conversation) {
     return (
       <div style={{ display: "flex", height: "100%", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
@@ -405,6 +430,17 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           title="选择或创建一个对话开始"
           description="与 AI Agent 协作，生成代码、文档和更多产出"
         />
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full flex-col">
+        <ChatHeader conversation={conversation} agents={agents} />
+        <div style={{ flex: 1, padding: 24 }}>
+          <Skeleton placeholder={<Skeleton.Paragraph rows={8} />} loading={true} />
+        </div>
       </div>
     );
   }
@@ -443,7 +479,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         </>
       )}
       <MessageList
-        messages={rawMessages}
+        messages={filteredMessages}
         agents={agents}
         streamingMessageId={streamMsgIdRef.current}
         streamingAgentName={streamAgentRef.current}
@@ -451,8 +487,10 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         hasMore={!!hasNextPage}
         isFetchingMore={isFetchingNextPage}
         onLoadMore={() => fetchNextPage()}
+        searchText={messageSearch}
+        onRegenerate={handleRegenerate}
       />
-      {rawMessages.length === 0 && !isStreaming && (
+      {filteredMessages.length === 0 && !isStreaming && (
         <div style={{
           padding: "0 16px 16px",
           display: "flex",
@@ -498,7 +536,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           ))}
         </div>
       )}
-      <ChatInput key={activeId} onSend={handleSend} disabled={isStreaming} agents={agents} />
+      <ChatInput key={activeId} onSend={handleSend} onStop={handleStop} disabled={isStreaming} agents={agents} />
 
       {switchData && conversation && (
         <MentionSwitchDialog

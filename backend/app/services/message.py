@@ -17,6 +17,37 @@ from app.schemas.message import MessageCreate, MessageListResponse
 class MessageService:
 
     @staticmethod
+    async def persist_stream_message(
+        db: AsyncSession,
+        conv_id: UUID,
+        message_id: str,
+        sender_name: str,
+        content: str,
+        status: str = "done",
+    ) -> Optional[Message]:
+        try:
+            msg_id = UUID(message_id)
+        except ValueError:
+            import uuid as _uuid
+            msg_id = _uuid.uuid4()
+        existing = await db.get(Message, msg_id)
+        if existing:
+            return existing
+        msg = Message(
+            id=msg_id,
+            conversation_id=conv_id,
+            sender_type="agent",
+            sender_id=None,
+            content_type="text",
+            content=content,
+            status=status,
+            meta_data={"agent_name": sender_name},
+        )
+        db.add(msg)
+        await db.flush()
+        return msg
+
+    @staticmethod
     async def create_message(
         db: AsyncSession,
         conv_id: UUID,
@@ -119,9 +150,17 @@ class MessageService:
                 "created_at": a.created_at,
             })
 
+        # build meta_data fallback map for agent messages without a DB agent
+        meta_fallbacks: Dict[tuple, str] = {}
+        for m in messages:
+            if m.sender_type == "agent" and m.meta_data and isinstance(m.meta_data, dict):
+                name = m.meta_data.get("agent_name")
+                if name:
+                    meta_fallbacks[(m.sender_type, m.sender_id)] = name
+
         # batch-resolve sender_names
         sender_names = await MessageService._batch_get_sender_names(
-            db, [(m.sender_type, m.sender_id) for m in messages]
+            db, [(m.sender_type, m.sender_id) for m in messages], meta_fallbacks
         )
 
         items = [
@@ -166,8 +205,10 @@ class MessageService:
 
     @staticmethod
     async def _batch_get_sender_names(
-        db: AsyncSession, senders: List[tuple]
+        db: AsyncSession, senders: List[tuple], meta_fallbacks: Dict[tuple, str] = None
     ) -> Dict[tuple, str]:
+        if meta_fallbacks is None:
+            meta_fallbacks = {}
         user_ids = []
         agent_ids = []
         for stype, sid in senders:
@@ -198,5 +239,10 @@ class MessageService:
                     name_map[key] = "Orchestrator"
                 elif stype == "system":
                     name_map[key] = "System"
+
+        # apply meta_data fallbacks for remaining unknown agent names
+        for key, fallback_name in meta_fallbacks.items():
+            if key not in name_map:
+                name_map[key] = fallback_name
 
         return name_map

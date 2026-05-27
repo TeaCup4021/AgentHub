@@ -3,12 +3,13 @@ from typing import Optional, AsyncGenerator
 from datetime import datetime, timezone
 import asyncio
 import json
+import logging
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
+from app.core.database import get_db, async_session_maker
 from app.schemas.conversation import ConversationCreate, ConversationUpdate, ConversationResponse, PinMessageRequest
 from app.schemas.base import Page
 from app.models.conversation import Conversation
@@ -18,6 +19,8 @@ from app.models.message_mention import MessageMention
 from app.services.conversation import ConversationService
 from app.services.adapters.adk_to_sse import ADKToSSETranslator
 from app.services.adk.runner import AgentHubRunner, build_single_chat_agent
+from app.services.artifact import ArtifactService
+from app.services.message import MessageService
 
 # Assuming we have a dependency to get the current user ID
 # For now, we will mock it or expect it in requests. Assuming there's some `get_current_user`
@@ -34,6 +37,7 @@ def _use_adk_stream() -> bool:
     return flag in {"1", "true", "yes"}
 
 router = APIRouter()
+logger = logging.getLogger("agenthub.stream")
 
 
 def _format_sse(event_name: str, data: dict) -> str:
@@ -85,6 +89,25 @@ async def _mock_sse_stream(conv_id: UUID):
         "progress": 60,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }))
+
+    # persist assistant message before yielding message_end
+    full_content = "".join(
+        data["delta"] for evt, data in events if evt == "token"
+    )
+    try:
+        async with async_session_maker() as db:
+            await MessageService.persist_stream_message(
+                db=db,
+                conv_id=conv_id,
+                message_id=message_id,
+                sender_name="Demo Agent",
+                content=full_content,
+                status="done",
+            )
+            await db.commit()
+    except Exception:
+        logger.exception("persist mock stream message failed")
+
     events.append(("message_end", build_payload({
         "finish_reason": "completed",
         "usage": {"input_tokens": 12, "output_tokens": 8},
@@ -92,6 +115,53 @@ async def _mock_sse_stream(conv_id: UUID):
     for event_name, data in events:
         yield _format_sse(event_name, data)
         await asyncio.sleep(0.05)
+
+
+async def _persist_artifact_from_sse_payload(conv_id: UUID, payload: str) -> None:
+    if not payload.startswith("event: artifact"):
+        return
+
+    try:
+        data_line = next((line for line in payload.splitlines() if line.startswith("data: ")), None)
+        if not data_line:
+            return
+        data = json.loads(data_line[len("data: "):])
+        artifact = data.get("artifact") if isinstance(data, dict) else None
+        message_id_raw = data.get("message_id") if isinstance(data, dict) else None
+        if not isinstance(artifact, dict) or not message_id_raw:
+            return
+
+        message_id = UUID(str(message_id_raw))
+        event_id = data.get("event_id") if isinstance(data.get("event_id"), str) else None
+
+        async with async_session_maker() as db:
+            await ArtifactService.append_version(
+                db=db,
+                conversation_id=conv_id,
+                message_id=message_id,
+                artifact_payload=artifact,
+                event_id=event_id,
+            )
+            await db.commit()
+    except Exception:
+        logger.exception("persist artifact failed")
+
+
+async def _parse_sse_event_type(payload: str) -> Optional[str]:
+    for line in payload.splitlines():
+        if line.startswith("event:"):
+            return line[6:].strip()
+    return None
+
+
+def _parse_sse_data(payload: str) -> Optional[dict]:
+    for line in payload.splitlines():
+        if line.startswith("data: "):
+            try:
+                return json.loads(line[6:])
+            except json.JSONDecodeError:
+                return None
+    return None
 
 
 async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -> AsyncGenerator[str, None]:
@@ -104,11 +174,69 @@ async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -
         session_id=str(conv_id),
         message=prompt_text,
     )
+    accumulators: dict = {}
     async for payload in translator.translate(
         event_stream=event_stream,
         conversation_id=str(conv_id),
     ):
-        yield payload
+        event_type = await _parse_sse_event_type(payload)
+        event_data = _parse_sse_data(payload)
+
+        if event_type == "message_end" and event_data:
+            mid = event_data.get("message_id")
+            acc = accumulators.pop(mid, None) if mid else None
+            if acc and acc["content"]:
+                try:
+                    async with async_session_maker() as db:
+                        await MessageService.persist_stream_message(
+                            db=db,
+                            conv_id=conv_id,
+                            message_id=mid,
+                            sender_name=acc["sender_name"],
+                            content=acc["content"],
+                            status="done",
+                        )
+                        await db.commit()
+                except Exception:
+                    logger.exception("persist stream message failed")
+            yield payload
+        else:
+            yield payload
+
+            if event_type == "message_start" and event_data:
+                mid = event_data.get("message_id")
+                sender = event_data.get("sender", {})
+                if mid:
+                    accumulators[mid] = {
+                        "content": "",
+                        "sender_name": sender.get("name", "Agent") if isinstance(sender, dict) else "Agent",
+                    }
+            elif event_type == "token" and event_data:
+                mid = event_data.get("message_id")
+                if mid and mid in accumulators:
+                    accumulators[mid]["content"] += event_data.get("delta", "")
+            elif event_type == "error" and event_data:
+                mid = event_data.get("message_id")
+                acc = accumulators.pop(mid, None) if mid else None
+                if acc:
+                    try:
+                        async with async_session_maker() as db:
+                            await MessageService.persist_stream_message(
+                                db=db,
+                                conv_id=conv_id,
+                                message_id=mid,
+                                sender_name=acc["sender_name"],
+                                content=acc.get("content", ""),
+                                status="failed",
+                            )
+                            await db.commit()
+                    except Exception:
+                        logger.exception("persist stream error message failed")
+
+        try:
+            await _persist_artifact_from_sse_payload(conv_id, payload)
+        except Exception:
+            logger.exception("persist artifact failed")
 
 @router.get("", response_model=Page[ConversationResponse])
 async def get_conversations(
