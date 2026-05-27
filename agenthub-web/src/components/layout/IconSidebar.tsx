@@ -17,7 +17,9 @@ export function IconSidebar() {
       width: "var(--icon-nav-width)",
       flexShrink: 0,
       background: "var(--color-bg-sidebar)",
-      borderRight: "1px solid var(--color-border-light)",
+      borderRadius: "var(--radius-card)",
+      boxShadow: "var(--shadow-card)",
+      overflow: "hidden",
     }}>
       <Nav
         mode="vertical"

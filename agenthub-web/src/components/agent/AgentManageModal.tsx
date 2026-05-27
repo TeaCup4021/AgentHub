@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Modal, Input, Button, Tag, Empty } from "@douyinfe/semi-ui";
-import { IconSearch } from "@douyinfe/semi-icons";
+import { IconSearch, IconPlus } from "@douyinfe/semi-icons";
 import { useAgents, useDeleteAgent } from "@/hooks/useAgents";
 import { CreateAgentModal } from "./CreateAgentModal";
 import type { Agent } from "@/types";
@@ -16,6 +16,7 @@ export function AgentManageModal({ open, onClose }: AgentManageModalProps) {
   const [search, setSearch] = useState("");
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
   const deleteAgent = useDeleteAgent();
 
@@ -48,12 +49,22 @@ export function AgentManageModal({ open, onClose }: AgentManageModalProps) {
         style={{ width: 640 }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Input
-            prefix={<IconSearch />}
-            placeholder="搜索 Agent..."
-            value={search}
-            onChange={setSearch}
-          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Input
+              prefix={<IconSearch />}
+              placeholder="搜索 Agent..."
+              value={search}
+              onChange={setSearch}
+              style={{ flex: 1 }}
+            />
+            <Button
+              icon={<IconPlus />}
+              theme="solid"
+              onClick={() => setShowCreate(true)}
+            >
+              创建
+            </Button>
+          </div>
 
           {filtered.length === 0 ? (
             <Empty title="没有匹配的 Agent" description="尝试其他关键词或创建新 Agent" />
@@ -141,6 +152,13 @@ export function AgentManageModal({ open, onClose }: AgentManageModalProps) {
           open={true}
           initialData={editingAgent}
           onClose={() => setEditingAgent(null)}
+        />
+      )}
+
+      {showCreate && (
+        <CreateAgentModal
+          open={true}
+          onClose={() => setShowCreate(false)}
         />
       )}
     </>

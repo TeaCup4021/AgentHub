@@ -36,22 +36,6 @@ const archiveIcon = <IconArchive />;
 const downloadIcon = <IconDownload />;
 const deleteIcon = <IconDelete />;
 
-const activeMenuItems = [
-  { node: "item" as const, name: "置顶" as const, icon: pinIcon },
-  { node: "item" as const, name: "取消置顶" as const, icon: pinIcon },
-  { node: "item" as const, name: "重命名", icon: editIcon },
-  { node: "item" as const, name: "归档", icon: archiveIcon },
-  { node: "item" as const, name: "导出", icon: downloadIcon },
-  { node: "divider" as const },
-  { node: "item" as const, name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger" },
-];
-
-const archivedMenuItems = [
-  { node: "item" as const, name: "取消归档", icon: <IconRestore /> },
-  { node: "divider" as const },
-  { node: "item" as const, name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger" },
-];
-
 interface ConversationListProps {
   conversations: Conversation[];
   agents: Agent[];
@@ -227,28 +211,30 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
   }, [qc]);
 
   const renderConversationItem = (conv: Conversation, isArchived: boolean) => {
+    const menu = isArchived
+      ? [
+          { node: "item" as const, itemKey: "unarchive", name: "取消归档", icon: <IconRestore />, onClick: () => handleUnarchive(conv.id) },
+          { node: "divider" as const },
+          { node: "item" as const, itemKey: "delete", name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger", onClick: () => { setConfirmDeleteId(conv.id); } },
+        ]
+      : [
+          ...(conv.isPinned
+            ? [{ node: "item" as const, itemKey: "unpin", name: "取消置顶", icon: pinIcon, onClick: () => handlePin(conv) }]
+            : [{ node: "item" as const, itemKey: "pin", name: "置顶", icon: pinIcon, onClick: () => handlePin(conv) }]
+          ),
+          { node: "item" as const, itemKey: "rename", name: "重命名", icon: editIcon, onClick: () => handleRenameStart(conv) },
+          { node: "item" as const, itemKey: "archive", name: "归档", icon: archiveIcon, onClick: () => handleArchive(conv.id) },
+          { node: "item" as const, itemKey: "export", name: "导出", icon: downloadIcon, onClick: () => handleExport(conv) },
+          { node: "divider" as const },
+          { node: "item" as const, itemKey: "delete", name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger", onClick: () => { setConfirmDeleteId(conv.id); } },
+        ];
+
     return (
       <Dropdown
         key={conv.id}
         trigger="contextMenu"
         position="right"
-        menu={
-          isArchived
-            ? archivedMenuItems
-            : activeMenuItems.filter((item) => {
-                if (item.name === "置顶") return !conv.isPinned;
-                if (item.name === "取消置顶") return conv.isPinned;
-                return true;
-              })
-        }
-        onClick={(item: { name: string }) => {
-          if (item.name === "置顶" || item.name === "取消置顶") handlePin(conv);
-          if (item.name === "重命名") handleRenameStart(conv);
-          if (item.name === "归档") handleArchive(conv.id);
-          if (item.name === "取消归档") handleUnarchive(conv.id);
-          if (item.name === "导出") handleExport(conv);
-          if (item.name === "删除") { setConfirmDeleteId(conv.id); }
-        }}
+        menu={menu}
       >
         <div
           onClick={() => {
@@ -260,21 +246,30 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
             alignItems: "flex-start",
             justifyContent: "space-between",
             gap: 8,
-            padding: "10px 16px",
+            padding: "10px 12px",
+            margin: "0 8px",
+            borderRadius: "var(--radius-md)",
             cursor: "pointer",
             background: selectedIds.has(conv.id)
               ? "var(--color-bg-active)"
               : conv.id === activeId && !batchMode
                 ? "var(--color-bg-active)"
                 : "transparent",
+            border: conv.id === activeId && !batchMode
+              ? "1px solid rgba(51, 112, 255, 0.3)"
+              : "1px solid transparent",
             opacity: isArchived ? 0.6 : 1,
-            transition: "background var(--duration-fast) var(--ease-out)",
+            transition: "background var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out)",
           }}
           onMouseEnter={(e) => {
-            if (conv.id !== activeId) e.currentTarget.style.background = "var(--color-bg-hover)";
+            if (conv.id !== activeId) {
+              e.currentTarget.style.background = "var(--color-bg-hover)";
+            }
           }}
           onMouseLeave={(e) => {
-            if (conv.id !== activeId) e.currentTarget.style.background = "transparent";
+            if (conv.id !== activeId) {
+              e.currentTarget.style.background = "transparent";
+            }
           }}
         >
           {batchMode && (
@@ -311,14 +306,14 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}>
-                {truncate(conv.title, 20)}
+                {truncate(conv.title, 18)}
               </span>
             </div>
-            <p style={{ marginTop: 2, fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>
+            <p style={{ marginTop: 3, fontSize: "var(--font-size-sm)", color: "var(--color-text-tertiary)" }}>
               {conv.type === "group" ? "群聊" : "单聊"}
             </p>
           </div>
-          <span style={{ flexShrink: 0, fontSize: 11, color: "var(--color-text-tertiary)" }}>
+          <span style={{ flexShrink: 0, fontSize: "var(--font-size-sm)", color: "var(--color-text-tertiary)" }}>
             {formatRelativeTime(conv.lastActiveAt)}
           </span>
         </div>
@@ -333,14 +328,12 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
       height: "100%",
       width: "100%",
       background: "var(--color-bg-sidebar)",
-      borderRight: "1px solid var(--color-border-light)",
     }}>
       <div style={{
         display: "flex",
         alignItems: "center",
         gap: 8,
-        padding: "12px 16px",
-        borderBottom: "1px solid var(--color-border-light)",
+        padding: "14px 16px 10px",
       }}>
         <Typography.Title heading={6} style={{ flex: 1, margin: 0, color: "var(--color-text-primary)" }}>
           AgentHub
@@ -370,7 +363,7 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
         </Button>
       </div>
 
-      <div style={{ padding: "0 12px 8px" }}>
+      <div style={{ padding: "0 8px 10px" }}>
         <Input
           prefix={<IconSearch />}
           placeholder="搜索对话..."
@@ -394,7 +387,7 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
             {active.map((conv) => renderConversationItem(conv, false))}
 
             {archived.length > 0 && (
-              <div style={{ borderTop: "1px solid var(--color-border-light)", marginTop: 4 }}>
+              <div style={{ marginTop: 8 }}>
                 <Button
                   theme="borderless"
                   block
@@ -421,8 +414,8 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
           alignItems: "center",
           gap: 8,
           padding: "12px 16px",
-          borderTop: "1px solid var(--color-border-light)",
           background: "var(--color-bg-elevated)",
+          boxShadow: "0 -1px 4px rgba(0,0,0,0.06)",
         }}>
           <span style={{ flex: 1, fontSize: "var(--font-size-sm)", color: "var(--color-text-secondary)" }}>
             已选 {selectedIds.size} 项

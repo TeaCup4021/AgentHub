@@ -80,7 +80,14 @@ export function AppLayout() {
   );
 
   return (
-    <Layout style={{ height: "100%", display: "flex", flexDirection: "row" }}>
+    <Layout style={{
+      height: "100%",
+      display: "flex",
+      flexDirection: "row",
+      padding: "var(--app-padding)",
+      gap: "var(--app-padding)",
+      background: "var(--color-bg-app)",
+    }}>
       <IconSidebar />
 
       {isMobile ? (
@@ -112,6 +119,9 @@ export function AppLayout() {
           )}
           <Layout.Content style={{
             flex: 1,
+            borderRadius: "var(--radius-card)",
+            boxShadow: "var(--shadow-card)",
+            overflow: "hidden",
             background: "var(--color-bg-chat)",
             display: "flex",
             flexDirection: "column",
@@ -137,7 +147,13 @@ export function AppLayout() {
         </>
       ) : (
         <>
-          <div style={{ width: convListWidth, flexShrink: 0 }}>
+          <div style={{
+            width: convListWidth,
+            flexShrink: 0,
+            borderRadius: "var(--radius-card)",
+            boxShadow: "var(--shadow-card)",
+            overflow: "hidden",
+          }}>
             {conversationListEl}
           </div>
 
@@ -145,19 +161,25 @@ export function AppLayout() {
             ref={dragRef}
             onMouseDown={handleDragStart}
             style={{
-              width: 4,
+              width: 8,
               flexShrink: 0,
               cursor: "col-resize",
               background: "transparent",
-              transition: "background var(--duration-fast) var(--ease-out)",
               zIndex: 5,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-primary)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(51, 112, 255, 0.15)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
           />
 
           <Layout.Content style={{
             flex: 1,
+            borderRadius: "var(--radius-card)",
+            boxShadow: "var(--shadow-card)",
+            overflow: "hidden",
             background: "var(--color-bg-chat)",
             display: "flex",
             flexDirection: "column",

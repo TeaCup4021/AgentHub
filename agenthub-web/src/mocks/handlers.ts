@@ -310,6 +310,31 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
         Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
+    // POST /messages/:id/regenerate
+    else if (method === "post" && /^\/messages\/[^/]+\/regenerate$/.test(url)) {
+      const messageId = url.split("/")[2];
+      await delay();
+      const [, responseBody] = successResponse({ message_id: messageId, status: "regenerated" });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // POST /conversations/:id/pins
+    else if (method === "post" && /^\/conversations\/[^/]+\/pins$/.test(url)) {
+      await delay();
+      const [, responseBody] = successResponse({ status: "pinned" });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // DELETE /conversations/:id/pins/:messageId
+    else if (method === "delete" && /^\/conversations\/[^/]+\/pins\/[^/]+$/.test(url)) {
+      await delay();
+      const [, responseBody] = successResponse(null);
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
     return config;
   });
 

@@ -28,6 +28,12 @@ function resolveTheme(theme: "light" | "dark" | "system"): "light" | "dark" {
 }
 
 const lightColors: Record<string, string> = {
+  /* 背景色 — 飞书风格柔和蓝灰 */
+  "--semi-color-bg-0": "rgba(240,242,246,1)",
+  "--semi-color-bg-1": "rgba(255,255,255,1)",
+  "--semi-color-bg-2": "rgba(250,251,252,1)",
+  "--semi-color-bg-3": "rgba(244,245,247,1)",
+  "--semi-color-bg-4": "rgba(238,240,243,1)",
   "--semi-blue-5": "51,112,255",
   "--semi-blue-6": "43,95,217",
   "--semi-blue-7": "34,76,174",
@@ -64,6 +70,11 @@ const lightColors: Record<string, string> = {
 };
 
 const darkColors: Record<string, string> = {
+  "--semi-color-bg-0": "rgba(20,20,20,1)",
+  "--semi-color-bg-1": "rgba(31,31,31,1)",
+  "--semi-color-bg-2": "rgba(42,42,42,1)",
+  "--semi-color-bg-3": "rgba(51,51,51,1)",
+  "--semi-color-bg-4": "rgba(58,58,58,1)",
   "--semi-blue-5": "92,143,255",
   "--semi-blue-6": "125,168,255",
   "--semi-blue-7": "74,114,204",

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Banner, Button, Empty, Skeleton } from "@douyinfe/semi-ui";
+import { Banner, Button, Empty, Spin } from "@douyinfe/semi-ui";
 import { IconComment } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import { useMessages } from "@/hooks/useMessages";
@@ -55,7 +55,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     data: messagesData,
     hasNextPage,
     isFetchingNextPage,
-    isLoading,
+    isLoading: isMessagesLoading,
     fetchNextPage,
   } = useMessages(activeId ?? "");
   const messageSearch = useChatStore((s) => s.messageSearch);
@@ -307,22 +307,38 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     const failedMsg = allMessages.find((m) => m.id === msgId);
     if (!failedMsg) return;
 
-    const parentUserMsg = allMessages.find(
-      (m) => m.senderType === "user" && m.id === failedMsg.parentMessageId,
-    );
+    let contentToResend: string;
+    if (failedMsg.senderType === "user") {
+      contentToResend = failedMsg.content;
+    } else {
+      const parentUserMsg = allMessages.find(
+        (m) => m.senderType === "user" && m.id === failedMsg.parentMessageId,
+      );
+      if (!parentUserMsg) return;
+      contentToResend = parentUserMsg.content;
+    }
 
-    if (parentUserMsg) {
-      const conv = conversations.find((c) => c.id === convId);
-      if (convId !== activeId) {
-        useChatStore.getState().setActiveConversation(convId);
-        setTimeout(() => {
-          executeSend(convId, parentUserMsg.content, [], conv);
-        }, 100);
-      } else {
-        executeSend(convId, parentUserMsg.content, [], conv);
-      }
+    if (convId !== useChatStore.getState().activeConversationId) {
+      useChatStore.getState().setActiveConversation(convId);
+      setTimeout(() => {
+        sendRef.current?.(convId, contentToResend, []);
+      }, 100);
+    } else {
+      sendRef.current?.(convId, contentToResend, []);
     }
   }, [qc, activeId, conversations, executeSend]);
+
+  useEffect(() => {
+    const onRegenerate = (e: Event) => {
+      const { messageId, conversationId } = (e as CustomEvent).detail as {
+        messageId: string;
+        conversationId: string;
+      };
+      handleRegenerate(conversationId, messageId);
+    };
+    window.addEventListener("regenerate-message", onRegenerate);
+    return () => window.removeEventListener("regenerate-message", onRegenerate);
+  }, [handleRegenerate]);
 
   const handleSend = useCallback(async (content: string, mentions: string[]) => {
     if (!activeId || !conversation) return;
@@ -434,17 +450,6 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full flex-col">
-        <ChatHeader conversation={conversation} agents={agents} />
-        <div style={{ flex: 1, padding: 24 }}>
-          <Skeleton placeholder={<Skeleton.Paragraph rows={8} />} loading={true} />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col">
       <ChatHeader conversation={conversation} agents={agents} />
@@ -478,18 +483,23 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           />
         </>
       )}
-      <MessageList
-        messages={filteredMessages}
-        agents={agents}
-        streamingMessageId={streamMsgIdRef.current}
-        streamingAgentName={streamAgentRef.current}
-        isWaiting={isStreaming && !streamMsgIdRef.current}
-        hasMore={!!hasNextPage}
-        isFetchingMore={isFetchingNextPage}
-        onLoadMore={() => fetchNextPage()}
-        searchText={messageSearch}
-        onRegenerate={handleRegenerate}
-      />
+      {isMessagesLoading ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Spin size="large" />
+        </div>
+      ) : (
+        <MessageList
+          messages={filteredMessages}
+          agents={agents}
+          streamingMessageId={streamMsgIdRef.current}
+          streamingAgentName={streamAgentRef.current}
+          isWaiting={isStreaming && !streamMsgIdRef.current}
+          hasMore={!!hasNextPage}
+          isFetchingMore={isFetchingNextPage}
+          onLoadMore={() => fetchNextPage()}
+          searchText={messageSearch}
+        />
+      )}
       {filteredMessages.length === 0 && !isStreaming && (
         <div style={{
           padding: "0 16px 16px",

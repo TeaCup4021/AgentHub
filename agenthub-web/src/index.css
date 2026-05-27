@@ -7,6 +7,11 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
@@ -53,6 +58,10 @@
 
 .message-bubble-wrap:hover .message-actions {
   opacity: 1 !important;
+}
+
+.semi-layout {
+  background: var(--color-bg-app);
 }
 
 html, body, #root {
