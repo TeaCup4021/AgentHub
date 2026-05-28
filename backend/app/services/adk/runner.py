@@ -1,5 +1,5 @@
 import os
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from google.adk.agents import LlmAgent
 from google.adk.agents.run_config import RunConfig, StreamingMode
@@ -36,13 +36,15 @@ def build_single_chat_agent(
 class AgentHubRunner:
     def __init__(
         self,
-        agent: LlmAgent,
+        agent: LlmAgent | None = None,
+        node: Any = None,
         app_name: str = "agenthub",
         session_service: Optional[BaseSessionService] = None,
     ) -> None:
         self.session_service = session_service or _DEFAULT_SESSION_SERVICE
         self.runner = Runner(
             agent=agent,
+            node=node,
             app_name=app_name,
             session_service=self.session_service,
         )

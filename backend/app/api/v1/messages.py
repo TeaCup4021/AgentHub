@@ -1,4 +1,4 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
@@ -70,16 +70,25 @@ async def create_message(
         agent_map = {str(a.id): a.name for a in agents_result.scalars().all()}
 
         new_plan_dict = {"subtasks": [
-            {**item, "agent_name": agent_map.get(item["agent_id"], "Unknown")}
+            {
+                **item,
+                "agent_name": agent_map.get(item["agent_id"], "Unknown"),
+                "depends_on": item.get("depends_on", item.get("dependsOn", [])),
+                "mode": item.get("mode", "single_turn"),
+                "output_key": item.get("output_key", item.get("outputKey")),
+            }
             for item in data.plan
         ]}
         from app.schemas.orchestrator import OrchestratorPlan, SubTaskPlan
         plan_obj = OrchestratorPlan(subtasks=[
             SubTaskPlan(
-                subtask_id=item["subtask_id"],
+                subtask_id=item.get("subtask_id", item.get("subtaskId", f"sub-{uuid4().hex[:8]}")),
                 agent_id=UUID(item["agent_id"]),
                 agent_name=agent_map.get(item["agent_id"], "Unknown"),
                 instruction=item["instruction"],
+                depends_on=item.get("depends_on", item.get("dependsOn", [])),
+                mode=item.get("mode", "single_turn"),
+                output_key=item.get("output_key", item.get("outputKey")),
             )
             for item in data.plan
         ])
@@ -91,6 +100,24 @@ async def create_message(
 
         task.status = "confirmed"
         task.result_summary = {"state_delta": {"plan_confirmed": True}}
+
+        # Create orchestrator_subtasks rows for each confirmed subtask
+        from app.models.orchestrator_subtask import OrchestratorSubtask
+        existing_subtasks = await db.execute(
+            select(OrchestratorSubtask).where(OrchestratorSubtask.task_id == task.id)
+        )
+        if not existing_subtasks.scalars().first():
+            for i, item in enumerate(new_plan_dict["subtasks"]):
+                db.add(OrchestratorSubtask(
+                    task_id=task.id,
+                    agent_id=UUID(item["agent_id"]),
+                    instruction=item["instruction"],
+                    status="queued",
+                    depends_on=item.get("depends_on", []),
+                    mode=item.get("mode", "single_turn"),
+                    execution_order=i,
+                ))
+
         await db.commit()
         return JSONResponse(content={"code": 200, "data": None, "message": "ok"})
 

@@ -69,19 +69,40 @@ class OrchestratorPlanner:
         return list(result.scalars().all())
 
     def _build_instruction(self, user_message: str, agents: List[Agent]) -> str:
-        agent_list = ", ".join(
-            f"{a.name} (id={a.id})" for a in agents
+        agent_list = "\n".join(
+            f"- {a.name} (id={a.id})"
+            + (f": {a.system_prompt[:120]}" if a.system_prompt else "")
+            for a in agents
         ) if agents else "(none)"
         return (
-            "You are a task orchestrator. Break down the user's request into subtasks "
-            "and assign each to one of the available agents below.\n\n"
-            f"Available agents: {agent_list}\n\n"
+            "You are a task orchestrator. Analyze the user's request and break it down "
+            "into subtasks with dependencies.\n\n"
+            f"Available agents:\n{agent_list}\n\n"
             "Output ONLY a JSON object (no markdown, no extra text):\n"
-            '{"subtasks": [{"agentId": "<uuid>", "agentName": "<name>", '
-            '"instruction": "<what this agent should do>"}]}\n\n'
+            '{\n'
+            '  "subtasks": [\n'
+            '    {\n'
+            '      "subtaskId": "s1",\n'
+            '      "agentId": "<uuid>",\n'
+            '      "agentName": "<name>",\n'
+            '      "instruction": "<self-contained instruction>",\n'
+            '      "dependsOn": [],\n'
+            '      "mode": "single_turn",\n'
+            '      "outputKey": "result_s1"\n'
+            '    }\n'
+            '  ]\n'
+            '}\n\n'
             "Rules:\n"
-            "- Use the exact agentId and agentName from the list above\n"
-            "- Each instruction must be self-contained and actionable\n"
+            "1. Use exact agentId and agentName from the list above\n"
+            "2. Each instruction must be self-contained and actionable\n"
+            '3. "dependsOn" lists subtaskIds that must finish before this subtask starts;\n'
+            "   if subtask B needs subtask A's output, add A's subtaskId to B's dependsOn\n"
+            "4. Independent subtasks should have empty dependsOn (they run in parallel)\n"
+            '5. "mode": "single_turn" (no user interaction, auto-return) or '
+            '"task" (can ask user for clarification, auto-return)\n'
+            '6. "outputKey" is the session state key where this subtask stores its result;\n'
+            "   downstream subtasks can reference it via {key} in their instruction\n"
+            "7. subtaskId must be unique within the plan (e.g. s1, s2, s3)\n"
             f"User request: {user_message}"
         )
 
@@ -112,10 +133,13 @@ class OrchestratorPlanner:
                 data = json.loads(match.group(0))
                 subtasks = [
                     SubTaskPlan(
-                        subtask_id=self._gen_subtask_id(),
+                        subtask_id=item.get("subtaskId", self._gen_subtask_id()),
                         agent_id=UUID(item["agentId"]),
                         agent_name=item["agentName"],
                         instruction=item["instruction"],
+                        depends_on=item.get("dependsOn", []),
+                        mode=item.get("mode", "single_turn"),
+                        output_key=item.get("outputKey"),
                     )
                     for item in data.get("subtasks", [])
                 ]
@@ -131,6 +155,9 @@ class OrchestratorPlanner:
                     agent_id=agents[0].id,
                     agent_name=agents[0].name,
                     instruction=user_message,
+                    depends_on=[],
+                    mode="single_turn",
+                    output_key=None,
                 )
             ])
         return OrchestratorPlan(subtasks=[])

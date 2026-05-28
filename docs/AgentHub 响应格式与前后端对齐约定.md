@@ -60,7 +60,11 @@
 ## 12) 发送消息请求对齐
 
 - **创建消息字段**：`content`（必填）、`contentType`（可选，默认 `"text"`）、`mentions?`、`parentMessageId?`、`mode?`。
-- **mode 预留**：`mode?: "auto_orchestrate" | "direct"` 为群聊预留；后端可接受但不一定启用行为。
+- **mode 取值**（2026-05-28 更新）：
+  - `"direct"` — 单 Agent 直连对话（默认）
+  - `"auto_orchestrate"` — Coordinator 模式：LLM 动态理解意图、拆解任务、调度子 Agent（ADK Collaborative Workflow）
+  - `"auto_orchestrate_dag"` — Static DAG 模式：Planner 预生成依赖图 → Workflow Graph 确定执行
+- **行为**：`auto_orchestrate` 和 `auto_orchestrate_dag` 仅在群聊（含 @mentions）时生效，`direct` 走现有单聊通道。
 
 ## 13) SSE 协议对齐
 
@@ -172,6 +176,7 @@
   | `OPENAI_API_KEY` | `null` | OpenAI API Key（LiteLlm 模式） |
   | `AGENTHUB_MAX_PINNED_CONTEXT` | `10` | 最大注入固定消息数 |
   | `AGENTHUB_PIN_INJECTOR_LOG` | `"0"` | `"true"` 启用 Pin 注入日志 |
+  | `AGENTHUB_WORKFLOW_MAX_CONCURRENCY` | `"3"` | Static DAG 模式最大并行 Agent 数，`1` 触发 Plan B2 串行降级 |
 
 ---
 
@@ -201,6 +206,17 @@
 - `backend/alembic/versions/0002_add_soft_delete_to_conversations.py`
 - `agenthub-web/src/lib/sse.ts`（`createSSEStream` prompt 参数）
 - `agenthub-web/src/components/layout/ChatArea.tsx`（`lastPromptRef`、`handleRegenerate`）
+- `backend/alembic/versions/0003_add_dag_fields_to_subtasks.py`（本次）
+- `docs/ADK工作流改进方案.md`（本次）
+- `backend/app/schemas/orchestrator.py`（本次 — SubTaskPlan 新增 depends_on/mode/output_key）
+- `backend/app/api/v1/messages.py`（本次 — confirm_plan 适配新字段）
+- `backend/app/api/v1/conversations.py`（本次 — orchestrateMode 参数 + _coordinator_stream + _dag_workflow_stream）
+- `backend/app/services/adk/workflow_builder.py`（本次 — 星型拓扑重写为 DAG + JoinNode）
+- `backend/app/services/adk/coordinator_builder.py`（本次新增 — Coordinator 模式构建器）
+- `backend/app/services/adk/execution_tracer.py`（本次新增 — ExecutionTracer 回调 + ExecutionRecord）
+- `backend/app/services/adk/tool_loader.py`（本次新增 — tool_config JSONB → ADK Tool 实例）
+- `vibeCodingPlan/AgentHub-后端B-Day11-12-双模式执行引擎补全.md`（本次）
+- `vibeCodingSummary/AgentHub-后端B-Day11-12-双模式执行引擎补全.md`（本次）
 
 ## 27) Agent 能力标签列表 API（新增于 2026-05-27 Day9-10 后端A）
 
@@ -219,3 +235,149 @@
 - **调用方**：后端 B 的 Orchestrator Planner（任务拆解后按能力匹配 Agent）、Context Assembler（注入能力路由提示）
 - **约束**：`match_agents` 初版仅支持单标签匹配，多标签 AND/OR 语义留待 Day 14
 - **数据来源**：复用 Day 1 已建的 `agents.capabilities` JSONB 列，无需新增 migration
+
+## 29) Orchestrator Plan JSON 格式（新增于 2026-05-28 工作流改进）
+
+- **用途**：Orchestrator Planner 输出的计划 JSON，以及 `confirm_plan` API 接收的确认/调整后的计划。前端 OrchestratorPlan 卡片据此渲染子任务列表和依赖关系。
+- **字段说明**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `subtaskId` | `string` | 是 | 子任务唯一标识，格式 `"sub-xxxxxxxx"` |
+| `agentId` | `string` (UUID) | 是 | 分配的 Agent ID |
+| `agentName` | `string` | 是 | Agent 名称（展示用） |
+| `instruction` | `string` | 是 | 子任务指令，自包含且可执行 |
+| `dependsOn` | `string[]` | 否（默认 `[]`） | 依赖的 subtaskId 列表，空数组表示无依赖（可并行） |
+| `mode` | `"single_turn"` \| `"task"` \| `"chat"` | 否（默认 `"single_turn"`） | 子 Agent 协作模式 |
+| `outputKey` | `string` \| `null` | 否 | 子任务输出写入 session state 的 key |
+
+- **示例**：
+  ```json
+  {
+    "subtasks": [
+      {
+        "subtaskId": "s1",
+        "agentId": "550e8400-e29b-41d4-a716-446655440001",
+        "agentName": "WeatherAgent",
+        "instruction": "查询东京未来三天天气",
+        "dependsOn": [],
+        "mode": "single_turn",
+        "outputKey": "weather_data"
+      },
+      {
+        "subtaskId": "s2",
+        "agentId": "550e8400-e29b-41d4-a716-446655440002",
+        "agentName": "FlightAgent",
+        "instruction": "查询北京到东京的直飞航班",
+        "dependsOn": [],
+        "mode": "single_turn",
+        "outputKey": "flight_data"
+      },
+      {
+        "subtaskId": "s3",
+        "agentId": "550e8400-e29b-41d4-a716-446655440003",
+        "agentName": "TravelPlanner",
+        "instruction": "根据天气({weather_data})和航班({flight_data})制定三天行程",
+        "dependsOn": ["s1", "s2"],
+        "mode": "task",
+        "outputKey": "travel_plan"
+      }
+    ]
+  }
+  ```
+
+- **依赖规则**：
+  - `dependsOn` 为空 → 从 START 节点并行启动
+  - 单一依赖 → 直接 Edge 串联
+  - 多个依赖 → JoinNode 等待所有依赖完成后触发
+  - 后端 `WorkflowBuilder` 根据 `dependsOn` 自动构建正确的 ADK Workflow Graph
+
+- **向后兼容**：旧格式（无 `dependsOn`/`mode`/`outputKey`）仍可解析，视同所有子任务 `dependsOn=[]`、`mode="single_turn"`
+
+## 30) SSE Plan 消息格式变更（新增于 2026-05-28 工作流改进）
+
+- **背景**：`GET /stream` 返回 Orchestrator 计划时，`message_start` 事件的 `meta.plan[]` 数组格式修改。
+- **变更前**（旧格式）：
+  ```json
+  { "subtask_id": "s1", "agent": {...}, "instruction": "...", "priority": 1 }
+  ```
+  `priority` 字段已移除。
+- **变更后**（新格式）：
+  ```json
+  {
+    "subtask_id": "s1",
+    "agent": { "id": "...", "name": "WeatherAgent" },
+    "instruction": "查询东京天气",
+    "depends_on": [],
+    "mode": "single_turn",
+    "output_key": "weather_data"
+  }
+  ```
+- **字段说明**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `depends_on` | `string[]` | 依赖的 subtask_id 列表，空数组=可并行 |
+| `mode` | `string` | 子 Agent 协作模式：`"single_turn"` / `"task"` / `"chat"` |
+| `output_key` | `string` \| `null` | 输出写入 session state 的 key |
+
+- **前端影响**：OrchestratorPlan 卡片渲染时，从 `depends_on` 读取依赖关系绘制 DAG 连线；根据 `mode` 决定是否显示"需用户确认"标记。
+
+## 31) Stream 端点 orchestrateMode 参数（新增于 2026-05-28 工作流改进）
+
+- **端点**：`GET /api/v1/conversations/{id}/stream`
+- **新增查询参数**：`orchestrateMode`（camelCase，可选）
+- **取值**：
+  | 值 | 说明 |
+  |---|---|
+  | 不传 | 默认行为：有 planning 任务则生成计划，有 confirmed 任务不处理（兼容旧版） |
+  | `"auto_orchestrate"` | Coordinator 模式：确认后的计划走 LLM 动态调度执行 |
+  | `"auto_orchestrate_dag"` | Static DAG 模式：确认后的计划走 Workflow Graph 确定执行 |
+- **使用时机**：前端在用户确认 Plan 后，携带 `orchestrateMode=auto_orchestrate`（或 `auto_orchestrate_dag`）重新连接 SSE 流触发执行。
+- **示例**：`GET /api/v1/conversations/{id}/stream?prompt=...&orchestrateMode=auto_orchestrate`
+- **兜底**：若未传 `orchestrateMode` 但有 status=confirmed 的 OrchestratorTask，stream 不会触发执行（兼容旧版行为，需显式传参）。
+
+## 32) confirm_plan API 接收新字段（新增于 2026-05-28 工作流改进）
+
+- **端点**：`POST /api/v1/conversations/{id}/messages`（`mode: "confirm_plan"`）
+- **plan 数组每项新增可选字段**：
+
+| 字段 | 来源 | 说明 |
+|------|------|------|
+| `dependsOn` | 前端发送 camelCase | 依赖的 subtaskId 列表，后端同时兼容 `depends_on`（snake_case） |
+| `mode` | 前端发送 | 子 Agent 模式：`"single_turn"` / `"task"` / `"chat"`，默认 `"single_turn"` |
+| `outputKey` | 前端发送 camelCase | 输出 key，后端同时兼容 `output_key`（snake_case） |
+
+- **向后兼容**：不传这些字段的后端按默认值处理（`depends_on=[]`、`mode="single_turn"`、`output_key=None`），旧前端可正常工作。
+- **存储**：确认后的 plan 完整存储到 `orchestrator_tasks.plan` JSONB 列（含新字段），供后续执行阶段读取。
+
+## 33) OrchestratorSubtask 数据生命周期（新增于 2026-05-28 Day11-12 双引擎补全）
+
+- **创建时机**：用户调用 `confirm_plan` API 确认计划后，后端为每个子任务创建一条 `orchestrator_subtasks` 行，初始 `status="queued"`。
+- **更新时机**：Coordinator / Static DAG 执行完成后，后端根据 `ExecutionTracer` 收集的指标回写：
+
+| 字段 | 写入时机 | 说明 |
+|------|---------|------|
+| `status` | 执行后 | `"success"` / `"failed"` |
+| `latency_ms` | 执行后 | 子 Agent 实际耗时（毫秒） |
+| `error_detail` | 失败时 | 错误详情文本 |
+| `output_message_id` | 执行后 | 指向该子任务产出的消息（`messages.id`），通过该 ID 可查询子 Agent 的完整输出 |
+
+- **前端使用场景**：
+  - 查询 `orchestrator_subtasks` 表可获取每个子任务的执行状态、耗时和对应的输出消息
+  - `output_message_id` 可直接用于 `GET /messages` 过滤或跳转到具体消息
+  - 结合 `depends_on` 字段可渲染 DAG 执行轨迹（Day 13 `GET /orchestrator/tasks/{id}/dag` 端点将提供整合接口）
+
+- **注意事项**：
+  - 子任务行的 `agent_id` 对应 `agents.id`，`task_id` 对应 `orchestrator_tasks.id`
+  - `execution_order` 字段记录子任务在原 plan 数组中的索引（从 0 开始）
+  - Coordinator 模式下的匹配逻辑：通过 `ExecutionTracer.records[].agent_name` → `agent_name_to_agent_id` 映射找到对应的 subtask 行
+
+## 34) AGENTHUB_WORKFLOW_MAX_CONCURRENCY 环境变量（新增于 2026-05-28 Day11-12 双引擎补全）
+
+- **变量名**：`AGENTHUB_WORKFLOW_MAX_CONCURRENCY`
+- **默认值**：`3`（未设置时 WorkflowBuilder 最多并行 3 个 Agent）
+- **用途**：控制 Static DAG 模式下 ADK Workflow Graph 的最大并行度。设为 `1` 触发 **Plan B2 串行降级**，所有子 Agent 按依赖顺序依次执行。
+- **降级场景**：当多 Agent 并发 token 流在 SSE 通道中 Demultiplexing 混乱、或生产环境需要降低 LLM API 并发压力时使用。
+- **实现位置**：`backend/app/services/adk/workflow_builder.py` 的 `build()` 方法，通过 `min(len(agent_map), concurrency)` 限制最终 `Workflow.max_concurrency`。
+- **应添加到 Convention #26 的环境变量清单**。

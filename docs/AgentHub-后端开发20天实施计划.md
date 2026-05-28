@@ -23,7 +23,7 @@
 | 9 | 查询参数命名 | 前端发送 camelCase 查询参数（如 `pageSize`），后端 Query 参数需添加 `alias` 支持（Pydantic `alias_generator` 仅对 body 生效） |
 | 10 | avatar_url 非空 | 前端 `Agent.avatarUrl: string` 为非可选字段，后端 `AgentBase.avatar_url` 默认空字符串 `""`，确保永不为 null |
 | 11 | sender_type / status 枚举 | 前端定义 `senderType: "user" \| "agent" \| "system" \| "orchestrator"`，`status: "pending" \| "streaming" \| "done" \| "failed"`，后端 `MessageResponse` 使用 `Literal` 类型校验 |
-| 12 | 消息 mode 字段 | 前端 `SendMessageRequest.mode?: "auto_orchestrate" \| "direct"` 为群聊预留，后端 `MessageCreate.mode` 已定义但暂不启用 |
+| 12 | 消息 mode 字段 | 前端 `SendMessageRequest.mode?: "auto_orchestrate" \| "auto_orchestrate_dag" \| "direct"`；`auto_orchestrate`=Coordinator 模式（LLM 动态调度），`auto_orchestrate_dag`=Static DAG 模式（Planner 生成依赖图执行），`direct`=单 Agent 直连 |
 
 ---
 
@@ -54,7 +54,8 @@
 |---------|--------|------|------|------|
 | ADK-to-SSE Translator | 后端B | Day 4 | Day 5 | 薄协议适配层，ADK Event → 6事件 SSE |
 | Pin/Spec 注入 Callback | 后端A | Day 6 | Day 6 | ~50行，替代原 Context Assembler；ADK Session 自动管理历史 |
-| Orchestrator 两阶段协议 | 后端B | Day 9 | Day 12 | 计划→确认→执行，利用 ADK Planner + state_delta |
+| Orchestrator 两阶段协议 | 后端B | Day 9 | Day 12 | 计划→确认→执行（DAG 模式），利用 ADK Planner + Workflow Graph + JoinNode |
+| CoordinatorBuilder | 后端B | Day 11 | Day 12 | Coordinator 模式构建器，基于 ADK Collaborative Workflow（sub_agents + mode），LLM 动态调度子 Agent |
 | ExecutionTracer Callback | 后端B | Day 11 | Day 11 | ~100行，after_agent_callback 收集计时；DAG 拓扑直接读 Workflow.edges |
 | CapabilityRegistry | 后端A | Day 9 | Day 14 | Agent 能力注册+匹配，可借力 ADK AgentRouter |
 | Meta-Agent (Builder) | 后端A | Day 14 | Day 15 | 对话式创建 Agent，本质是另一个 LlmAgent + DB 写入工具 |
@@ -214,24 +215,46 @@
 
 **后端 B（主攻 — [ADK] Planner + [自研] 计划生成）：**
 
-**Day 9：Planner 集成 + Plan Schema**
+**Day 9：Planner 集成 + Plan Schema（DAG 化）**
 - **[ADK]** 调用 `BuiltInPlanner`：将用户意图拆解为步骤列表（**ADK 原生，一行 import**）
-- **[自研]** 将 ADK Planner 输出转为标准 Plan JSON（轻量格式转换）：
+- **[自研]** Planner Prompt 升级：要求 LLM 分析任务依赖关系，输出带 `dependsOn` 的 DAG Plan：
   ```json
-  { "subtasks": [{ "agentId": "...", "agentName": "...", "instruction": "..." }] }
+  {
+    "subtasks": [
+      {
+        "subtaskId": "s1",
+        "agentId": "...",
+        "agentName": "...",
+        "instruction": "...",
+        "dependsOn": [],
+        "mode": "single_turn",
+        "outputKey": "result_s1"
+      },
+      {
+        "subtaskId": "s2",
+        "dependsOn": ["s1"],
+        ...
+      }
+    ]
+  }
   ```
-- **[ADK]** 根据 Plan JSON 动态构建 Workflow Graph（**ADK 原生 API**）：
-  - 可并行子任务 → 并行 Edge 路由
-  - 有依赖子任务 → `Edge(from_node=A, to_node=B)`
-  - 设置 `Workflow(max_concurrency=2)`
+- **[自研]** SubTaskPlan schema 升级 (`schemas/orchestrator.py`)：新增 `depends_on`、`mode`、`output_key` 字段
+- **[ADK]** 根据 Plan DAG 动态构建 Workflow Graph（**ADK 原生 API**）：
+  - 无依赖子任务 → `Edge(from_node=START, to_node=agent)`
+  - 单依赖子任务 → `Edge(from_node=A, to_node=B)`
+  - 多依赖子任务 → `JoinNode` 汇聚 → `Edge(from_node=join, to_node=agent)`
+  - 多个终端节点 → 最终 `JoinNode` 聚合
+  - 设置 `max_concurrency` 控制并行度
 - **[自研]** 计划消息存储：`sender_type="orchestrator"`，`artifact_type="plan"`
 
-**Day 10：两阶段协议 API**
-- **[自研]** `POST /api/v1/conversations/{id}/orchestrator/confirm`：
-  - 接收前端确认/调整后的 Plan JSON
-  - 更新 Workflow Graph（如有调整）
-  - 设置 `state_delta={"plan_confirmed": True}` 触发执行阶段（**ADK 原生 state_delta 机制**）
-- **[ADK]** 利用 ADK `state_delta` 实现 Phase 1 → Phase 2 的状态传递
+**Day 10：两阶段协议 API + 数据库迁移**
+- **[自研]** `POST /api/v1/conversations/{id}/messages`（`mode="confirm_plan"`）：
+  - 接收前端确认/调整后的 Plan JSON（含 dependsOn/mode/outputKey，兼容 camelCase 和 snake_case）
+  - 构建 `OrchestratorPlan` 对象验证 schema，调用 WorkflowBuilder 预构建图（验证拓扑）
+  - 更新 `OrchestratorTask.status = "confirmed"` 进入执行阶段
+  - 阶段状态机：`planning → awaiting_confirmation → confirmed → completed`
+- **[自研]** 数据库迁移：`orchestrator_subtasks` 表新增 `depends_on`(JSONB)、`mode`(VARCHAR)、`execution_order`(INTEGER) 列
+- **[自研]** 利用 `OrchestratorTask.status` 状态机实现 Phase 1 → Phase 2 的状态传递，stream 端点根据 status + `orchestrateMode` 参数决定进入 Coordinator 或 Static DAG 执行分支
 
 **后端 A（CapabilityRegistry + 计划 API）：**
 - **[自研] Agent CapabilityRegistry** 初版：
@@ -240,26 +263,34 @@
   - 可借力 ADK `RoutedAgent`（实验性）实现简单路由；LLM-driven routing 通过 agent `description` 字段自动选择
 - `orchestrator` sender_type 加入消息模型
 
-### Day 11-12：【ADK 核心】Workflow 并发执行 + SSE 直推
+### Day 11-12：【ADK 核心】双模式执行引擎 + SSE 直推
 
-**后端 B（主攻 — [ADK] Workflow 执行 + [自研] 状态映射）：**
+**后端 B（主攻 — [ADK] Static DAG 执行 + [ADK] Coordinator 模式 + [自研] 状态映射）：**
 
-**Day 11：Workflow 执行 + ExecutionTracer**
-- **[ADK]** 将确认后的 Plan → 构建 Workflow Graph → `runner.run_async()` 执行（**ADK 原生**）
+**Day 11：Workflow DAG 执行 + CoordinatorBuilder + ExecutionTracer**
+- **[ADK]** Static DAG 模式：确认后的 DAG Plan → WorkflowBuilder 构建 Workflow Graph → `runner.run_async()` 执行（**ADK 原生**）
+  - WorkflowBuilder 根据 `depends_on` 生成正确的 Edge + JoinNode 拓扑
+  - `max_concurrency` 控制并行度
+- **[ADK]** Coordinator 模式（**新增，ADK 2.0 Collaborative Workflow**）：
+  - `CoordinatorBuilder` (`services/adk/coordinator_builder.py`)：从 DB Agent 列表动态构建 Coordinator + sub_agents
+  - sub_agents 使用 `mode="task"` 或 `mode="single_turn"`，自动返回 Coordinator
+  - Coordinator LLM 自动理解意图 → `request_task_<agent_name>` 调度子 Agent
+  - 适用于复杂交互任务和用户自定义 Agent 动态注册
 - **[自研]** ExecutionTracer Callback（~100行）：在 `after_agent_callback` 中收集：
-  - agent_name, start_time, end_time, status（延迟和状态在同一 callback 中记录）
+  - agent_name, start_time, end_time, status
   - DAG 拓扑直接读取 `Workflow.edges`（**Graph 本身就是 DAG，无需自研 DAGBuilder**）
 - **[自研]** agent_status SSE 事件映射（Translator 的一部分）：
   - `actions.transfer_to_agent` → agent_status(status="running")
   - `actions.end_of_agent` → agent_status(status="done")
-  - `Event.branch` → subtask_id（**ADK 原生字段**）
+  - `Event.branch` → subtask_id
 
-**Day 12：并发流式合并**
-- **[ADK+自研]** 多 Agent 并发流式输出：
-  - ADK Workflow 并行执行各 Node（**ADK 原生，`max_concurrency` 参数控制**）
-  - Translator 按 `Event.branch`（**ADK 原生字段**）区分不同 Agent 的 token 流
+**Day 12：并发流式合并 + 双模式 SSE 统一**
+- **[ADK+自研]** 多 Agent 并发流式输出（两种模式共用同一 SSE 管道）：
+  - Static DAG：ADK Workflow 并行执行各 Node，`max_concurrency` 控制
+  - Coordinator：LLM 动态 `request_task` 触发子 Agent，ADK 自动管理分支
+  - Translator 按 `Event.branch` 区分不同 Agent 的 token 流
   - 合并推送到同一 SSE 连接（携带不同 sender_id）
-- 如果并发 Demultiplexing 混乱 → Plan B2（串行推流）
+- 如果并发 Demultiplexing 混乱 → Plan B2（退化为 `max_concurrency=1` 串行）
 
 **后端 A：**
 - `orchestrator_subtasks` 表：基于 ADK 执行历史更新（日志记录，非状态驱动）
@@ -279,10 +310,12 @@
 - 群聊消息历史查询：支持按 sender 过滤
 - 前后端联调群聊完整流程
 
-**Day 13 检查点（[ADK] P0 群聊就绪）：**
-- [ ] 群聊：@多 Agent → [ADK Planner] 拆解 → [自研] 计划卡片 → 确认 → [ADK Workflow] 执行
+**Day 13 检查点（P0 群聊就绪）：**
+- [ ] 群聊：@多 Agent → Planner 拆解为 DAG Plan → 计划卡片（含依赖关系可视化）→ 确认 → Workflow DAG 执行
+- [ ] Coordinator 模式可用：Coordinator LLM 自动调度子 Agent，适用于交互式复杂任务
 - [ ] agent_status SSE 事件实时推送，前端 AgentProgressBar 可渲染
 - [ ] 多 Agent 输出正确合并，sender 区分清晰
+- [ ] 任务按 `dependsOn` 依赖顺序执行，JoinNode 正确汇聚
 
 ---
 
@@ -398,10 +431,13 @@
 如果中途受阻必须做出取舍：
 
 ### Plan B1：取消两阶段等待 (Day 10 触发)
-若自研的两阶段协议遇阻，退回到 **Auto-Solve**：跳过计划审批，直接让 [ADK Workflow] 自动执行并在群聊中产出结果气泡。Planner 输出仅作为 DAG 可视化数据源。
+若自研的两阶段协议遇阻，退回到 **Auto-Solve**：跳过计划审批，直接使用 Coordinator 模式自动执行并在群聊中产出结果气泡。Planner 输出仅作为 DAG 可视化数据源。
 
-### Plan B2：降级 ADK SSE 为串行通道 (Day 12 触发)
-若多 Agent 并发 token 流在 SSE 通道中 Demultiplexing 混乱，退回到 `Workflow(max_concurrency=1)` 串行执行，各 Agent 依次输出。
+### Plan B2：降级 SSE 为串行通道 (Day 12 触发)
+若多 Agent 并发 token 流在 SSE 通道中 Demultiplexing 混乱，退回到 `max_concurrency=1` 串行执行（Static DAG 模式）或 Coordinator 模式顺序调用子 Agent，各 Agent 依次输出。
+
+### Plan B2.5：Coordinator 模式降级 (Day 12 触发)
+若 Coordinator 模式（LLM 动态调度）路由准确性不达标，降级为 Static DAG 模式：Planner 预生成依赖图 → WorkflowBuilder 构建确定性 Graph 执行。
 
 ### Plan B3：ADK 模型回退 (Day 5 触发)
 若 AnthropicLlm 配置遇阻，改用 ADK LiteLLM 通用接口调用 Claude（LiteLLM 支持 100+ 模型，兼容性好）。
@@ -423,7 +459,7 @@ Agent 搜索建议 API 来不及做 → 前端从 `useAgents()` 缓存中过滤�
 |--------|---------|-----------|------|
 | 核心引擎驱动 | 手写 Orchestrator + Celery | ADK 2.0 Workflow Graph + Planner | ADK 2.0 废弃 ParallelAgent，Graph 原生产生 DAG |
 | 模型适配 | 自研适配器逐一对接 | ADK AnthropicLlm + LiteLLM (100+ 模型) | ADK 直接内置，零适配代码 |
-| 多 Agent 编排 | 自研状态机流转 | ADK Workflow (Node/Edge/JoinNode/max_concurrency) | Graph-based 编排更灵活，天然支持可视化 |
+| 多 Agent 编排 | 自研状态机流转 | ADK Workflow Graph (Node/Edge/JoinNode/max_concurrency) + Coordinator 模式 (Collaborative Workflow) | Graph DAG + Coordinator LLM 动态调度双模式，覆盖静态流水线和交互式协作 |
 | 流式输出 | 自研 SSE Generator | ADK Runner.run_async() → AsyncGenerator[Event] → 自研 Translator 转 SSE | ADK 提供完整 Event 模型，自研仅做协议转换 |
 | 上下文管理 | 自研 Context Assembler（历史+Pin+Rules+State） | **退化为 Pin/Spec 注入 Callback（~50行）+ ADK Session/State/Memory 原生管理** | ADK Session.events 自动历史、State 自动管理、MemoryService 跨会话记忆 |
 | DAG 执行轨迹 | 自研 ExecutionTracer + DAGBuilder（收集+构建拓扑） | **退化为 after_agent_callback 计时器 + 直接读 Workflow.edges 拓扑（~100行）** | ADK Workflow Graph 本身就是 DAG，edges 已定义完整拓扑 |
@@ -448,7 +484,9 @@ Agent 搜索建议 API 来不及做 → 前端从 `useAgents()` 缓存中过滤�
 | CapabilityRegistry | ~200行 | ~200行 | 不变 |
 | MergeAggregator | ~150行 | ~150行 | 不变 |
 | AgentHubRunner | ~100行 | ~100行 | 不变 |
-| **总计** | **~1600行** | **~770行** | **-52%** |
+| CoordinatorBuilder | — | **~120行** | 新增 |
+| WorkflowBuilder (DAG化) | — | **~80行** (原~30行星型) | 重写 |
+| **总计** | **~1600行** | **~970行** | **-39%** |
 
 ---
 
