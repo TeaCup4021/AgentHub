@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from uuid import UUID
+from uuid import UUID, uuid4
 from typing import List
 
 from sqlalchemy import select
@@ -16,6 +16,7 @@ from google.genai import types
 from app.models.agent import Agent
 from app.schemas.orchestrator import OrchestratorPlan, SubTaskPlan
 from app.services.adk.runner import AgentHubRunner
+from app.services.adk.models import get_anthropic_llm
 
 logger = logging.getLogger("agenthub.planner")
 
@@ -23,6 +24,7 @@ logger = logging.getLogger("agenthub.planner")
 @dataclass
 class OrchestratorPlanResult:
     plan: OrchestratorPlan
+    raw_text: str = ""
     workflow: Workflow | None = None
 
 
@@ -41,7 +43,7 @@ class OrchestratorPlanner:
 
         agent = LlmAgent(
             name="orchestrator",
-            model="claude-sonnet-4-6",
+            model=get_anthropic_llm(),
             instruction=instruction,
             planner=BuiltInPlanner(
                 thinking_config=types.ThinkingConfig(thinking_budget=1024)
@@ -58,7 +60,7 @@ class OrchestratorPlanner:
         raw_text = self._extract_text(events)
         plan = self._parse_plan(raw_text, user_message, agents)
 
-        return OrchestratorPlanResult(plan=plan)
+        return OrchestratorPlanResult(plan=plan, raw_text=raw_text)
 
     async def _lookup_agents(self, db: AsyncSession, agent_ids: List[UUID]) -> List[Agent]:
         if not agent_ids:

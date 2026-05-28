@@ -201,3 +201,21 @@
 - `backend/alembic/versions/0002_add_soft_delete_to_conversations.py`
 - `agenthub-web/src/lib/sse.ts`（`createSSEStream` prompt 参数）
 - `agenthub-web/src/components/layout/ChatArea.tsx`（`lastPromptRef`、`handleRegenerate`）
+
+## 27) Agent 能力标签列表 API（新增于 2026-05-27 Day9-10 后端A）
+
+- **端点**：`GET /api/v1/agents/capabilities`
+- **响应**：`{ code: 200, data: ["coding", "debugging", "docs", ...], message: "ok" }` — 所有活跃 Agent 的能力标签去重列表（`List[str]`，字母排序）
+- **用途**：前端 Agent 创建/编辑时可下拉选择已有标签，Orchestrator Planner 匹配 Agent 时获取可用标签
+- **实现位置**：`backend/app/services/capability_registry.py` 的 `CapabilityRegistry.get_all_capabilities`
+- **路由顺序**：`GET /capabilities` **必须**在 `GET /{agent_id}` 之前注册，防止 "capabilities" 被当作 UUID 解析
+
+## 28) Agent 能力匹配查询（内部 Service）（新增于 2026-05-27 Day9-10 后端A）
+
+- **模块**：`backend/app/services/capability_registry.py` — `CapabilityRegistry` 类
+- **方法**：
+  - `CapabilityRegistry.match_agents(db, required_capability, limit) → List[Agent]`：使用 PostgreSQL JSONB `contains` 操作符查询 `agents.capabilities` 中包含指定标签的活跃 Agent
+  - `CapabilityRegistry.get_all_capabilities(db) → List[str]`：从所有活跃 Agent 聚合去重能力标签
+- **调用方**：后端 B 的 Orchestrator Planner（任务拆解后按能力匹配 Agent）、Context Assembler（注入能力路由提示）
+- **约束**：`match_agents` 初版仅支持单标签匹配，多标签 AND/OR 语义留待 Day 14
+- **数据来源**：复用 Day 1 已建的 `agents.capabilities` JSONB 列，无需新增 migration

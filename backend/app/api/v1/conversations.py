@@ -350,6 +350,7 @@ async def _orchestrator_plan_stream(
             conversation_id=conv_id,
         )
     except Exception:
+        logger.exception("Planner failed for conv=%s task=%s", conv_id, orch_task.id)
         yield _format_sse("error", {
             "version": "v1",
             "event_id": str(uuid4()),

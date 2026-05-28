@@ -88,7 +88,7 @@ class AgentHubRunner:
     async def _ensure_session(self, user_id: str, session_id: str) -> None:
         try:
             await self.session_service.create_session(
-                app_name="agenthub",
+                app_name=self.runner.app_name,
                 user_id=user_id,
                 session_id=session_id,
             )

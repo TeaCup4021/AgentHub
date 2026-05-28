@@ -5,12 +5,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.schemas.agent import AgentResponse, AgentCreate, AgentUpdate, AgentVerifyRequest
 from app.services.agent import AgentService
+from app.services.capability_registry import CapabilityRegistry
 
 # Placeholder for current user
 async def get_current_user_id() -> uuid.UUID:
     return uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 router = APIRouter()
+
+@router.get("/capabilities", response_model=List[str])
+async def list_capabilities(
+    db: AsyncSession = Depends(get_db)
+):
+    return await CapabilityRegistry.get_all_capabilities(db)
 
 @router.get("", response_model=List[AgentResponse])
 async def list_agents(
