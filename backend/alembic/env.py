@@ -33,6 +33,8 @@ import app.models.message_pin
 import app.models.artifact
 import app.models.orchestrator_task
 import app.models.orchestrator_subtask
+import app.models.project
+import app.models.verification_code
 
 target_metadata = Base.metadata
 
