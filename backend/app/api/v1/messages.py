@@ -22,11 +22,14 @@ async def list_messages(
     conv_id: UUID,
     cursor: Optional[str] = None,
     limit: int = Query(50, ge=1, le=100),
+    sender_type: Optional[str] = Query(None, alias="senderType"),
+    sender_id: Optional[UUID] = Query(None, alias="senderId"),
     db: AsyncSession = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
 ):
     return await MessageService.list_messages(
-        db=db, conv_id=conv_id, user_id=user_id, cursor=cursor, limit=limit
+        db=db, conv_id=conv_id, user_id=user_id, cursor=cursor, limit=limit,
+        sender_type=sender_type, sender_id=sender_id,
     )
 
 

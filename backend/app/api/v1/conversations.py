@@ -22,6 +22,7 @@ from app.services.adk.runner import AgentHubRunner, build_single_chat_agent
 from app.services.adk.coordinator_builder import CoordinatorBuilder
 from app.services.adk.workflow_builder import WorkflowBuilder
 from app.services.adk.execution_tracer import ExecutionTracer
+from app.services.adk.merge_aggregator import MergeAggregator
 from app.services.artifact import ArtifactService
 from app.services.message import MessageService
 
@@ -576,6 +577,15 @@ async def _coordinator_stream(
         },
     )
 
+    # MergeAggregator: generate orchestrator summary
+    await _run_merge_aggregator(db, orch_task.id, conv_id)
+
+    # Persist DAG data from tracer
+    dag_data = tracer.get_dag_data()
+    if orch_task.result_summary is None:
+        orch_task.result_summary = {}
+    orch_task.result_summary["dag_data"] = dag_data
+
     orch_task.status = "completed"
     await db.commit()
 
@@ -667,8 +677,69 @@ async def _dag_workflow_stream(
         agent_name_to_agent_id=name_to_agent_id,
     )
 
+    # Capture ADK Workflow.edges as native DAG topology
+    tracer.capture_edges(workflow.edges if hasattr(workflow, 'edges') else [])
+
+    # MergeAggregator: generate orchestrator summary
+    await _run_merge_aggregator(db, orch_task.id, conv_id)
+
+    # Persist DAG data from tracer (edges + records)
+    dag_data = tracer.get_dag_data()
+    if orch_task.result_summary is None:
+        orch_task.result_summary = {}
+    orch_task.result_summary["dag_data"] = dag_data
+
     orch_task.status = "completed"
     await db.commit()
+
+
+async def _run_merge_aggregator(
+    db: AsyncSession,
+    orch_task_id: UUID,
+    conv_id: UUID,
+) -> None:
+    """Run MergeAggregator after orchestration completes and persist summary."""
+    try:
+        from app.models.message import Message as MsgModel
+        from app.models.artifact import Artifact
+
+        aggregator = MergeAggregator()
+        merge_result = await aggregator.aggregate(db, orch_task_id)
+
+        summary_msg = MsgModel(
+            conversation_id=conv_id,
+            sender_type="orchestrator",
+            content=merge_result.summary_text,
+            status="done",
+        )
+        db.add(summary_msg)
+        await db.flush()
+
+        artifact = Artifact(
+            conversation_id=conv_id,
+            message_id=summary_msg.id,
+            artifact_type="orchestrator_summary",
+            title="Orchestrator Summary",
+            content={
+                "sub_summaries": [
+                    {
+                        "agent_name": s.agent_name,
+                        "subtask_id": s.subtask_id,
+                        "status": s.status,
+                        "latency_ms": s.latency_ms,
+                        "summary": s.summary,
+                        "output_message_id": s.output_message_id,
+                        "depends_on": s.depends_on,
+                    }
+                    for s in merge_result.sub_summaries
+                ],
+                "has_conflict": merge_result.has_conflict,
+                "conflict_detail": merge_result.conflict_detail,
+            },
+        )
+        db.add(artifact)
+    except Exception:
+        logger.exception("MergeAggregator failed for task=%s", orch_task_id)
 
 
 async def _update_subtask_metrics(
