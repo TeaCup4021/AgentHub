@@ -105,6 +105,8 @@ class MessageService:
         user_id: UUID,
         cursor: Optional[str] = None,
         limit: int = 50,
+        sender_type: Optional[str] = None,
+        sender_id: Optional[UUID] = None,
     ) -> MessageListResponse:
         # verify conversation exists and belongs to user
         conv = await db.get(Conversation, conv_id)
@@ -112,6 +114,11 @@ class MessageService:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
         query = select(Message).where(Message.conversation_id == conv_id)
+
+        if sender_type:
+            query = query.where(Message.sender_type == sender_type)
+        if sender_id:
+            query = query.where(Message.sender_id == sender_id)
 
         if cursor:
             try:
