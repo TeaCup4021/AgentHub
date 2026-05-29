@@ -15,7 +15,7 @@ redis[hiredis]>=5.2
 minio>=7.2
 
 # Config & validation
-pydantic>=2.12,<3
+pydantic[email]>=2.12,<3
 pydantic-settings>=2.7
 python-dotenv>=1.0
 
@@ -23,6 +23,11 @@ python-dotenv>=1.0
 google-adk==2.0.0
 anthropic
 openai
+
+# Auth
+python-jose[cryptography]>=3.3
+passlib[bcrypt]>=1.7
+bcrypt>=4.0
 
 # Dev
 pytest-asyncio

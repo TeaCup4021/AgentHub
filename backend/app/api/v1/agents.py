@@ -6,10 +6,7 @@ from app.core.database import get_db
 from app.schemas.agent import AgentResponse, AgentCreate, AgentUpdate, AgentVerifyRequest
 from app.services.agent import AgentService
 from app.services.capability_registry import CapabilityRegistry
-
-# Placeholder for current user
-async def get_current_user_id() -> uuid.UUID:
-    return uuid.UUID("00000000-0000-0000-0000-000000000001")
+from app.api.deps import get_current_user_id
 
 router = APIRouter()
 

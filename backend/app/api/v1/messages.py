@@ -11,13 +11,10 @@ from app.models.agent import Agent
 from app.models.message import Message
 from app.models.artifact import Artifact
 from app.services.message import MessageService
+from app.api.deps import get_current_user_id
 
 router = APIRouter()
 messages_router = APIRouter()
-
-
-async def get_current_user_id() -> UUID:
-    return UUID("00000000-0000-0000-0000-000000000001")
 
 
 @router.get("/{conv_id}/messages", response_model=MessageListResponse)

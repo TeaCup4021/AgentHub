@@ -18,14 +18,18 @@ from fastapi import HTTPException
 class ConversationService:
     @staticmethod
     async def list_conversations(
-        db: AsyncSession, 
+        db: AsyncSession,
         user_id: UUID,
-        page: int = 1, 
-        page_size: int = 10, 
-        keyword: Optional[str] = None
+        page: int = 1,
+        page_size: int = 10,
+        keyword: Optional[str] = None,
+        project_id: Optional[UUID] = None,
     ) -> Page:
         query = select(Conversation).where(Conversation.owner_id == user_id, Conversation.is_deleted == False)
-        
+
+        if project_id:
+            query = query.where(Conversation.project_id == project_id)
+
         if keyword:
             query = query.where(Conversation.title.ilike(f"%{keyword}%"))
             
@@ -62,6 +66,7 @@ class ConversationService:
                     "title": c.title,
                     "type": c.type,
                     "owner_id": c.owner_id,
+                    "project_id": c.project_id,
                     "is_archived": c.is_archived,
                     "is_pinned": c.is_pinned,
                     "last_active_at": c.last_active_at,
@@ -79,6 +84,7 @@ class ConversationService:
             title=data.title,
             type=data.type,
             owner_id=user_id,
+            project_id=data.project_id,
             last_active_at=datetime.now(timezone.utc)
         )
         db.add(new_conv)
@@ -117,6 +123,7 @@ class ConversationService:
             "title": conv.title,
             "type": conv.type,
             "owner_id": conv.owner_id,
+            "project_id": conv.project_id,
             "is_archived": conv.is_archived,
             "is_pinned": conv.is_pinned,
             "last_active_at": conv.last_active_at,

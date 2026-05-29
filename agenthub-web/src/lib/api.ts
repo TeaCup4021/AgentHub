@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { AxiosInstance, AxiosError } from "axios";
+import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from "axios";
 import type {
   CreateConversationRequest,
   CreateConversationResponse,
@@ -30,7 +30,6 @@ const api: AxiosInstance = axios.create({
   },
 });
 
-// [后端对接] Token 从 localStorage 读取，存的时候用 localStorage.setItem("token", "xxx")
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -38,6 +37,18 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb: (token: string) => void) {
+  refreshSubscribers.push(cb);
+}
 
 api.interceptors.response.use(
   (response) => {
@@ -47,10 +58,46 @@ api.interceptors.response.use(
     }
     return response;
   },
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      const refreshToken = localStorage.getItem("refresh_token");
+
+      if (!refreshToken) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
+        return Promise.reject(error);
+      }
+
+      if (!isRefreshing) {
+        isRefreshing = true;
+        try {
+          const res = await axios.post("/api/v1/auth/refresh", null, {
+            params: { refresh_token: refreshToken },
+          });
+          const newToken = res.data.data.access_token;
+          localStorage.setItem("token", newToken);
+          isRefreshing = false;
+          onRefreshed(newToken);
+        } catch {
+          isRefreshing = false;
+          refreshSubscribers = [];
+          localStorage.removeItem("token");
+          localStorage.removeItem("refresh_token");
+          return Promise.reject(error);
+        }
+      }
+
+      return new Promise((resolve) => {
+        addRefreshSubscriber((newToken: string) => {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          originalRequest._retry = true;
+          resolve(api(originalRequest));
+        });
+      });
     }
+
     return Promise.reject(error);
   },
 );

@@ -11,6 +11,9 @@ class Conversation(Base, UUIDMixin, TimestampMixin):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    project_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
+    )
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default='false')
     is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default='false')
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default='false')

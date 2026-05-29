@@ -381,3 +381,206 @@
 - **降级场景**：当多 Agent 并发 token 流在 SSE 通道中 Demultiplexing 混乱、或生产环境需要降低 LLM API 并发压力时使用。
 - **实现位置**：`backend/app/services/adk/workflow_builder.py` 的 `build()` 方法，通过 `min(len(agent_map), concurrency)` 限制最终 `Workflow.max_concurrency`。
 - **应添加到 Convention #26 的环境变量清单**。
+
+## 35) 认证系统 — Token 与鉴权约定（新增于 2026-05-29 认证系统）
+
+- **认证方式**：JWT access token + refresh token 双 token 方案。
+- **Token 传递**：所有需要鉴权的 REST 请求通过 `Authorization: Bearer <access_token>` header 传递。
+- **401 响应**：鉴权失败时后端返回 `{ code: 401, data: null, message: "未登录" }`。
+- **Token 刷新**：
+  - 前端 API 拦截器在收到 401 时自动调用 `POST /api/v1/auth/refresh`（传 `refresh_token` query param）
+  - 刷新成功后自动重试原请求（支持并发请求共享一次 refresh）
+  - 刷新失败则清除本地 token，跳转 `/login`
+- **Token 存储**：
+  - `access_token` → `localStorage.token`
+  - `refresh_token` → `localStorage.refresh_token`
+- **SSE 鉴权**：SSE 连接建立时同样携带 `Authorization: Bearer <token>` header。已建立的 SSE 连接不中途校验 token 过期。
+- **get_current_user 依赖**：
+  - 公共依赖位于 `app/api/deps.py`
+  - 所有需要用户身份的端点使用 `user = Depends(get_current_user)`
+  - 只需 user_id 的端点可使用 `user_id = Depends(get_current_user_id)`
+- **向后兼容**：旧代码中本地定义的 `get_current_user_id()` 均已删除，统一使用 `app.api.deps` 中的版本。
+- **参考**：`vibeCodingSummary/AuthSystem-Implementation.md`
+
+## 36) 认证系统 — 注册与验证码约定（新增于 2026-05-29 认证系统）
+
+- **注册流程**：
+  1. `POST /api/v1/auth/send-code` — 发送验证码到邮箱
+  2. `POST /api/v1/auth/register` — 携带验证码 + 密码 + 姓名完成注册
+- **send-code 请求体**：`{ "email": "user@example.com" }`，响应 `{ code: 200, data: null, message: "验证码已发送" }`
+- **send-code 限流**：同一邮箱 60 秒内不可重复发送，违反返回 `{ code: 429, data: null, message: "请 60 秒后再试" }`
+- **register 请求体**：`{ "email": "...", "code": "123456", "name": "张三", "password": "mypassword" }`
+- **register 错误**：
+  - 409：邮箱已被注册
+  - 400：验证码错误或已过期
+- **验证码规则**：
+  - 6 位纯数字，10 分钟有效
+  - 使用后立即标记 `used=true`，不可重复使用
+  - 同邮箱同 purpose 的新验证码发送时，旧未使用验证码自动失效
+- **存储**：验证码存入 `verification_codes` 表（email, code, purpose, expires_at, used）
+- **邮件发送**：当前使用 Resend API（`app/services/email.py`），`EMAIL_API_KEY` 环境变量未配置时验证码仅 log 到控制台
+- **purpose 字段**：当前使用 `"register"`，已预留 `"reset_password"` 供后续忘记密码功能使用
+
+## 37) 认证系统 — 新增 API 端点汇总（新增于 2026-05-29 认证系统）
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| `POST` | `/api/v1/auth/send-code` | 否 | 发送邮箱验证码 |
+| `POST` | `/api/v1/auth/register` | 否 | 验证码 + 密码注册，返回 tokens |
+| `POST` | `/api/v1/auth/login` | 否 | 邮箱 + 密码登录，返回 tokens |
+| `POST` | `/api/v1/auth/refresh` | 否 | refresh_token 换新 access_token |
+| `GET` | `/api/v1/auth/me` | 是 | 获取当前用户信息 |
+| `PATCH` | `/api/v1/auth/password` | 是 | 修改密码（需旧密码） |
+
+**TokenResponse 格式**（register/login/refresh 共用）：
+```json
+{
+  "code": 200,
+  "data": {
+    "accessToken": "eyJ...",
+    "refreshToken": "eyJ...",
+    "tokenType": "bearer",
+    "expiresIn": 1800
+  }
+}
+```
+
+**UserResponse 格式**（GET /auth/me）：
+```json
+{
+  "code": 200,
+  "data": {
+    "id": "550e8400-...",
+    "email": "user@example.com",
+    "name": "张三",
+    "avatarUrl": null,
+    "isVerified": true
+  }
+}
+```
+
+## 38) 认证系统 — User 模型变更（新增于 2026-05-29 认证系统）
+
+- **users 表新增字段**：
+  - `password_hash VARCHAR(255) NULL` — bcrypt 哈希密码，OAuth 用户可为空（为未来 OAuth 预留）
+  - `is_verified BOOLEAN DEFAULT false` — 邮箱是否已验证
+- **不影响存量数据**：`password_hash` 允许 NULL，已有 mock 用户保留但无法登录
+- **新增 verification_codes 表**：独立存储验证码（email, code, purpose, expires_at, used, created_at），索引 `idx_vc_email_purpose(email, purpose)`
+- **迁移文件**：`alembic/versions/0004_add_auth_fields.py`
+
+## 39) 项目管理 — 新增 API 端点汇总（新增于 2026-05-29 项目管理功能）
+
+- **功能**：用户可按"项目"维度组织对话，实现工作区隔离。每个项目可预设默认 Agent，对话通过 `projectId` 归属到项目。
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|------|------|------|------|
+| `POST` | `/api/v1/projects` | 是 | 创建项目 |
+| `GET` | `/api/v1/projects` | 是 | 列出用户所有项目（含每个项目的对话数量） |
+| `GET` | `/api/v1/projects/:id` | 是 | 获取单个项目详情 |
+| `PATCH` | `/api/v1/projects/:id` | 是 | 更新项目 |
+| `DELETE` | `/api/v1/projects/:id` | 是 | 删除项目（对话保留，project_id 置空） |
+
+**POST /api/v1/projects 请求体**：
+```json
+{
+  "name": "React Dashboard",
+  "description": "前端管理后台项目",
+  "defaultAgentIds": ["550e8400-e29b-41d4-a716-446655440001"]
+}
+```
+（仅 `name` 必填，`description` 和 `defaultAgentIds` 可选）
+
+**GET /api/v1/projects 响应**：
+```json
+{
+  "code": 200,
+  "data": [
+    {
+      "id": "proj-uuid-001",
+      "name": "React Dashboard",
+      "description": "前端管理后台",
+      "ownerId": "user-uuid-xxx",
+      "defaultAgentIds": ["550e8400-..."],
+      "conversationCount": 5,
+      "createdAt": "2026-05-29T10:00:00Z",
+      "updatedAt": "2026-05-29T10:00:00Z"
+    }
+  ],
+  "message": "success"
+}
+```
+
+**PATCH /api/v1/projects/:id 请求体**（所有字段可选）：
+```json
+{
+  "name": "新名称",
+  "description": "新描述",
+  "defaultAgentIds": ["agent-uuid-1", "agent-uuid-2"]
+}
+```
+
+**DELETE /api/v1/projects/:id**：返回 204，关联对话的 `project_id` 通过数据库 FK `ON DELETE SET NULL` 自动置空。
+
+## 40) 项目管理 — 已有端点变更（新增于 2026-05-29 项目管理功能）
+
+**ConversationCreate 新增字段**：
+- `projectId` (`string \| null`, UUID 格式，可选)：创建对话时指定归属项目。不传则为无归属对话。
+
+**ConversationResponse 新增字段**：
+- `projectId` (`string \| null`)：对话所属项目 ID，无归属时为 `null`。
+
+**GET /api/v1/conversations 新增查询参数**：
+- `projectId` (`string`, UUID 格式，可选)：按项目过滤对话列表。不传则返回所有对话（含无归属的）。
+- 示例：`GET /api/v1/conversations?projectId=proj-uuid-001&page=1&pageSize=10`
+
+**安全隔离**：
+- 所有项目操作通过 `owner_id == user_id` 校验，用户 A 不可操作用户 B 的项目
+- 创建对话时若传 `projectId`，该 ID 必须存在且属于当前用户（否则数据库 FK 约束拒绝写入）
+
+**数据库变更**：
+- 新增 `projects` 表：`id`, `name`, `description`, `owner_id` (FK→users), `default_agent_ids` (UUID[]), `created_at`, `updated_at`
+- `conversations` 表新增 `project_id` 列（FK→projects，ON DELETE SET NULL），允许 NULL 兼容存量数据
+- 迁移文件：`alembic/versions/0005_add_projects.py`，依赖 `0004`
+
+**实现文件**：
+- `backend/app/models/project.py`（本次新增）
+- `backend/app/models/conversation.py`（新增 `project_id` 字段）
+- `backend/app/schemas/project.py`（本次新增 — ProjectCreate/ProjectUpdate/ProjectResponse）
+- `backend/app/schemas/conversation.py`（ConversationCreate/Response 新增 `projectId`）
+- `backend/app/services/project.py`（本次新增 — ProjectService）
+- `backend/app/services/conversation.py`（list/create/get 支持 project_id）
+- `backend/app/api/v1/projects.py`（本次新增 — 5 个端点）
+- `backend/app/api/v1/conversations.py`（`get_conversations` 新增 `projectId` 查询参数）
+- `backend/app/api/router.py`（注册 `/v1/projects` 路由）
+
+- **后端注意**：启动前需执行 `alembic upgrade head` 应用迁移（`0005` 依赖 `0004`，迁移链完整方可执行）
+- **前端注意**：
+  - `GET /projects` 返回的 `conversationCount` 已包含在响应中，无需额外请求
+  - 创建对话时传 `projectId` 即可将对话归属到项目
+  - 删除项目前建议前端二次确认（对话不丢失但会变成无归属状态）
+  - 项目列表按 `updated_at` 降序排列
+
+---
+
+## 来源补充
+
+- `vibeCodingPlan/AuthSystem-Design.md`
+- `vibeCodingSummary/AuthSystem-Implementation.md`（本次）
+- `backend/app/models/user.py`（password_hash, is_verified）
+- `backend/app/models/verification_code.py`（本次新增）
+- `backend/app/schemas/auth.py`（本次新增）
+- `backend/app/services/auth.py`（本次新增）
+- `backend/app/services/email.py`（本次新增）
+- `backend/app/api/v1/auth.py`（本次新增）
+- `backend/app/api/deps.py`（本次新增 — get_current_user）
+- `backend/app/core/config.py`（AUTH_*, EMAIL_* 字段）
+- `backend/alembic/versions/0004_add_auth_fields.py`（本次新增）
+- `agenthub-web/src/stores/authStore.ts`（本次新增）
+- `agenthub-web/src/components/auth/LoginPage.tsx`（本次新增）
+- `agenthub-web/src/lib/api.ts`（refresh token 逻辑）
+- `vibeCodingPlan/项目管理-设计方案.md`（本次）
+- `backend/app/models/project.py`（本次新增）
+- `backend/app/schemas/project.py`（本次新增）
+- `backend/app/services/project.py`（本次新增）
+- `backend/app/api/v1/projects.py`（本次新增）
+- `backend/alembic/versions/0005_add_projects.py`（本次新增）
