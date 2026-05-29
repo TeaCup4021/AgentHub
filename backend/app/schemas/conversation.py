@@ -7,6 +7,7 @@ class ConversationCreate(BaseSchema):
     title: str
     type: str = "single"  # "single" | "group"
     agent_ids: List[UUID] = []
+    project_id: Optional[UUID] = None
 
 class ConversationUpdate(BaseSchema):
     title: Optional[str] = None
@@ -23,6 +24,7 @@ class ConversationResponse(BaseSchema):
     title: str
     type: str
     owner_id: UUID
+    project_id: Optional[UUID] = None
     is_archived: bool
     is_pinned: bool
     last_active_at: datetime

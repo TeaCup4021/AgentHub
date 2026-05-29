@@ -25,6 +25,18 @@ class Settings(BaseSettings):
     ANTHROPIC_BASE_URL: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
 
+    # Auth
+    AUTH_SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
+    AUTH_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    AUTH_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    AUTH_ALGORITHM: str = "HS256"
+
+    # Email (verification code)
+    EMAIL_API_KEY: str = ""
+    EMAIL_FROM: str = "AgentHub <noreply@agenthub.example.com>"
+    VERIFY_CODE_EXPIRE_SECONDS: int = 600
+    VERIFY_CODE_RATE_LIMIT_SECONDS: int = 60
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 settings = Settings()

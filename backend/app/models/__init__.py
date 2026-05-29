@@ -9,3 +9,5 @@ from .message_pin import MessagePin
 from .artifact import Artifact
 from .orchestrator_task import OrchestratorTask
 from .orchestrator_subtask import OrchestratorSubtask
+from .verification_code import VerificationCode
+from .project import Project

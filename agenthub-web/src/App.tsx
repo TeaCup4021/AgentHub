@@ -1,10 +1,12 @@
 import { useEffect, lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { ConfigProvider, Spin } from "@douyinfe/semi-ui";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { LoginPage } from "@/components/auth";
+import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 
 const SettingsPage = lazy(() =>
@@ -152,6 +154,35 @@ function ThemeSync() {
   return null;
 }
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
+
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function AuthInit({ children }: { children: React.ReactNode }) {
+  const fetchMe = useAuthStore((s) => s.fetchMe);
+
+  useEffect(() => {
+    fetchMe();
+  }, [fetchMe]);
+
+  return <>{children}</>;
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
 
@@ -166,12 +197,19 @@ function AnimatedRoutes() {
         style={{ height: "100%" }}
       >
         <Routes location={location}>
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/settings" element={
-            <Suspense fallback={<div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}><Spin size="large" /></div>}>
-              <SettingsPage />
-            </Suspense>
+            <ProtectedRoute>
+              <Suspense fallback={<div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}><Spin size="large" /></div>}>
+                <SettingsPage />
+              </Suspense>
+            </ProtectedRoute>
           } />
-          <Route path="/*" element={<AppLayout />} />
+          <Route path="/*" element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          } />
         </Routes>
       </motion.div>
     </AnimatePresence>
@@ -184,7 +222,9 @@ export default function App() {
       <ConfigProvider>
         <ThemeSync />
         <BrowserRouter>
-          <AnimatedRoutes />
+          <AuthInit>
+            <AnimatedRoutes />
+          </AuthInit>
         </BrowserRouter>
         <Toaster position="top-center" richColors />
       </ConfigProvider>

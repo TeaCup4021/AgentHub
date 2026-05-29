@@ -26,15 +26,7 @@ from app.services.adk.merge_aggregator import MergeAggregator
 from app.services.artifact import ArtifactService
 from app.services.message import MessageService
 
-# Assuming we have a dependency to get the current user ID
-# For now, we will mock it or expect it in requests. Assuming there's some `get_current_user`
-# But let's just create a dummy one for the sake of structure if it doesn't exist,
-# or we'll assume a hardcoded UUID or a header for now, since it wasn't provided.
-# Usually it's `Depends(get_current_user)`.
-# Let's write a placeholder dependency if none exists.
-async def get_current_user_id() -> UUID:
-    # return a mock UUID, or should be replaced with real auth later
-    return UUID("00000000-0000-0000-0000-000000000001")
+from app.api.deps import get_current_user, get_current_user_id
 
 def _use_adk_stream() -> bool:
     flag = os.getenv("AGENTHUB_USE_ADK_STREAM", "0").strip().lower()
@@ -247,11 +239,13 @@ async def get_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100, alias="pageSize"),
     keyword: Optional[str] = None,
+    project_id: Optional[UUID] = Query(None, alias="projectId"),
     db: AsyncSession = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id)
 ):
     return await ConversationService.list_conversations(
-        db=db, user_id=user_id, page=page, page_size=page_size, keyword=keyword
+        db=db, user_id=user_id, page=page, page_size=page_size,
+        keyword=keyword, project_id=project_id,
     )
 
 @router.post("", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
