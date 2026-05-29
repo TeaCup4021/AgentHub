@@ -17,7 +17,7 @@ See `.vibe-coding/workflow.md` for detailed steps.
 - **Backend**: FastAPI + SQLAlchemy async + PostgreSQL + Redis + MinIO
 - **Agent Engine**: Google ADK 2.0 (LlmAgent, Workflow, Runner)
 - **Models**: AnthropicLlm (Claude) + LiteLLM (Codex/OpenCode)
-- **Frontend**: React 19 + TypeScript + Vite + TailwindCSS + shadcn/ui
+- **Frontend**: React 19 + TypeScript + Vite + Semi Design 2.x
 
 ## Key Conventions
 
@@ -25,7 +25,7 @@ See `.vibe-coding/workflow.md` for detailed steps.
 - Python: `snake_case` storage, `camelCase` serialization (Pydantic `alias_generator`)
 - Pagination: `{ list: T[], total: number, page: number, pageSize: number }`
 - Dates: ISO 8601
-- SSE protocol: 6 event types (message_start, token, artifact, agent_status, message_end, error)
+- SSE protocol: 7 event types (message_start, token, artifact, agent_status, thinking, message_end, error)
 
 ## Key Files
 
@@ -37,6 +37,9 @@ See `.vibe-coding/workflow.md` for detailed steps.
 | `vibeCodingPlan/` | Daily implementation plans |
 | `vibeCodingSummary/` | Daily completion summaries |
 | `backend/` | FastAPI application code |
+| `agenthub-web/` | React 19 + Semi Design 2.x frontend |
+| `docs/AgentHub 响应格式与前后端对齐约定.md` | Frontend-backend API contract (24 sections) |
+| `agenthub-web/docs/specs/2026-05-30-frontend-backend-alignment-gaps.md` | 34-endpoint full alignment audit |
 
 ## Role Split
 

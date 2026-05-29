@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentHub — 聊天 & 产物 Tab 切换 · 飞书风格</title>
+<style>
+  /* ================================================================
+     Semi Design / 飞书风格 Design Tokens
+     ================================================================ */
+  :root {
+    --color-bg-app: #f5f6f8;
+    --color-bg-elevated: #ffffff;
+    --color-bg-hover: #f2f3f5;
+    --color-bg-sidebar: #fafafa;
+    --color-bg-overlay: #ffffff;
+
+    --color-border: #e5e6eb;
+    --color-border-light: #eeeef2;
+    --color-card-border: #e5e6eb;
+
+    --color-text-primary: #1f2329;
+    --color-text-secondary: #646a73;
+    --color-text-tertiary: #8f959e;
+    --color-text-disabled: #bbbfc4;
+
+    --color-primary: #3370ff;
+    --color-primary-hover: #4e83fd;
+    --color-primary-bg: rgba(51,112,255,0.08);
+
+    --color-success: #00a870;
+    --color-success-bg: rgba(0,168,112,0.08);
+    --color-danger: #d54941;
+    --color-danger-bg: rgba(213,73,65,0.08);
+    --color-warning: #f08e1f;
+    --color-warning-bg: rgba(240,142,31,0.08);
+
+    --color-bubble-agent-bg: #f2f3f5;
+    --color-bubble-agent-border: #e5e6eb;
+    --color-bubble-user-bg: #3370ff;
+    --color-bubble-user-text: #ffffff;
+
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+
+    --radius-sm: 6px;
+    --radius-card: 8px;
+    --radius-lg: 12px;
+    --radius-full: 9999px;
+
+    --font-size-xs: 11px;
+    --font-size-sm: 12px;
+    --font-size-md: 14px;
+    --font-size-lg: 16px;
+
+    --duration-fast: 0.15s;
+    --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+    --font-mono: "SF Mono","JetBrains Mono","Cascadia Code","Fira Code",Consolas,monospace;
+    --font-sans: "PingFang SC","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    height:100%;font-family:var(--font-sans);background:var(--color-bg-app);
+    color:var(--color-text-primary);-webkit-font-smoothing:antialiased;
+  }
+  body{
+    padding:20px 24px 60px;display:flex;flex-direction:column;align-items:center;
+  }
+
+  .page-header{text-align:center;margin-bottom:6px}
+  .page-header h1{font-size:18px;font-weight:700;color:var(--color-text-primary)}
+  .page-header .sub{font-size:12px;color:var(--color-text-tertiary);margin-top:4px}
+
+  .note{
+    display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-text-tertiary);margin-bottom:14px;
+    background:var(--color-bg-elevated);border:1px solid var(--color-card-border);
+    padding:8px 14px;border-radius:var(--radius-card);
+  }
+  .note-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:var(--color-primary)}
+
+  /* ================================================================
+     LAYOUT
+     ================================================================ */
+  .layout{width:100%;max-width:1200px;display:flex;gap:12px;margin-top:12px}
+
+  /* ---- Sidebar ---- */
+  .sidebar{
+    width:220px;flex-shrink:0;background:var(--color-bg-sidebar);border:1px solid var(--color-card-border);
+    border-radius:var(--radius-card);padding:10px;display:flex;flex-direction:column;gap:2px;
+    height:fit-content;max-height:80vh;overflow-y:auto;
+  }
+  .sidebar .conv-item{
+    padding:7px 10px;border-radius:var(--radius-sm);font-size:var(--font-size-sm);color:var(--color-text-secondary);
+    cursor:pointer;transition:all var(--duration-fast) var(--ease-out);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .sidebar .conv-item:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}
+  .sidebar .conv-item.active{background:var(--color-primary-bg);color:var(--color-primary);font-weight:500}
+  .sidebar .sec-label{font-size:10px;color:var(--color-text-tertiary);letter-spacing:.5px;font-weight:600;padding:8px 10px 2px}
+
+  /* ---- Main Area ---- */
+  .main{
+    flex:1;min-width:0;background:var(--color-bg-elevated);border:1px solid var(--color-card-border);
+    border-radius:var(--radius-card);max-height:80vh;display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:var(--shadow-card);
+  }
+
+  /* ================================================================
+     TAB BAR — Semi Design 风格
+     ================================================================ */
+  .tab-bar{
+    display:flex;border-bottom:1px solid var(--color-border-light);flex-shrink:0;
+    padding:0 16px;background:var(--color-bg-elevated);
+  }
+  .tab{
+    padding:10px 18px;font-size:var(--font-size-sm);font-weight:500;color:var(--color-text-secondary);
+    cursor:pointer;border-bottom:2px solid transparent;transition:all var(--duration-fast) var(--ease-out);
+    display:flex;align-items:center;gap:6px;background:none;font-family:inherit;
+  }
+  .tab:hover{color:var(--color-text-primary)}
+  .tab.active{color:var(--color-primary);border-bottom-color:var(--color-primary);font-weight:600}
+  .tab .badge{
+    font-size:10px;background:var(--color-primary-bg);color:var(--color-primary);
+    padding:1px 7px;border-radius:var(--radius-full);font-weight:500;
+  }
+
+  /* ================================================================
+     CHAT VIEW
+     ================================================================ */
+  .chat-view{
+    flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px;
+  }
+  .msg-row{display:flex;gap:10px;align-items:flex-start}
+  .msg-avatar{
+    width:32px;height:32px;border-radius:50%;background:var(--color-primary);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;
+  }
+  .msg-bubble{
+    max-width:70%;padding:9px 14px;border-radius:var(--radius-card);
+    border:1px solid var(--color-bubble-agent-border);font-size:var(--font-size-sm);line-height:1.6;
+    background:var(--color-bubble-agent-bg);color:var(--color-text-primary);
+  }
+  .msg-meta{font-size:var(--font-size-xs);color:var(--color-text-tertiary);margin-bottom:4px;font-weight:500}
+
+  /* ================================================================
+     ARTIFACTS VIEW
+     ================================================================ */
+  .artifacts-view{
+    flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;
+  }
+  .artifacts-view .view-header{
+    display:flex;align-items:center;gap:8px;margin-bottom:2px;
+  }
+  .artifacts-view .view-header .title{
+    font-size:var(--font-size-lg);font-weight:600;color:var(--color-text-primary);
+  }
+  .artifacts-view .view-header .count{
+    font-size:var(--font-size-sm);color:var(--color-text-tertiary);font-weight:400;
+  }
+  .artifacts-view .filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+  .artifacts-view .filter-chip{
+    font-size:var(--font-size-xs);font-weight:500;padding:4px 12px;border-radius:var(--radius-full);
+    color:var(--color-text-secondary);cursor:pointer;transition:all var(--duration-fast) var(--ease-out);
+    border:1px solid transparent;background:var(--color-bg-hover);
+  }
+  .artifacts-view .filter-chip:hover{color:var(--color-text-primary);background:#e9eaee}
+  .artifacts-view .filter-chip.active{background:var(--color-primary-bg);color:var(--color-primary);font-weight:600}
+
+  /* ================================================================
+     CARD — 统一卡片样式 (飞书/Semi Design)
+     ================================================================ */
+  .card{
+    background:var(--color-bg-elevated);border:1px solid var(--color-card-border);
+    border-radius:var(--radius-card);box-shadow:var(--shadow-card);
+    display:flex;flex-direction:column;overflow:hidden;position:relative;
+    transition:box-shadow var(--duration-fast) var(--ease-out);
+    width:100%;
+  }
+  .card:hover{box-shadow:var(--shadow-md)}
+
+  .card__header{
+    display:flex;align-items:center;gap:8px;padding:9px 14px;
+    border-bottom:1px solid var(--color-border-light);flex-shrink:0;
+    background:var(--color-bg-elevated);
+  }
+  .card__icon{width:15px;height:15px;flex-shrink:0;color:var(--color-text-tertiary)}
+  .card__title{font-family:var(--font-mono);font-size:var(--font-size-sm);font-weight:600;color:var(--color-text-primary)}
+  .card__badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:var(--radius-full);text-transform:uppercase}
+  .card__badge--lang{background:var(--color-primary-bg);color:var(--color-primary)}
+  .card__badge--green{background:var(--color-success-bg);color:var(--color-success)}
+  .card__badge--red{background:var(--color-danger-bg);color:var(--color-danger)}
+  .card__badge--orange{background:var(--color-warning-bg);color:var(--color-warning)}
+  .card__badge--grey{background:var(--color-bg-hover);color:var(--color-text-tertiary)}
+  .card__spacer{flex:1}
+
+  .card__body{flex:1;min-height:0;overflow:auto}
+  .card__body pre,.card__body code{
+    font-family:var(--font-mono);font-size:var(--font-size-sm);line-height:1.6;
+    white-space:pre;color:var(--color-text-primary);margin:0;
+  }
+
+  /* Resize handle */
+  .card__resize{
+    position:absolute;right:0;bottom:0;z-index:20;width:22px;height:22px;
+    cursor:nwse-resize;opacity:0;transition:opacity var(--duration-fast) var(--ease-out);
+    display:flex;align-items:flex-end;justify-content:flex-end;padding:4px 4px 5px 5px;
+    border-radius:0 0 var(--radius-card) 0;
+  }
+  .card:hover .card__resize{opacity:1}
+  .card__resize svg{width:10px;height:10px;color:var(--color-text-tertiary);transition:color .15s}
+  .card__resize:hover svg{color:var(--color-primary)}
+
+  /* Reset button */
+  .card__reset{
+    flex-shrink:0;width:26px;height:26px;border-radius:var(--radius-sm);border:1px solid transparent;
+    background:transparent;color:var(--color-text-tertiary);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:all var(--duration-fast) var(--ease-out);
+  }
+  .card__reset:hover{background:var(--color-bg-hover);border-color:var(--color-border-light);color:var(--color-primary)}
+  .card__reset:active{transform:scale(0.93)}
+
+  .card__body::-webkit-scrollbar{width:4px;height:4px}
+  .card__body::-webkit-scrollbar-track{background:transparent}
+  .card__body::-webkit-scrollbar-thumb{background:var(--color-border);border-radius:3px}
+
+  /* Diff divider */
+  .diff-divider{
+    width:6px;background:var(--color-border-light);cursor:col-resize;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;transition:background .15s;
+  }
+  .diff-divider:hover{background:var(--color-primary)}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>AgentHub — 飞书 Style</h1>
+  <p class="sub">聊天 / 产物 Tab 切换 · 浅色主题 · Semi Design 风格 · 所有卡片可调大小</p>
+</div>
+
+<div class="note">
+  <span class="note-dot"></span>
+  左边栏 220px · 主区域 flex:1 · 通过顶部 Tab 切换视图（Semi Design Tab 风格）
+</div>
+
+<div class="layout">
+
+  <!-- === SIDEBAR === -->
+  <div class="sidebar">
+    <div class="sec-label">最近对话</div>
+    <div class="conv-item active">多 Agent 协作 — 全栈开发</div>
+    <div class="conv-item">代码审查 — PR #42</div>
+    <div class="conv-item">Bug 分析 — 登录超时</div>
+    <div class="sec-label" style="margin-top:8px">Agents</div>
+    <div class="conv-item">Architect</div>
+    <div class="conv-item">Code Reviewer</div>
+    <div class="conv-item">DevOps Agent</div>
+  </div>
+
+  <!-- === MAIN === -->
+  <div class="main">
+
+    <!-- Semi Design Tab Bar -->
+    <div class="tab-bar">
+      <button class="tab active" id="tab-chat" onclick="switchTab('chat')">聊天</button>
+      <button class="tab" id="tab-artifacts" onclick="switchTab('artifacts')">
+        产物 <span class="badge">3</span>
+      </button>
+    </div>
+
+    <!-- ============================================================
+         CHAT TAB
+         ============================================================ -->
+    <div class="chat-view" id="view-chat">
+
+      <div class="msg-row">
+        <div class="msg-avatar">A</div>
+        <div style="flex:1;min-width:0">
+          <div class="msg-meta">Architect · 10:32</div>
+          <div class="msg-bubble">
+            我来重构认证中间件，从简单的硬编码校验升级为 JWT 验证方案，补充单元测试和 Docker 部署配置。
+          </div>
+        </div>
+      </div>
+
+      <div class="msg-row">
+        <div class="msg-avatar">A</div>
+        <div style="flex:1;min-width:0">
+          <div class="msg-meta">Architect · 10:32</div>
+          <div class="msg-bubble">
+            具体改动：引入 JWT 验证、新增 23 个测试用例、添加 Dockerfile。<br><br>
+            产物在「产物」Tab 中查看。
+          </div>
+        </div>
+      </div>
+
+      <div class="msg-row">
+        <div class="msg-avatar" style="background:var(--color-text-tertiary)">我</div>
+        <div style="flex:1;min-width:0;text-align:right">
+          <div class="msg-meta">我 · 10:33</div>
+          <div style="display:inline-block;max-width:70%;padding:9px 14px;border-radius:var(--radius-card);font-size:var(--font-size-sm);line-height:1.6;background:var(--color-bubble-user-bg);color:var(--color-bubble-user-text);text-align:left">
+            部署成功了吗？
+          </div>
+        </div>
+      </div>
+
+      <div class="msg-row">
+        <div class="msg-avatar">A</div>
+        <div style="flex:1;min-width:0">
+          <div class="msg-meta">Architect · 10:33</div>
+          <div class="msg-bubble">
+            部署成功。所有产物已就绪，切换 Tab 查看详情。
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================================
+         ARTIFACTS TAB
+         ============================================================ -->
+    <div class="artifacts-view" id="view-artifacts" style="display:none">
+
+      <div class="view-header" style="margin-bottom:4px">
+        <span class="title">产物</span>
+        <span class="count">本次会话 · 3 个产物</span>
+      </div>
+
+      <div class="filter-row">
+        <span class="filter-chip active">全部</span><span class="filter-chip">代码</span><span class="filter-chip">差异</span><span class="filter-chip">部署</span><span class="filter-chip">预览</span><span class="filter-chip">文件</span>
+      </div>
+
+      <!-- Diff Card -->
+      <div class="card" style="height:320px;">
+        <div class="card__header">
+          <svg class="card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+          <span class="card__title">src/middleware/auth.ts</span>
+          <span class="card__badge card__badge--lang">ts</span>
+          <span class="card__spacer"></span>
+          <span style="font-family:var(--font-mono);font-size:var(--font-size-xs);font-weight:600;color:var(--color-success)">+8</span>
+          <span style="color:var(--color-text-disabled);margin:0 2px;font-size:10px">/</span>
+          <span style="font-family:var(--font-mono);font-size:var(--font-size-xs);font-weight:600;color:var(--color-danger)">−5</span>
+          <button class="card__reset" title="恢复默认大小">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+        </div>
+        <div class="card__body" style="display:flex;overflow:hidden">
+          <div style="flex:1;overflow:auto;min-width:120px;padding:8px 12px;font-family:var(--font-mono);font-size:var(--font-size-sm);line-height:1.65;background:var(--color-bg-app)">
+            <div style="display:flex;gap:8px;background:var(--color-danger-bg);box-shadow:inset 3px 0 0 var(--color-danger);padding:0 10px">
+              <span style="color:var(--color-text-disabled);font-size:10px;opacity:.5;width:26px;text-align:right;flex-shrink:0">1</span>
+              <span style="color:var(--color-danger);font-weight:700;flex-shrink:0;font-size:10px;width:14px">−</span>
+              <span style="color:var(--color-danger)">export function authMiddleware(req: Request) {</span>
+            </div>
+            <div style="display:flex;gap:8px;background:var(--color-danger-bg);box-shadow:inset 3px 0 0 var(--color-danger);padding:0 10px">
+              <span style="color:var(--color-text-disabled);font-size:10px;opacity:.5;width:26px;text-align:right;flex-shrink:0">2</span>
+              <span style="color:var(--color-danger);font-weight:700;flex-shrink:0;font-size:10px;width:14px">−</span>
+              <span style="color:var(--color-danger);white-space:pre">  if (token === "admin") return true;  // hardcoded_check_not_safe</span>
+            </div>
+            <div style="display:flex;gap:8px;padding:0 10px">
+              <span style="color:var(--color-text-disabled);font-size:10px;opacity:.5;width:26px;text-align:right;flex-shrink:0">3</span>
+              <span style="opacity:.25;flex-shrink:0;font-size:10px;width:14px"> </span>
+              <span style="color:var(--color-text-secondary)">  return false;</span>
+            </div>
+          </div>
+          <div class="diff-divider">
+            <div style="display:flex;flex-direction:column;gap:2.5px;opacity:.7"><span style="width:2.5px;height:2.5px;border-radius:50%;background:var(--color-text-tertiary)"></span><span style="width:2.5px;height:2.5px;border-radius:50%;background:var(--color-text-tertiary)"></span><span style="width:2.5px;height:2.5px;border-radius:50%;background:var(--color-text-tertiary)"></span></div>
+          </div>
+          <div style="flex:1;overflow:auto;min-width:120px;padding:8px 12px;font-family:var(--font-mono);font-size:var(--font-size-sm);line-height:1.65;background:var(--color-bg-app)">
+            <div style="display:flex;gap:8px;background:var(--color-success-bg);box-shadow:inset 3px 0 0 var(--color-success);padding:0 10px">
+              <span style="color:var(--color-text-disabled);font-size:10px;opacity:.5;width:26px;text-align:right;flex-shrink:0">1</span>
+              <span style="color:var(--color-success);font-weight:700;flex-shrink:0;font-size:10px;width:14px">+</span>
+              <span style="color:var(--color-success)">import { verifyToken } from "@/lib/jwt";</span>
+            </div>
+            <div style="display:flex;gap:8px;background:var(--color-success-bg);box-shadow:inset 3px 0 0 var(--color-success);padding:0 10px">
+              <span style="color:var(--color-text-disabled);font-size:10px;opacity:.5;width:26px;text-align:right;flex-shrink:0">2</span>
+              <span style="color:var(--color-success);font-weight:700;flex-shrink:0;font-size:10px;width:14px">+</span>
+              <span style="color:var(--color-success);white-space:pre">export async function authMiddleware(req) {</span>
+            </div>
+            <div style="display:flex;gap:8px;padding:0 10px">
+              <span style="color:var(--color-text-disabled);font-size:10px;opacity:.5;width:26px;text-align:right;flex-shrink:0">3</span>
+              <span style="opacity:.25;flex-shrink:0;font-size:10px;width:14px"> </span>
+              <span style="color:var(--color-text-secondary)">  const token = req.headers.get("Authorization")?.replace("Bearer ", "");</span>
+            </div>
+          </div>
+        </div>
+        <div class="card__resize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/></svg></div>
+      </div>
+
+      <!-- Code Card -->
+      <div class="card" style="height:240px;">
+        <div class="card__header">
+          <svg class="card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+          <span class="card__title">Dockerfile</span>
+          <span class="card__badge card__badge--lang">docker</span>
+          <span class="card__spacer"></span>
+          <span style="font-size:10px;color:var(--color-text-tertiary);font-family:var(--font-mono)">11 行</span>
+          <button class="card__reset" title="恢复默认大小">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+        </div>
+        <div class="card__body" style="padding:8px 14px;background:var(--color-bg-app)"><pre>FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production
+COPY . .
+EXPOSE 3000
+CMD ["node", "dist/server.js"]</pre></div>
+        <div class="card__resize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/></svg></div>
+      </div>
+
+      <!-- Deploy Card -->
+      <div class="card" style="height:160px;">
+        <div class="card__header">
+          <svg class="card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3"/></svg>
+          <span class="card__title">部署状态</span>
+          <span class="card__badge card__badge--green">已部署</span>
+          <span class="card__spacer"></span>
+          <button class="card__reset" title="恢复默认大小">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+        </div>
+        <div class="card__body" style="display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;text-align:center">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span style="font-size:var(--font-size-md);font-weight:600;color:var(--color-text-primary)">部署成功</span>
+          <span style="font-size:var(--font-size-xs);color:var(--color-primary)">https://app.example.com</span>
+        </div>
+        <div class="card__resize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/></svg></div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<script>
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('[id^="view-"]').forEach(v=>v.style.display='none');
+  document.getElementById('tab-'+name).classList.add('active');
+  document.getElementById('view-'+name).style.display='flex';
+}
+</script>
+
+</body>
+</html>

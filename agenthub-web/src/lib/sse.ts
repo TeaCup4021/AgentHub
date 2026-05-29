@@ -31,6 +31,7 @@ export function createSSEStream(
   conversationId: string,
   callbacks: SSECallbacks,
   prompt?: string,
+  orchestrateMode?: string,
 ): () => void {
   if (mockSSE) return mockSSE(conversationId, callbacks);
 
@@ -40,6 +41,7 @@ export function createSSEStream(
   const eventHandlers: Record<string, (data: unknown) => void> = {
     message_start: (d) => callbacks.onMessageStart?.(d as SSEMessageStart),
     token: (d) => callbacks.onToken?.(d as SSEToken),
+    message: (d) => callbacks.onToken?.(d as SSEToken),
     artifact: (d) => callbacks.onArtifact?.(d as SSEArtifact),
     agent_status: (d) => callbacks.onAgentStatus?.(d as SSEAgentStatus),
     thinking: (d) => callbacks.onThinking?.(d as SSEThinking),
@@ -47,9 +49,11 @@ export function createSSEStream(
     error: (d) => callbacks.onError?.(d as SSEError),
   };
 
-  // [后端对接] SSE 流式端点，事件类型: message_start / token / artifact / agent_status / thinking / message_end / error
-  const streamUrl = `/api/v1/conversations/${conversationId}/stream${prompt ? `?prompt=${encodeURIComponent(prompt)}` : ""}`;
-  fetch(streamUrl, {
+  const streamUrl = new URL(`/api/v1/conversations/${conversationId}/stream`, window.location.origin);
+  if (prompt) streamUrl.searchParams.set("prompt", prompt);
+  if (orchestrateMode) streamUrl.searchParams.set("orchestrate_mode", orchestrateMode);
+  fetch(streamUrl.toString(), {
+    method: "GET",
     headers: {
       Accept: "text/event-stream",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -80,14 +84,14 @@ export function createSSEStream(
           if (line.startsWith("event:")) {
             currentEvent = line.slice(6).trim();
           } else if (line.startsWith("data:")) {
-            currentData = line.slice(5).trim();
+            currentData += (currentData ? "\n" : "") + line.slice(5).trim();
           } else if (line === "" && currentData) {
             const handler = eventHandlers[currentEvent || "message"];
             if (handler) {
               try {
                 handler(JSON.parse(currentData));
-              } catch {
-                // 跳过 JSON 解析失败的事件
+              } catch (e) {
+                console.error("SSE JSON parse error:", e, currentData);
               }
             }
             currentEvent = "";

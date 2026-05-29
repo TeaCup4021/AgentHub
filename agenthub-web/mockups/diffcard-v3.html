@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DiffCard v3 — AgentHub Design</title>
+<style>
+  /* ================================================================
+     Tokens — ChatGPT / Gemini inspired artifact card
+     ================================================================ */
+  :root {
+    --surface: #1e1e24;
+    --surface-alt: #23232b;
+    --border: #31313b;
+    --border-light: #2a2a34;
+    --text: #e8e8ee;
+    --text-secondary: #9e9ead;
+    --text-tertiary: #6a6a7a;
+    --text-disabled: #484858;
+
+    --accent: #5b8def;
+    --accent-bg: rgba(91,141,239,0.1);
+
+    --add-text: #56d364;
+    --add-bg: rgba(63,185,80,0.14);
+    --add-gutter: rgba(63,185,80,0.2);
+
+    --del-text: #f7787a;
+    --del-bg: rgba(248,81,73,0.14);
+    --del-gutter: rgba(248,81,73,0.2);
+
+    --radius: 10px;
+    --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", "SF Mono", Consolas, ui-monospace, monospace;
+    --font-sans: "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    --shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 2px 8px rgba(0,0,0,0.25);
+    --shadow-hover: 0 0 0 1px rgba(255,255,255,0.06), 0 6px 24px rgba(0,0,0,0.35);
+
+    /* Size bounds for resize */
+    --card-min-w: 420px;
+    --card-min-h: 200px;
+    --card-max-w: 1200px;
+    --card-max-h: 700px;
+    --pane-min-w: 140px;
+  }
+
+  [data-theme="light"] {
+    --surface: #ffffff;
+    --surface-alt: #f8f8fb;
+    --border: #e0e0e9;
+    --border-light: #ececf2;
+    --text: #1a1a26;
+    --text-secondary: #6b6b7d;
+    --text-tertiary: #9898ae;
+    --text-disabled: #c4c4d4;
+    --accent: #3b6fd4;
+    --accent-bg: rgba(59,111,212,0.08);
+    --add-text: #1a7f37;
+    --add-bg: rgba(26,127,55,0.1);
+    --add-gutter: rgba(26,127,55,0.16);
+    --del-text: #cf222e;
+    --del-bg: rgba(207,34,46,0.1);
+    --del-gutter: rgba(207,34,46,0.16);
+    --shadow: 0 0 0 1px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.06);
+    --shadow-hover: 0 0 0 1px rgba(0,0,0,0.06), 0 6px 24px rgba(0,0,0,0.1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    background: #18181c;
+    color: var(--text);
+    padding: 36px 28px 60px;
+    display: flex; flex-direction: column; align-items: center;
+    transition: background 0.3s, color 0.3s;
+    -webkit-font-smoothing: antialiased;
+  }
+  [data-theme="light"] body { background: #f3f3f7; }
+
+  /* ---- Theme toggle ---- */
+  .theme-btn {
+    position: fixed; top: 18px; right: 18px; z-index: 100;
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-secondary); cursor: pointer; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12); transition: all 0.2s;
+  }
+  .theme-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ---- Page ---- */
+  .page-header { text-align: center; margin-bottom: 10px; }
+  .page-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; }
+  .page-header .sub { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+
+  /* ---- Status bar ---- */
+  .status-bar {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 24px;
+    padding: 8px 14px; border-radius: 8px; font-size: 11px; color: var(--text-tertiary);
+    background: var(--surface); border: 1px solid var(--border);
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--text-tertiary); transition: background 0.2s; }
+  .status-dot.on { background: #e09030; animation: statusPulse 1.4s infinite; }
+  @keyframes statusPulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+  /* ---- Demo ---- */
+  .demo-wrap { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 40px; }
+  .demo-section { display: flex; flex-direction: column; gap: 8px; }
+  .demo-label { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; padding-left: 2px; }
+
+  .size-info {
+    font-size: 10px; color: var(--text-disabled); font-family: var(--font-mono);
+    margin-left: auto;
+  }
+
+  /* ================================================================
+     DIFF CARD
+     ================================================================ */
+  .diff-card {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    transition: box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .diff-card:hover { box-shadow: var(--shadow-hover); }
+  .diff-card.is-resizing,
+  .diff-card.is-dragging { user-select: none; }
+
+  /* ---- Header ---- */
+  .diff-card__header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 16px; border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0; background: var(--surface);
+  }
+  .diff-card__icon { width: 15px; height: 15px; flex-shrink: 0; color: var(--text-tertiary); }
+  .diff-card__name { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; color: var(--text); }
+  .diff-card__lang { font-size: 9px; font-weight: 700; padding: 1.5px 7px; border-radius: 10px; background: var(--accent-bg); color: var(--accent); text-transform: uppercase; }
+  .diff-card__spacer { flex: 1; }
+  .diff-card__stat { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; }
+  .diff-card__stat--add { color: var(--add-text); }
+  .diff-card__stat--del { color: var(--del-text); }
+
+  /* ---- Body ---- */
+  .diff-card__body {
+    display: flex; flex: 1; min-height: 0; position: relative;
+    background: var(--surface);
+  }
+
+  /* ---- Pane ---- */
+  .diff-pane {
+    flex: 1;
+    min-width: var(--pane-min-w);
+    overflow: auto;
+    font-family: var(--font-mono); font-size: 12px; line-height: 1.6;
+    background: var(--surface); color: var(--text);
+  }
+
+  /* ---- Diff line ---- */
+  .diff-line {
+    display: flex; transition: filter 0.08s;
+  }
+  .diff-line:hover { filter: brightness(1.12); }
+  .diff-line__gutter {
+    display: flex; flex-shrink: 0; align-items: center;
+    width: 56px; padding-right: 8px; user-select: none;
+    font-size: 10.5px; color: var(--text-disabled);
+  }
+  .diff-line__ln { width: 32px; text-align: right; opacity: 0.5; }
+  .diff-line__sign { width: 16px; text-align: center; font-weight: 700; font-size: 11px; }
+  .diff-line__code { flex: 1; white-space: pre; padding-right: 16px; overflow-wrap: anywhere; }
+
+  .diff-line--add {
+    background: var(--add-bg);
+    box-shadow: inset 3px 0 0 var(--add-text);
+  }
+  .diff-line--add .diff-line__gutter { background: var(--add-gutter); }
+  .diff-line--add .diff-line__sign { color: var(--add-text); opacity: 1; }
+  .diff-line--add .diff-line__code { color: var(--add-text); }
+
+  .diff-line--del {
+    background: var(--del-bg);
+    box-shadow: inset 3px 0 0 var(--del-text);
+  }
+  .diff-line--del .diff-line__gutter { background: var(--del-gutter); }
+  .diff-line--del .diff-line__sign { color: var(--del-text); opacity: 1; }
+  .diff-line--del .diff-line__code { color: var(--del-text); }
+
+  .diff-line--ctx .diff-line__code { color: var(--text-secondary); }
+  .diff-line--ctx .diff-line__sign { opacity: 0.3; }
+
+  /* ---- Divider ---- */
+  .diff-card__divider {
+    flex-shrink: 0; width: 8px; cursor: col-resize;
+    background: var(--border-light);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+    position: relative; z-index: 10;
+  }
+  .diff-card__divider:hover,
+  .diff-card__divider.is-active { background: var(--accent); }
+  .diff-card__divider-grip {
+    display: flex; flex-direction: column; gap: 3px; align-items: center;
+    opacity: 0; transition: opacity 0.12s; pointer-events: none;
+  }
+  .diff-card__divider:hover .diff-card__divider-grip,
+  .diff-card__divider.is-active .diff-card__divider-grip { opacity: 1; }
+  .diff-card__divider-grip span {
+    width: 3px; height: 3px; border-radius: 50%; background: #fff;
+  }
+
+  /* ---- Resize handle ---- */
+  .diff-card__resize {
+    position: absolute; right: 0; bottom: 0; z-index: 20;
+    width: 24px; height: 24px; cursor: nwse-resize;
+    opacity: 0; transition: opacity 0.15s;
+    display: flex; align-items: flex-end; justify-content: flex-end;
+    padding: 5px 5px 6px 6px;
+    border-radius: 0 0 var(--radius) 0;
+  }
+  .diff-card:hover .diff-card__resize,
+  .diff-card__resize.is-active { opacity: 1; }
+  .diff-card__resize svg {
+    width: 12px; height: 12px; color: var(--text-disabled);
+    transition: color 0.15s; pointer-events: none;
+  }
+  .diff-card__resize:hover svg,
+  .diff-card__resize.is-active svg { color: var(--accent); }
+
+  /* ---- Scrollbar ---- */
+  .diff-pane::-webkit-scrollbar { width: 4px; height: 4px; }
+  .diff-pane::-webkit-scrollbar-track { background: transparent; }
+  .diff-pane::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .diff-pane::-webkit-scrollbar-thumb:hover { background: var(--text-disabled); }
+  .diff-pane::-webkit-scrollbar-corner { background: transparent; }
+
+  /* ================================================================
+     Unified variant
+     ================================================================ */
+  .diff-card--unified .diff-card__body { flex-direction: column; }
+</style>
+</head>
+<body>
+
+<button class="theme-btn" onclick="toggleTheme()" title="切换主题">
+  <span class="icon-sun" hidden>☀</span><span class="icon-moon">☾</span>
+</button>
+
+<div class="page-header">
+  <h1>DiffCard · V3</h1>
+  <p class="sub">拖拽右下角自由调整尺寸 · 拖拽分隔线调整比例 · 上下限约束 · 深浅主题</p>
+</div>
+
+<div class="status-bar">
+  <span class="status-dot" id="statusDot"></span>
+  <span id="statusText">↔ 拖中间分隔线 · ↘ 拖右下角 · 宽 420~1200 · 高 200~700</span>
+  <span class="size-info" id="card1Size"></span>
+</div>
+
+<div class="demo-wrap">
+
+  <!-- ============================================================
+       Card 1 — Side-by-side diff
+       ============================================================ -->
+  <div class="demo-section">
+    <div class="demo-label" style="display:flex;align-items:center;">
+      示例 1 · 并排对比
+      <span class="size-info" id="card1SizeLabel"></span>
+    </div>
+
+    <div class="diff-card" id="card1" style="height:360px;">
+      <div class="diff-card__header">
+        <svg class="diff-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/>
+        </svg>
+        <span class="diff-card__name">src/middleware/auth.ts</span>
+        <span class="diff-card__lang">ts</span>
+        <span class="diff-card__spacer"></span>
+        <span class="diff-card__stat diff-card__stat--add">+8</span>
+        <span style="color:var(--text-disabled);margin:0 2px;font-size:10px">/</span>
+        <span class="diff-card__stat diff-card__stat--del">−5</span>
+      </div>
+
+      <div class="diff-card__body" id="card1-body">
+        <div class="diff-pane" id="card1-left">
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">1</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">export function authMiddleware(req: Request) {</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">2</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">  const token = req.headers.get("Authorization")?.replace("Bearer ", "");</span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">3</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">  if (token === "admin") return true;  // simplistic_hardcoded_check_that_is_no_longer_acceptable_for_production_use_cases_since_2024</span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">4</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">  if (token === "superadmin_secret_master_key_do_not_ever_expose_in_production_or_staging_environments") return true;</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">5</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">  return false;</span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">6</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">}</span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">7</span><span class="diff-line__sign">−</span></div><span class="diff-line__code"></span></div>
+        </div>
+
+        <div class="diff-card__divider" id="card1-divider">
+          <div class="diff-card__divider-grip"><span></span><span></span><span></span></div>
+        </div>
+
+        <div class="diff-pane" id="card1-right">
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">1</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">import { verifyToken } from "@/lib/jwt";</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">2</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">import { UnauthorizedError } from "@/lib/errors";</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">3</span><span class="diff-line__sign">+</span></div><span class="diff-line__code"></span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">4</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">export async function authMiddleware(req: Request): Promise&lt;UserPayload&gt; {</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">5</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">  const token = req.headers.get("Authorization")?.replace("Bearer ", "");</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">6</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  if (!token) throw new UnauthorizedError("未登录，请先登录后重试");</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">7</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  const payload = await verifyToken(token);</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">8</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  return payload;</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">9</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">}</span></div>
+        </div>
+      </div>
+
+      <div class="diff-card__resize" id="card1-resize" title="拖拽调整大小">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round">
+          <line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/><line x1="19" y1="17" x2="17" y2="19"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Card 2 — Unified diff (ChatGPT style)
+       ============================================================ -->
+  <div class="demo-section">
+    <div class="demo-label" style="display:flex;align-items:center;">
+      示例 2 · 统一 diff（ChatGPT 风格）
+      <span class="size-info" id="card2SizeLabel"></span>
+    </div>
+
+    <div class="diff-card diff-card--unified" id="card2" style="width:680px; height:420px;">
+      <div class="diff-card__header">
+        <svg class="diff-card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/>
+        </svg>
+        <span class="diff-card__name">src/components/chat/MessageList.tsx</span>
+        <span class="diff-card__lang">tsx</span>
+        <span class="diff-card__spacer"></span>
+        <span class="diff-card__stat diff-card__stat--add">+14</span>
+        <span style="color:var(--text-disabled);margin:0 2px;font-size:10px">/</span>
+        <span class="diff-card__stat diff-card__stat--del">−5</span>
+      </div>
+
+      <div class="diff-card__body">
+        <div class="diff-pane" style="width:100%;">
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">18</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">export function MessageList({ conversationId }: Props) {</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">19</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">  const messages = useChatStore((s) => s.messages);</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">20</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">  const prevCountRef = useRef(messages.length);</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">21</span><span class="diff-line__sign"> </span></div><span class="diff-line__code"></span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">22</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">  const [searchQuery, setSearchQuery] = useState("");</span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">23</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">  const filtered = messages.filter((m) =></span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">24</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">    m.content.toLowerCase().includes(searchQuery.toLowerCase())</span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">25</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">  );</span></div>
+<div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">26</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">  return &lt;div&gt;{filtered.map(m =&gt; &lt;MessageRow key={m.id} msg={m} /&gt;)}&lt;/div&gt;;</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">22</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  const [searchQuery, setSearchQuery] = useState("");</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">23</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  const [searchVisible, setSearchVisible] = useState(false);</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">24</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  const searchInputRef = useRef&lt;HTMLInputElement&gt;(null);</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">25</span><span class="diff-line__sign">+</span></div><span class="diff-line__code"></span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">26</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  const filtered = useMemo(() => {</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">27</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">    if (!searchQuery.trim()) return messages;</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">28</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">    const q = searchQuery.toLowerCase();</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">29</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">    return messages.filter((m) => {</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">30</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">      const text = typeof m.content === "string" ? m.content : "";</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">31</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">      return text.toLowerCase().includes(q);</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">32</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">    });</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">33</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  }, [messages, searchQuery]);</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">34</span><span class="diff-line__sign"> </span></div><span class="diff-line__code"></span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">35</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  return (</span></div>
+<div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">36</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">    &lt;div&gt;</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">37</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">      {searchVisible &amp;&amp; (</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">38</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">        &lt;SearchBar ref={searchInputRef} value={searchQuery} onChange={setSearchQuery} /&gt;</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">39</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">      )}</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">40</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">      {filtered.map(m =&gt; &lt;MessageRow key={m.id} msg={m} /&gt;)}</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">41</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">    &lt;/div&gt;</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">42</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">  );</span></div>
+<div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">43</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">}</span></div>
+        </div>
+      </div>
+
+      <div class="diff-card__resize" id="card2-resize" title="拖拽调整大小">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round">
+          <line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/><line x1="19" y1="17" x2="17" y2="19"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ================================================================
+// Theme
+// ================================================================
+function toggleTheme() {
+  const h = document.documentElement;
+  const next = h.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  h.setAttribute("data-theme", next);
+  document.querySelector(".icon-sun").hidden = next === "dark";
+  document.querySelector(".icon-moon").hidden = next === "light";
+}
+
+// ================================================================
+// Constraints
+// ================================================================
+const STYLE = getComputedStyle(document.documentElement);
+const MIN_W = parseInt(STYLE.getPropertyValue("--card-min-w"));
+const MIN_H = parseInt(STYLE.getPropertyValue("--card-min-h"));
+const MAX_W = parseInt(STYLE.getPropertyValue("--card-max-w"));
+const MAX_H = parseInt(STYLE.getPropertyValue("--card-max-h"));
+const PANE_MIN = parseInt(STYLE.getPropertyValue("--pane-min-w"));
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// ================================================================
+// Resize handle — adjust card width & height with min/max bounds
+// ================================================================
+function setupResize(cardId, sizeLabelId) {
+  const card = document.getElementById(cardId);
+  const handle = card.querySelector(".diff-card__resize");
+  if (!handle) return;
+  const sizeLabel = sizeLabelId ? document.getElementById(sizeLabelId) : null;
+
+  let dragging = false, sx, sy, sw, sh;
+
+  function updateLabel() {
+    if (!sizeLabel) return;
+    const r = card.getBoundingClientRect();
+    sizeLabel.textContent = Math.round(r.width) + " × " + Math.round(r.height);
+  }
+
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dragging = true;
+    handle.classList.add("is-active");
+    card.classList.add("is-resizing");
+    sx = e.clientX; sy = e.clientY;
+    sw = card.getBoundingClientRect().width;
+    sh = card.getBoundingClientRect().height;
+    setStatus(true, "调整尺寸… [宽 " + MIN_W + "–" + MAX_W + " · 高 " + MIN_H + "–" + MAX_H + "]");
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const w = clamp(sw + (e.clientX - sx), MIN_W, MAX_W);
+    const h = clamp(sh + (e.clientY - sy), MIN_H, MAX_H);
+    card.style.width = w + "px";
+    card.style.height = h + "px";
+    updateLabel();
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("is-active");
+    card.classList.remove("is-resizing");
+    updateLabel();
+    setStatus(false, "↔ 拖中间分隔线 · ↘ 拖右下角 · 宽 " + MIN_W + "–" + MAX_W + " · 高 " + MIN_H + "–" + MAX_H);
+  });
+
+  // Initial
+  setTimeout(updateLabel, 100);
+}
+
+// ================================================================
+// Divider drag — adjust left/right pane ratio
+// ================================================================
+function setupDivider(cardId) {
+  const card = document.getElementById(cardId);
+  const divider = card.querySelector(".diff-card__divider");
+  const panes = card.querySelectorAll(".diff-pane");
+  if (!divider || panes.length < 2) return;
+
+  let dragging = false, sx, sw0, sw1;
+
+  divider.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    divider.classList.add("is-active");
+    card.classList.add("is-dragging");
+    sx = e.clientX;
+    sw0 = panes[0].getBoundingClientRect().width;
+    sw1 = panes[1].getBoundingClientRect().width;
+    setStatus(true, "分割线拖拽中… (每侧最小 " + PANE_MIN + "px)");
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - sx;
+    const total = sw0 + sw1;
+    // Each pane gets at least PANE_MIN px
+    let w0 = clamp(sw0 + dx, PANE_MIN, total - PANE_MIN);
+    let w1 = total - w0;
+    const p0 = (w0 / total) * 100;
+    const p1 = (w1 / total) * 100;
+    panes[0].style.flex = "none"; panes[0].style.width = p0 + "%";
+    panes[1].style.flex = "none"; panes[1].style.width = p1 + "%";
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove("is-active");
+    card.classList.remove("is-dragging");
+    setStatus(false, "↔ 拖中间分隔线 · ↘ 拖右下角 · 宽 " + MIN_W + "–" + MAX_W + " · 高 " + MIN_H + "–" + MAX_H);
+  });
+}
+
+// ================================================================
+// Status bar
+// ================================================================
+function setStatus(on, text) {
+  document.getElementById("statusDot").className = "status-dot" + (on ? " on" : "");
+  document.getElementById("statusText").textContent = text;
+}
+
+// ================================================================
+// Init
+// ================================================================
+setupDivider("card1");
+setupResize("card1", "card1SizeLabel");
+setupResize("card2", "card2SizeLabel");
+
+console.log("%cDiffCard V3%c — 自由调整 · 上下限 " + MIN_W + "–" + MAX_W + " × " + MIN_H + "–" + MAX_H + " · 每面板最小 " + PANE_MIN + "px",
+  "color:#5b8def;font-weight:700", "color:#9e9ead");
+</script>
+</body>
+</html>

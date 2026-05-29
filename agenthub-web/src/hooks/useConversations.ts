@@ -7,8 +7,19 @@ export function useConversations(params?: ConversationListParams) {
     queryKey: ["conversations", params],
     queryFn: async () => {
       const res = await conversationApi.list(params);
-      return res.data.data; // { list, total, page, pageSize }
+      return res.data.data;
     },
+  });
+}
+
+export function useConversationsByProject(projectId?: string) {
+  return useQuery({
+    queryKey: ["conversations", { projectId }],
+    queryFn: async () => {
+      const res = await conversationApi.list({ projectId });
+      return res.data.data;
+    },
+    enabled: !!projectId,
   });
 }
 

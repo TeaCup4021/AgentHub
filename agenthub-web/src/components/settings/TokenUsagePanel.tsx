@@ -1,7 +1,26 @@
 import { useMemo } from "react";
-import { Card, Typography } from "@douyinfe/semi-ui";
 import { useTokenUsageStore } from "@/stores/tokenUsageStore";
 import { TokenCharts } from "./TokenCharts";
+
+function formatNum(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return n.toLocaleString();
+}
+
+function StatItem({ value, label, sub, color }: { value: string; label: string; sub: string; color: string }) {
+  return (
+    <div style={{
+      flex: 1,
+      padding: "14px 16px",
+      borderRight: "1px solid var(--color-border-light)",
+    }}>
+      <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.2, color }}>{value}</div>
+      <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginTop: 2 }}>{label}</div>
+      <div style={{ fontSize: 11, color: "var(--color-text-disabled)", marginTop: 1 }}>{sub}</div>
+    </div>
+  );
+}
 
 export function TokenUsagePanel() {
   const usageMap = useTokenUsageStore((s) => s.usageMap);
@@ -21,84 +40,45 @@ export function TokenUsagePanel() {
 
   return (
     <section>
-      <Typography.Title heading={6} style={{ marginBottom: 8, color: "var(--color-text-primary)" }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 2 }}>
         Token 用量
-      </Typography.Title>
-      <Typography.Text type="tertiary" size="small" style={{ display: "block", marginBottom: 16 }}>
-        统计各会话的 Token 消耗和预估成本。数据从每次会话完成后累积。
-      </Typography.Text>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-        <Card style={{ textAlign: "center" }}>
-          <Typography.Text type="tertiary" size="small">输入 Token</Typography.Text>
-          <Typography.Title heading={4} style={{ margin: "4px 0 0", color: "var(--color-text-primary)" }}>
-            {(totalInput / 1000).toFixed(1)}k
-          </Typography.Title>
-        </Card>
-        <Card style={{ textAlign: "center" }}>
-          <Typography.Text type="tertiary" size="small">输出 Token</Typography.Text>
-          <Typography.Title heading={4} style={{ margin: "4px 0 0", color: "var(--color-text-primary)" }}>
-            {(totalOutput / 1000).toFixed(1)}k
-          </Typography.Title>
-        </Card>
-        <Card style={{ textAlign: "center" }}>
-          <Typography.Text type="tertiary" size="small">预估成本</Typography.Text>
-          <Typography.Title heading={4} style={{ margin: "4px 0 0", color: "var(--color-text-primary)" }}>
-            ${totalCost.toFixed(4)}
-          </Typography.Title>
-        </Card>
+      </div>
+      <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginBottom: 12 }}>
+        本月累计消耗统计，每月 1 日重置
       </div>
 
-      {usages.length > 0 && (
-        <Card bodyStyle={{ padding: 0 }} style={{ marginBottom: 16 }}>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 120px 120px 120px",
-            gap: 8,
-            padding: "8px 16px",
-            background: "var(--color-bg-hover)",
-            fontSize: "var(--font-size-xs)",
-            fontWeight: 500,
-            color: "var(--color-text-tertiary)",
-          }}>
-            <span>会话</span>
-            <span style={{ textAlign: "right" }}>输入</span>
-            <span style={{ textAlign: "right" }}>输出</span>
-            <span style={{ textAlign: "right" }}>成本</span>
-          </div>
-          {usages
-            .slice()
-            .sort((a, b) => b.totalTokens - a.totalTokens)
-            .map((u) => (
-              <div
-                key={u.conversationId}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 120px 120px 120px",
-                  gap: 8,
-                  padding: "8px 16px",
-                  borderTop: "1px solid var(--color-border-light)",
-                  fontSize: "var(--font-size-sm)",
-                }}
-              >
-                <span style={{ color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {u.conversationTitle}
-                </span>
-                <span style={{ textAlign: "right", color: "var(--color-text-tertiary)" }}>
-                  {(u.inputTokens / 1000).toFixed(1)}k
-                </span>
-                <span style={{ textAlign: "right", color: "var(--color-text-tertiary)" }}>
-                  {(u.outputTokens / 1000).toFixed(1)}k
-                </span>
-                <span style={{ textAlign: "right", color: "var(--color-text-secondary)" }}>
-                  ${u.estimatedCost.toFixed(4)}
-                </span>
-              </div>
-            ))}
-        </Card>
-      )}
+      {/* Stats row */}
+      <div style={{
+        display: "flex",
+        border: "1px solid var(--color-card-border)",
+        borderRadius: 8,
+        background: "var(--color-bg-sidebar)",
+        overflow: "hidden",
+      }}>
+        <StatItem
+          value={formatNum(totalInput)}
+          label="输入 Token"
+          sub="本月累计"
+          color="var(--color-primary)"
+        />
+        <StatItem
+          value={formatNum(totalOutput)}
+          label="输出 Token"
+          sub="本月累计"
+          color="var(--color-success)"
+        />
+        <StatItem
+          value={"$" + totalCost.toFixed(2)}
+          label="预估费用"
+          sub="按官方定价估算"
+          color="var(--color-text-primary)"
+        />
+      </div>
 
-      <TokenCharts />
+      {/* Charts */}
+      <div style={{ marginTop: 16 }}>
+        <TokenCharts />
+      </div>
     </section>
   );
 }

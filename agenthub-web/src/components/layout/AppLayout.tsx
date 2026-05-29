@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Layout, Button } from "@douyinfe/semi-ui";
 import { IconMenu } from "@douyinfe/semi-icons";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useConversations, useCreateConversation, useAgents, useKeyboardShortcut } from "@/hooks";
 import { useChatStore } from "@/stores/chatStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -9,13 +10,21 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { IconSidebar } from "./IconSidebar";
 import { ConversationList } from "./ConversationList";
 import { ChatArea } from "./ChatArea";
+import { SettingsPage } from "@/components/settings";
 
 export function AppLayout() {
-  const { data: conversationsData, isLoading } = useConversations();
+  const selectedProjectId = useUIStore((s) => s.selectedProjectId);
+  const { data: conversationsData, isLoading } = useConversations(
+    selectedProjectId ? { projectId: selectedProjectId } : undefined,
+  );
   const conversations = conversationsData?.list ?? [];
   const { data: agents = [] } = useAgents();
   const createConversation = useCreateConversation();
   const setActive = useChatStore((s) => s.setActiveConversation);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isSettings = location.pathname === "/settings";
 
   const isMobile = useMediaQuery("(max-width: 767px)");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -90,7 +99,9 @@ export function AppLayout() {
     }}>
       <IconSidebar />
 
-      {isMobile ? (
+      {isSettings ? (
+        <SettingsPage onClose={() => navigate("/")} />
+      ) : isMobile ? (
         <>
           {mobileDrawerOpen && (
             <div
@@ -146,7 +157,7 @@ export function AppLayout() {
           </Layout.Content>
         </>
       ) : (
-        <>
+        <div style={{ display: "flex", flex: 1, minWidth: 0 }}>
           <div style={{
             width: convListWidth,
             flexShrink: 0,
@@ -189,7 +200,7 @@ export function AppLayout() {
               <ChatArea conversations={conversations} />
             </ErrorBoundary>
           </Layout.Content>
-        </>
+        </div>
       )}
     </Layout>
   );

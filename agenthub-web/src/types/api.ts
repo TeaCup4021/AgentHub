@@ -1,5 +1,6 @@
 import type { Artifact, Conversation, CreateConversationParams, UpdateConversationParams, MessageListData } from "./chat";
 import type { Agent, CreateAgentParams, UpdateAgentParams } from "./agent";
+import type { Project, CreateProjectParams, UpdateProjectParams } from "./project";
 
 // ========== 通用响应 ==========
 
@@ -43,6 +44,7 @@ export type DeleteConversationResponse = ApiResponse<void>;
 
 export interface ConversationListParams {
   keyword?: string;
+  projectId?: string;
   page?: number;
   pageSize?: number;
 }
@@ -59,6 +61,19 @@ export type GetAgentDetailResponse = ApiResponse<Agent>;
 // ========== Artifact API ==========
 
 export type GetArtifactsResponse = ApiResponse<Artifact[]>;
+
+// ========== Project API ==========
+
+export type CreateProjectRequest = CreateProjectParams;
+export type CreateProjectResponse = ApiResponse<Project>;
+export type GetProjectListResponse = ApiResponse<Project[]>;
+export type GetProjectDetailResponse = ApiResponse<Project>;
+export type UpdateProjectRequest = UpdateProjectParams;
+export type UpdateProjectResponse = ApiResponse<Project>;
+
+// ========== Orchestrator API ==========
+
+export type GetDagResponse = ApiResponse<import("./chat").DagResponse>;
 
 // ========== Message API ==========
 

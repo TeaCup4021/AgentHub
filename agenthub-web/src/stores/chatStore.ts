@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Artifact, ThinkingStep } from "@/types";
+import type { Artifact, ThinkingStep, PlanSubtask } from "@/types";
 
 interface StreamingMessage {
   content: string;
@@ -8,6 +8,11 @@ interface StreamingMessage {
 }
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'failed';
+
+export interface OrchestratorPendingPlan {
+  planId: string;
+  subtasks: PlanSubtask[];
+}
 
 interface ChatUIState {
   activeConversationId: string | null;
@@ -19,6 +24,8 @@ interface ChatUIState {
   retryCount: number;
   pendingQuote: { messageId: string; content: string } | null;
   messageSearch: string;
+  pendingPlan: OrchestratorPendingPlan | null;
+  dagTaskId: string | null;
 
   setActiveConversation: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
@@ -35,6 +42,8 @@ interface ChatUIState {
   setConnectionStatus: (status: ConnectionStatus) => void;
   setRetryCount: (n: number) => void;
   setPendingQuote: (quote: { messageId: string; content: string } | null) => void;
+  setPendingPlan: (plan: OrchestratorPendingPlan | null) => void;
+  setDagTaskId: (id: string | null) => void;
 }
 
 export const useChatStore = create<ChatUIState>((set, get) => ({
@@ -47,6 +56,8 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   retryCount: 0,
   pendingQuote: null,
   messageSearch: "",
+  pendingPlan: null,
+  dagTaskId: null,
 
   setActiveConversation: (id) => set({ activeConversationId: id }),
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -131,4 +142,7 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   setRetryCount: (n) => set({ retryCount: n }),
 
   setPendingQuote: (quote) => set({ pendingQuote: quote }),
+
+  setPendingPlan: (plan) => set({ pendingPlan: plan }),
+  setDagTaskId: (id) => set({ dagTaskId: id }),
 }));

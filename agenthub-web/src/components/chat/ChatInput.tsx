@@ -110,6 +110,7 @@ function getMentionQuery(): { query: string } | null {
 
 export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const isComposingRef = useRef(false);
 
   const [mentionActive, setMentionActive] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -221,7 +222,7 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
         return;
       }
     }
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !isComposingRef.current) {
       e.preventDefault();
       handleSend();
     }
@@ -258,39 +259,10 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
-
     for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith("image/")) {
+      if (items[i].type.startsWith("image/")) {
         e.preventDefault();
-        const file = item.getAsFile();
-        if (!file) continue;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const el = editorRef.current;
-          if (!el) return;
-          el.focus();
-          const img = el.ownerDocument.createElement("img");
-          img.src = reader.result as string;
-          img.style.maxWidth = "320px";
-          img.style.maxHeight = "200px";
-          img.style.borderRadius = "var(--radius-md)";
-          img.style.margin = "4px 0";
-
-          const sel = window.getSelection();
-          if (sel && sel.rangeCount > 0) {
-            const range = sel.getRangeAt(0);
-            range.deleteContents();
-            range.insertNode(img);
-            range.setStartAfter(img);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-          } else {
-            el.appendChild(img);
-          }
-        };
-        reader.readAsDataURL(file);
+        return;
       }
     }
   }, []);
@@ -308,40 +280,6 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-
-    const files = e.dataTransfer?.files;
-    if (!files) return;
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file.type.startsWith("image/")) continue;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const el = editorRef.current;
-        if (!el) return;
-        el.focus();
-        const img = el.ownerDocument.createElement("img");
-        img.src = reader.result as string;
-        img.style.maxWidth = "320px";
-        img.style.maxHeight = "200px";
-        img.style.borderRadius = "var(--radius-md)";
-        img.style.margin = "4px 0";
-
-        const sel = window.getSelection();
-        if (sel && sel.rangeCount > 0) {
-          const range = sel.getRangeAt(0);
-          range.deleteContents();
-          range.insertNode(img);
-          range.setStartAfter(img);
-          range.collapse(true);
-          sel.removeAllRanges();
-          sel.addRange(range);
-        } else {
-          el.appendChild(img);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
   }, []);
 
   return (
@@ -385,7 +323,7 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
           trigger="custom"
           position="topLeft"
           content={
-            <div style={{ maxHeight: 192, overflowY: "auto", minWidth: 200 }}>
+            <div style={{ maxHeight: 192, overflowY: "auto", minWidth: 260 }}>
               {matchedAgents.map((agent, i) => (
                 <Button
                   key={agent.id}
@@ -395,6 +333,8 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
                     justifyContent: "flex-start",
                     background: i === mentionIndex ? "var(--color-bg-active)" : "transparent",
                     borderRadius: "var(--radius-sm)",
+                    height: "auto",
+                    padding: "6px 12px",
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -404,14 +344,35 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
                   <Avatar size="extra-small" style={{ marginRight: 8 }}>
                     {agent.name.charAt(0)}
                   </Avatar>
-                  <span>{agent.name}</span>
-                  <span style={{
-                    marginLeft: "auto",
-                    fontSize: "var(--font-size-xs)",
-                    color: "var(--color-text-tertiary)",
-                  }}>
-                    {agent.provider}
-                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "var(--font-size-md)", color: "var(--color-text-primary)", fontWeight: 500 }}>
+                      {agent.name}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>
+                        {agent.provider}
+                      </span>
+                      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>
+                        {agent.model}
+                      </span>
+                    </div>
+                  </div>
+                  {agent.capabilities && agent.capabilities.length > 0 && (
+                    <div style={{ display: "flex", gap: 2, marginLeft: 8 }}>
+                      {agent.capabilities.slice(0, 3).map((cap) => (
+                        <span key={cap} style={{
+                          fontSize: 10,
+                          color: "var(--color-primary)",
+                          background: "rgba(51,112,255,0.08)",
+                          borderRadius: 4,
+                          padding: "1px 4px",
+                          whiteSpace: "nowrap",
+                        }}>
+                          {cap}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </Button>
               ))}
             </div>
@@ -435,6 +396,8 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
               ref={editorRef}
               contentEditable={!disabled}
               suppressContentEditableWarning
+              onCompositionStart={() => { isComposingRef.current = true; }}
+              onCompositionEnd={() => { isComposingRef.current = false; }}
               onInput={handleInput}
               onKeyDown={handleKeyDown}
               onKeyUp={handleKeyUp}

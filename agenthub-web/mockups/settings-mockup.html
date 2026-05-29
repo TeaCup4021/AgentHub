@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设置 — AgentHub</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #dce5f7; color: #1f2329; font-size: 14px; height: 100vh; display: flex; }
+
+/* 左侧导航 */
+.nav { width: 200px; background: #fff; border-right: 1px solid #e8eaef; display: flex; flex-direction: column; padding: 16px 0; flex-shrink: 0; }
+.nav-title { font-size: 13px; font-weight: 600; color: #8f959e; padding: 0 16px 8px; letter-spacing: 0.5px; }
+.nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; border-radius: 0; font-size: 14px; color: #646a73; transition: background 0.15s; }
+.nav-item:hover { background: #f2f3f5; }
+.nav-item.active { background: rgba(51,112,255,0.08); color: #3370ff; font-weight: 500; }
+.nav-item svg { flex-shrink: 0; }
+
+/* 内容区 */
+.content { flex: 1; padding: 20px 24px; overflow-y: auto; }
+
+/* Section */
+.section-title { font-size: 15px; font-weight: 600; color: #1f2329; margin-bottom: 2px; }
+.section-sub { font-size: 12px; color: #8f959e; margin-bottom: 12px; }
+.section + .section { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e8eaef; }
+
+/* 主题卡片 */
+.theme-cards { display: flex; gap: 12px; }
+.theme-card { width: 180px; border-radius: 8px; border: 2px solid #e8eaef; background: #fff; padding: 10px; cursor: pointer; flex-shrink: 0; }
+.theme-card.selected { border-color: #3370ff; background: rgba(51,112,255,0.04); }
+.theme-thumb { height: 72px; border-radius: 4px; overflow: hidden; margin-bottom: 8px; position: relative; }
+.theme-label-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.theme-label { font-size: 13px; font-weight: 500; color: #1f2329; text-align: center; }
+.check-icon { width: 16px; height: 16px; background: #3370ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.check-icon::after { content: ''; display: block; width: 4px; height: 7px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px, -1px); }
+
+/* 浅色主题缩略图 */
+.thumb-light { background: #f5f6f7; }
+.thumb-light .t-topbar { height: 14px; background: #fff; border-bottom: 1px solid #e8eaef; display: flex; align-items: center; padding: 0 6px; gap: 3px; }
+.thumb-light .t-dot { width: 4px; height: 4px; border-radius: 50%; background: #e8eaef; }
+.thumb-light .t-body { display: flex; height: calc(100% - 14px); }
+.thumb-light .t-sidebar { width: 28px; background: #fff; border-right: 1px solid #e8eaef; padding: 4px 3px; display: flex; flex-direction: column; gap: 3px; }
+.thumb-light .t-sidebar-item { height: 5px; border-radius: 2px; background: #e8eaef; }
+.thumb-light .t-sidebar-item.active { background: #3370ff; }
+.thumb-light .t-main { flex: 1; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+.thumb-light .t-line { height: 4px; border-radius: 2px; background: #e8eaef; }
+.thumb-light .t-line.w60 { width: 60%; }
+.thumb-light .t-line.w80 { width: 80%; }
+.thumb-light .t-line.w40 { width: 40%; }
+
+/* 深色主题缩略图 */
+.thumb-dark { background: #1a1a2e; }
+.thumb-dark .t-topbar { height: 14px; background: #16213e; border-bottom: 1px solid #0f3460; display: flex; align-items: center; padding: 0 6px; gap: 3px; }
+.thumb-dark .t-dot { width: 4px; height: 4px; border-radius: 50%; background: #0f3460; }
+.thumb-dark .t-body { display: flex; height: calc(100% - 14px); }
+.thumb-dark .t-sidebar { width: 28px; background: #16213e; border-right: 1px solid #0f3460; padding: 4px 3px; display: flex; flex-direction: column; gap: 3px; }
+.thumb-dark .t-sidebar-item { height: 5px; border-radius: 2px; background: #0f3460; }
+.thumb-dark .t-sidebar-item.active { background: #3370ff; }
+.thumb-dark .t-main { flex: 1; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+.thumb-dark .t-line { height: 4px; border-radius: 2px; background: #0f3460; }
+.thumb-dark .t-line.w60 { width: 60%; }
+.thumb-dark .t-line.w80 { width: 80%; }
+.thumb-dark .t-line.w40 { width: 40%; }
+
+/* 跟随系统缩略图 */
+.thumb-auto { display: flex; }
+.thumb-auto .half-light { width: 50%; background: #f5f6f7; }
+.thumb-auto .half-dark { width: 50%; background: #1a1a2e; }
+.thumb-auto .t-topbar-l { height: 14px; background: #fff; border-bottom: 1px solid #e8eaef; }
+.thumb-auto .t-topbar-d { height: 14px; background: #16213e; border-bottom: 1px solid #0f3460; }
+.thumb-auto .t-body-l { padding: 4px 3px; display: flex; flex-direction: column; gap: 3px; }
+.thumb-auto .t-body-d { padding: 4px 3px; display: flex; flex-direction: column; gap: 3px; }
+.thumb-auto .t-line-l { height: 4px; border-radius: 2px; background: #e8eaef; }
+.thumb-auto .t-line-d { height: 4px; border-radius: 2px; background: #0f3460; }
+.thumb-auto .t-line-l.w60 { width: 60%; }
+.thumb-auto .t-line-d.w80 { width: 80%; }
+.thumb-auto .divider-v { width: 1px; background: #c0c4cc; flex-shrink: 0; }
+
+/* LLM 卡片 */
+.llm-card { background: #fff; border-radius: 8px; border: 1px solid rgba(0,0,0,0.06); padding: 10px 14px; margin-bottom: 8px; }
+.llm-card:last-child { margin-bottom: 0; }
+.llm-row1 { display: flex; align-items: center; gap: 8px; height: 32px; }
+.llm-row2 { margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+
+/* CSS 开关 */
+.toggle { width: 32px; height: 18px; border-radius: 9px; position: relative; flex-shrink: 0; cursor: pointer; }
+.toggle.on { background: #00a870; }
+.toggle.off { background: #c0c4cc; }
+.toggle::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #fff; top: 2px; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.toggle.on::after { left: 16px; }
+.toggle.off::after { left: 2px; }
+
+.llm-name { font-size: 14px; font-weight: 500; color: #1f2329; }
+.badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; font-weight: 500; }
+.badge-p1 { background: rgba(51,112,255,0.1); color: #3370ff; }
+.badge-active { background: rgba(0,168,112,0.1); color: #00a870; }
+.badge-inactive { background: #f2f3f5; color: #8f959e; }
+.llm-spacer { flex: 1; }
+.arrow-btn { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #e8eaef; background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #646a73; font-size: 12px; }
+.arrow-btn:hover { background: #f2f3f5; }
+
+.input-field { flex: 1; height: 32px; border: 1px solid #e8eaef; border-radius: 6px; padding: 0 10px; font-size: 13px; color: #1f2329; background: #f7f8fa; outline: none; }
+.input-field:focus { border-color: #3370ff; background: #fff; }
+.input-label { font-size: 12px; color: #8f959e; white-space: nowrap; }
+
+/* Token 统计 */
+.token-stats { display: flex; border: 1px solid rgba(0,0,0,0.06); border-radius: 8px; background: #fff; overflow: hidden; }
+.stat-item { flex: 1; padding: 14px 16px; border-right: 1px solid #e8eaef; }
+.stat-item:last-child { border-right: none; }
+.stat-num { font-size: 24px; font-weight: 700; line-height: 1.2; }
+.stat-num.blue { color: #3370ff; }
+.stat-num.green { color: #00a870; }
+.stat-num.dark { color: #1f2329; }
+.stat-label { font-size: 12px; color: #8f959e; margin-top: 2px; }
+.stat-sub { font-size: 11px; color: #c0c4cc; margin-top: 1px; }
+
+.empty-hint { margin-top: 12px; padding: 12px 16px; background: #fff; border-radius: 8px; border: 1px solid rgba(0,0,0,0.06); font-size: 13px; color: #8f959e; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- 左侧导航 -->
+<nav class="nav">
+  <div class="nav-title">设置</div>
+
+  <div class="nav-item active">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="3" stroke="#3370ff" stroke-width="1.5"/>
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="#3370ff" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    外观
+  </div>
+
+  <div class="nav-item">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="3" width="12" height="10" rx="2" stroke="#646a73" stroke-width="1.5"/>
+      <circle cx="6" cy="7" r="1.5" stroke="#646a73" stroke-width="1.2"/>
+      <path d="M9 6h3M9 8h2" stroke="#646a73" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M4 11c0-1.1.9-2 2-2s2 .9 2 2" stroke="#646a73" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+    LLM 配置
+  </div>
+
+  <div class="nav-item">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M2 12l3-4 3 2 3-5 3 3" stroke="#646a73" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="1" y="1" width="14" height="14" rx="2" stroke="#646a73" stroke-width="1.5"/>
+    </svg>
+    Token 用量
+  </div>
+</nav>
+
+<!-- 内容区 -->
+<main class="content">
+
+  <!-- 外观 -->
+  <section class="section">
+    <div class="section-title">外观</div>
+    <div class="section-sub">选择界面主题，影响整体配色风格</div>
+
+    <div class="theme-cards">
+      <!-- 浅色 -->
+      <div class="theme-card selected">
+        <div class="theme-thumb thumb-light">
+          <div class="t-topbar">
+            <div class="t-dot"></div><div class="t-dot"></div><div class="t-dot"></div>
+          </div>
+          <div class="t-body">
+            <div class="t-sidebar">
+              <div class="t-sidebar-item active"></div>
+              <div class="t-sidebar-item"></div>
+              <div class="t-sidebar-item"></div>
+              <div class="t-sidebar-item"></div>
+            </div>
+            <div class="t-main">
+              <div class="t-line w80"></div>
+              <div class="t-line w60"></div>
+              <div class="t-line w80"></div>
+              <div class="t-line w40"></div>
+              <div class="t-line w60"></div>
+            </div>
+          </div>
+        </div>
+        <div class="theme-label-row">
+          <span class="theme-label">浅色</span>
+          <div class="check-icon"></div>
+        </div>
+      </div>
+
+      <!-- 深色 -->
+      <div class="theme-card">
+        <div class="theme-thumb thumb-dark">
+          <div class="t-topbar">
+            <div class="t-dot"></div><div class="t-dot"></div><div class="t-dot"></div>
+          </div>
+          <div class="t-body">
+            <div class="t-sidebar">
+              <div class="t-sidebar-item active"></div>
+              <div class="t-sidebar-item"></div>
+              <div class="t-sidebar-item"></div>
+              <div class="t-sidebar-item"></div>
+            </div>
+            <div class="t-main">
+              <div class="t-line w80"></div>
+              <div class="t-line w60"></div>
+              <div class="t-line w80"></div>
+              <div class="t-line w40"></div>
+              <div class="t-line w60"></div>
+            </div>
+          </div>
+        </div>
+        <div class="theme-label-row">
+          <span class="theme-label">深色</span>
+        </div>
+      </div>
+
+      <!-- 跟随系统 -->
+      <div class="theme-card">
+        <div class="theme-thumb">
+          <div class="thumb-auto" style="height:100%;">
+            <div class="half-light" style="display:flex;flex-direction:column;">
+              <div class="t-topbar-l"></div>
+              <div class="t-body-l">
+                <div class="t-line-l" style="width:80%"></div>
+                <div class="t-line-l w60"></div>
+                <div class="t-line-l" style="width:70%"></div>
+                <div class="t-line-l" style="width:50%"></div>
+              </div>
+            </div>
+            <div class="divider-v"></div>
+            <div class="half-dark" style="display:flex;flex-direction:column;">
+              <div class="t-topbar-d"></div>
+              <div class="t-body-d">
+                <div class="t-line-d w80"></div>
+                <div class="t-line-d" style="width:60%"></div>
+                <div class="t-line-d" style="width:70%"></div>
+                <div class="t-line-d" style="width:50%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="theme-label-row">
+          <span class="theme-label">跟随系统</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LLM 配置 -->
+  <section class="section">
+    <div class="section-title">LLM 配置</div>
+    <div class="section-sub">配置 AI 模型提供商及 API 密钥，优先级高的 Provider 优先使用</div>
+
+    <!-- OpenAI -->
+    <div class="llm-card">
+      <div class="llm-row1">
+        <div class="toggle on"></div>
+        <span class="llm-name">OpenAI</span>
+        <span class="badge badge-p1">P1</span>
+        <span class="badge badge-active">已连接</span>
+        <div class="llm-spacer"></div>
+        <div class="arrow-btn">▲</div>
+        <div class="arrow-btn">▼</div>
+      </div>
+      <div class="llm-row2">
+        <span class="input-label">API Key</span>
+        <input class="input-field" type="password" value="sk-••••••••••••••••••••••••••••••••" />
+      </div>
+    </div>
+
+    <!-- Anthropic -->
+    <div class="llm-card">
+      <div class="llm-row1">
+        <div class="toggle on"></div>
+        <span class="llm-name">Anthropic</span>
+        <span class="badge badge-p1" style="background:rgba(255,107,53,0.1);color:#ff6b35;">P2</span>
+        <span class="badge badge-active">已连接</span>
+        <div class="llm-spacer"></div>
+        <div class="arrow-btn">▲</div>
+        <div class="arrow-btn">▼</div>
+      </div>
+      <div class="llm-row2">
+        <span class="input-label">API Key</span>
+        <input class="input-field" type="password" value="sk-ant-••••••••••••••••••••••••••••" />
+      </div>
+    </div>
+
+    <!-- Gemini -->
+    <div class="llm-card">
+      <div class="llm-row1">
+        <div class="toggle off"></div>
+        <span class="llm-name">Gemini</span>
+        <span class="badge badge-p1" style="background:rgba(100,106,115,0.1);color:#646a73;">P3</span>
+        <span class="badge badge-inactive">未启用</span>
+        <div class="llm-spacer"></div>
+        <div class="arrow-btn">▲</div>
+        <div class="arrow-btn">▼</div>
+      </div>
+      <div class="llm-row2">
+        <span class="input-label">API Key</span>
+        <input class="input-field" type="password" placeholder="输入 Gemini API Key" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Token 用量 -->
+  <section class="section">
+    <div class="section-title">Token 用量</div>
+    <div class="section-sub">本月累计消耗统计，每月 1 日重置</div>
+
+    <div class="token-stats">
+      <div class="stat-item">
+        <div class="stat-num blue">128,450</div>
+        <div class="stat-label">输入 Token</div>
+        <div class="stat-sub">本月累计</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num green">43,210</div>
+        <div class="stat-label">输出 Token</div>
+        <div class="stat-sub">本月累计</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num dark">$0.87</div>
+        <div class="stat-label">预估费用</div>
+        <div class="stat-sub">按官方定价估算</div>
+      </div>
+    </div>
+
+    <div class="empty-hint">
+      暂无近期对话记录 — 开始对话后将在此展示 Token 消耗明细
+    </div>
+  </section>
+
+</main>
+
+</body>
+</html>

@@ -12,8 +12,9 @@ export function Skeleton({ width = "100%", height = 16, borderRadius = "var(--ra
         width,
         height,
         borderRadius,
-        background: "var(--color-bg-hover)",
-        animation: "skeleton-pulse 1.5s ease-in-out infinite",
+        background: "linear-gradient(90deg, var(--color-bg-hover) 25%, var(--color-bg-elevated) 50%, var(--color-bg-hover) 75%)",
+        backgroundSize: "200% 100%",
+        animation: "shimmer 1.5s ease-in-out infinite",
         ...style,
       }}
     />

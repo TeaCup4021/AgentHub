@@ -1,4 +1,27 @@
-import type { Agent, Conversation, Message } from "@/types";
+import type { Agent, Conversation, Message, Project } from "@/types";
+
+export const mockProjects: Project[] = [
+  {
+    id: "proj-1",
+    name: "AgentHub 前端开发",
+    description: "多 Agent 协作平台前端",
+    ownerId: "00000000-0000-0000-0000-000000000001",
+    defaultAgentIds: ["agent-claude-code"],
+    conversationCount: 2,
+    createdAt: "2026-05-20T06:00:00Z",
+    updatedAt: "2026-05-21T14:00:00Z",
+  },
+  {
+    id: "proj-2",
+    name: "数据库设计",
+    description: "电商系统 Schema",
+    ownerId: "00000000-0000-0000-0000-000000000001",
+    defaultAgentIds: ["agent-opencode"],
+    conversationCount: 1,
+    createdAt: "2026-05-20T07:00:00Z",
+    updatedAt: "2026-05-21T12:00:00Z",
+  },
+];
 
 export const mockAgents: Agent[] = [
   {
@@ -52,6 +75,7 @@ export const mockConversations: Conversation[] = [
     type: "single",
     ownerId: "00000000-0000-0000-0000-000000000001",
     agentIds: ["agent-claude-code"],
+    projectId: "proj-1",
     isPinned: true,
     isArchived: false,
     lastActiveAt: "2026-05-21T14:00:00Z",
@@ -64,6 +88,7 @@ export const mockConversations: Conversation[] = [
     type: "group",
     ownerId: "00000000-0000-0000-0000-000000000001",
     agentIds: ["agent-claude-code", "agent-codex"],
+    projectId: "proj-1",
     isPinned: false,
     isArchived: false,
     lastActiveAt: "2026-05-21T13:00:00Z",
@@ -76,6 +101,7 @@ export const mockConversations: Conversation[] = [
     type: "single",
     ownerId: "00000000-0000-0000-0000-000000000001",
     agentIds: ["agent-opencode"],
+    projectId: "proj-2",
     isPinned: false,
     isArchived: false,
     lastActiveAt: "2026-05-21T12:00:00Z",

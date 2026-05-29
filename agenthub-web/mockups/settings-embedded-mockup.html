@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设置内嵌模式 — 设计预览</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; height: 100vh; overflow: hidden; }
+
+/* ===== 主布局：外层画布 ===== */
+.app-shell {
+  height: 100vh;
+  display: flex;
+  padding: 8px;
+  gap: 8px;
+  /* 默认底色 — 通过 JS 切换 data-bg */
+  background: #DCE5F7;
+  transition: background 0.3s;
+}
+
+/* ===== 图标栏（左侧最窄） ===== */
+.iconbar {
+  width: 56px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.iconbar-item {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: #646a73;
+  transition: background 0.15s;
+}
+.iconbar-item:hover { background: #f2f3f5; }
+.iconbar-item.active { background: rgba(51,112,255,0.08); color: #3370ff; }
+
+/* ===== 对话列表（左侧中间） ===== */
+.convlist {
+  width: 260px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.convlist-header {
+  padding: 12px 16px;
+  font-size: 15px; font-weight: 600;
+  color: #1f2329;
+  border-bottom: 1px solid #e8eaef;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.convlist-items { flex: 1; overflow-y: auto; padding: 4px; }
+.conv-item {
+  padding: 8px 12px; border-radius: 6px;
+  cursor: pointer; font-size: 13px; color: #646a73;
+  display: flex; align-items: center; gap: 8px;
+}
+.conv-item:hover { background: #f2f3f5; }
+.conv-item.active { background: rgba(51,112,255,0.06); color: #3370ff; font-weight: 500; }
+
+/* ===== 右侧主内容区（聊天 / 设置 切换） ===== */
+.main-area {
+  flex: 1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* 聊天视图 */
+.chat-view { display: flex; flex-direction: column; height: 100%; }
+.chat-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid #e8eaef;
+  font-size: 14px; font-weight: 500; color: #1f2329;
+  background: #fafbfc;
+}
+.chat-body { flex: 1; padding: 24px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #8f959e; }
+.chat-input-bar {
+  padding: 12px 16px;
+  border-top: 1px solid #e8eaef;
+  display: flex; gap: 8px;
+}
+.chat-input-bar .fake-input {
+  flex: 1; height: 36px; border-radius: 18px;
+  border: 1px solid #e8eaef; background: #f7f8fa;
+}
+
+/* ===== 设置面板（内嵌在 main-area 中） ===== */
+.settings-panel {
+  display: flex;
+  height: 100%;
+  /* 左侧 nav */
+}
+.settings-nav {
+  width: 180px;
+  flex-shrink: 0;
+  border-right: 1px solid #e8eaef;
+  display: flex; flex-direction: column;
+  padding: 12px 0;
+}
+.settings-nav-title {
+  font-size: 13px; font-weight: 600; color: #8f959e;
+  padding: 0 16px 8px; letter-spacing: 0.5px;
+}
+.settings-nav-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; cursor: pointer;
+  font-size: 14px; color: #646a73;
+  transition: background 0.15s, color 0.15s;
+}
+.settings-nav-item:hover { background: #f2f3f5; }
+.settings-nav-item.active { background: rgba(51,112,255,0.08); color: #3370ff; font-weight: 500; }
+.settings-nav-item svg { flex-shrink: 0; }
+
+/* 设置内容区 */
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+/* 设置标题栏 */
+.settings-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.settings-topbar-title { font-size: 16px; font-weight: 600; color: #1f2329; }
+.settings-close-btn {
+  width: 28px; height: 28px;
+  border-radius: 6px; border: none; background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: #646a73; font-size: 18px;
+}
+.settings-close-btn:hover { background: #f2f3f5; }
+
+/* Section */
+.sec-title { font-size: 15px; font-weight: 600; color: #1f2329; margin-bottom: 2px; }
+.sec-sub { font-size: 12px; color: #8f959e; margin-bottom: 10px; }
+.sec-divider { margin-top: 18px; padding-top: 18px; border-top: 1px solid #e8eaef; }
+
+/* 背景底色卡片 */
+.bgcolor-cards { display: flex; gap: 12px; }
+.bgcolor-card {
+  width: 180px;
+  border-radius: 8px;
+  border: 2px solid #e8eaef;
+  background: #fff;
+  padding: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+.bgcolor-card.selected { border-color: #3370ff; background: rgba(51,112,255,0.04); }
+.bgcolor-card:hover:not(.selected) { border-color: #c0c4cc; }
+
+.bgcolor-thumb {
+  height: 72px; border-radius: 4px; overflow: hidden;
+  margin-bottom: 8px; padding: 6px;
+  display: flex; gap: 4px; align-items: stretch;
+}
+.bgcolor-thumb .p-bar {
+  width: 10px; border-radius: 3px;
+  background: rgba(255,255,255,0.85);
+  flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 3px 0; gap: 3px;
+}
+.bgcolor-thumb .p-bar span {
+  width: 5px; height: 5px; border-radius: 2px;
+  background: rgba(0,0,0,0.12); display: block;
+}
+.bgcolor-thumb .p-bar span.n { background: rgba(51,112,255,0.5); }
+.bgcolor-thumb .p-list {
+  width: 44px; border-radius: 3px;
+  background: rgba(255,255,255,0.85);
+  flex-shrink: 0; padding: 3px 2px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.bgcolor-thumb .p-list span {
+  height: 5px; border-radius: 2px;
+  background: rgba(0,0,0,0.08); display: block;
+}
+.bgcolor-thumb .p-list span.h { background: rgba(51,112,255,0.35); }
+.bgcolor-thumb .p-chat {
+  flex: 1; border-radius: 3px;
+  background: rgba(255,255,255,0.85);
+  padding: 3px 4px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.bgcolor-thumb .p-chat span {
+  height: 4px; border-radius: 2px;
+  background: rgba(0,0,0,0.06); display: block;
+}
+
+.check-icon { width: 16px; height: 16px; background: #3370ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.check-icon::after { content: ''; display: block; width: 4px; height: 7px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px, -1px); }
+
+.label-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.label-row span { font-size: 13px; font-weight: 500; color: #1f2329; }
+
+/* 底部颜色切换按钮 */
+.color-demo-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+.color-demo-dot {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.color-demo-dot:hover { transform: scale(1.15); }
+.color-demo-dot.active { border-color: #3370ff; box-shadow: 0 0 0 2px rgba(51,112,255,0.25); }
+.color-label {
+  font-size: 12px; color: #8f959e;
+  align-self: center;
+  margin-right: 4px;
+}
+</style>
+</head>
+<body>
+
+<!-- 外层画布 — 这是 bgColor 生效的地方 -->
+<div class="app-shell" id="appShell">
+
+  <!-- 图标栏（始终存在） -->
+  <div class="iconbar">
+    <div class="iconbar-item active" title="聊天">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="3" width="16" height="13" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M6 9h8M6 13h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+    </div>
+    <div class="iconbar-item" title="设置" id="iconSettings">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.9 4.9l1.4 1.4M13.7 13.7l1.4 1.4M4.9 15.1l1.4-1.4M13.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </div>
+  </div>
+
+  <!-- 对话列表（始终存在） -->
+  <div class="convlist">
+    <div class="convlist-header">
+      <span>对话</span>
+      <span style="font-size:18px;cursor:pointer;color:#8f959e;line-height:1;">+</span>
+    </div>
+    <div class="convlist-items">
+      <div class="conv-item active">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        产品需求讨论
+      </div>
+      <div class="conv-item">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        代码审查反馈
+      </div>
+      <div class="conv-item">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M5 6h6M5 9h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        周报总结
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧主区域 — 聊天 or 设置 -->
+  <div class="main-area" id="mainArea">
+    <!-- 设置面板 -->
+    <div class="settings-panel" id="settingsPanel">
+      <!-- 设置内导航 -->
+      <div class="settings-nav">
+        <div class="settings-nav-title">设置</div>
+        <div class="settings-nav-item active">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          外观
+        </div>
+        <div class="settings-nav-item">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="6" cy="7" r="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M9 6h3M9 8h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          LLM 配置
+        </div>
+        <div class="settings-nav-item">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 12l3-4 3 2 3-5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/></svg>
+          Token 用量
+        </div>
+      </div>
+
+      <!-- 设置内容 -->
+      <div class="settings-content">
+        <div class="settings-topbar">
+          <span class="settings-topbar-title">外观</span>
+          <button class="settings-close-btn" id="closeSettings" title="关闭设置">✕</button>
+        </div>
+
+        <div class="sec-title">主题</div>
+        <div class="sec-sub">选择界面主题，影响整体配色风格</div>
+
+        <!-- 主题卡片（简化单张示意） -->
+        <div style="display:flex;gap:12px;margin-bottom:12px;">
+          <div class="bgcolor-card selected" style="cursor:default;">
+            <div style="height:72px;border-radius:4px;overflow:hidden;margin-bottom:8px;background:#f5f6f7;display:flex;flex-direction:column;">
+              <div style="height:14px;background:#fff;border-bottom:1px solid #e8eaef;display:flex;align-items:center;padding:0 6px;gap:3px;">
+                <span style="width:4px;height:4px;border-radius:50%;background:#e8eaef;"></span>
+                <span style="width:4px;height:4px;border-radius:50%;background:#e8eaef;"></span>
+                <span style="width:4px;height:4px;border-radius:50%;background:#e8eaef;"></span>
+              </div>
+              <div style="display:flex;flex:1;">
+                <div style="width:28px;background:#fff;border-right:1px solid #e8eaef;padding:4px 3px;display:flex;flex-direction:column;gap:3px;">
+                  <span style="height:5px;border-radius:2px;background:#3370ff;"></span>
+                  <span style="height:5px;border-radius:2px;background:#e8eaef;"></span>
+                  <span style="height:5px;border-radius:2px;background:#e8eaef;"></span>
+                </div>
+                <div style="flex:1;padding:4px;display:flex;flex-direction:column;gap:3px;">
+                  <span style="height:4px;border-radius:2px;background:#e8eaef;width:80%;"></span>
+                  <span style="height:4px;border-radius:2px;background:#e8eaef;width:60%;"></span>
+                </div>
+              </div>
+            </div>
+            <div class="label-row"><span>浅色</span><div class="check-icon"></div></div>
+          </div>
+        </div>
+
+        <div class="sec-divider"></div>
+
+        <!-- 背景底色 -->
+        <div class="sec-title" style="margin-bottom:2px;font-size:13px;">背景底色</div>
+        <div class="sec-sub">调整聊天区画布底色，仅影响浅色主题</div>
+
+        <div class="bgcolor-cards">
+          <!-- 素云灰 -->
+          <div class="bgcolor-card" onclick="setBg('#ECEDEE', this)">
+            <div class="bgcolor-thumb" style="background:#ECEDEE;">
+              <div class="p-bar"><span class="n"></span><span></span><span></span></div>
+              <div class="p-list"><span class="h"></span><span></span><span></span><span></span></div>
+              <div class="p-chat"><span style="width:80%"></span><span style="width:60%"></span><span style="width:70%"></span></div>
+            </div>
+            <div class="label-row"><span>素云灰</span></div>
+          </div>
+
+          <!-- 湖水蓝 -->
+          <div class="bgcolor-card" onclick="setBg('#E6F1F4', this)">
+            <div class="bgcolor-thumb" style="background:#E6F1F4;">
+              <div class="p-bar"><span class="n"></span><span></span><span></span></div>
+              <div class="p-list"><span class="h"></span><span></span><span></span><span></span></div>
+              <div class="p-chat"><span style="width:80%"></span><span style="width:60%"></span><span style="width:70%"></span></div>
+            </div>
+            <div class="label-row"><span>湖水蓝</span></div>
+          </div>
+
+          <!-- 烟波蓝 — 默认选中 -->
+          <div class="bgcolor-card selected" onclick="setBg('#DCE5F7', this)">
+            <div class="bgcolor-thumb" style="background:#DCE5F7;">
+              <div class="p-bar"><span class="n"></span><span></span><span></span></div>
+              <div class="p-list"><span class="h"></span><span></span><span></span><span></span></div>
+              <div class="p-chat"><span style="width:80%"></span><span style="width:60%"></span><span style="width:70%"></span></div>
+            </div>
+            <div class="label-row"><span>烟波蓝</span><div class="check-icon"></div></div>
+          </div>
+
+          <!-- 深海蓝 -->
+          <div class="bgcolor-card" onclick="setBg('#4872AD', this)">
+            <div class="bgcolor-thumb" style="background:#4872AD;">
+              <div class="p-bar"><span class="n"></span><span></span><span></span></div>
+              <div class="p-list"><span class="h"></span><span></span><span></span><span></span></div>
+              <div class="p-chat"><span style="width:80%"></span><span style="width:60%"></span><span style="width:70%"></span></div>
+            </div>
+            <div class="label-row"><span>深海蓝</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 底部切换条：演示实时变色 -->
+<div class="color-demo-bar">
+  <span class="color-label">切换底色：</span>
+  <div class="color-demo-dot active" style="background:#ECEDEE;" onclick="switchBg('#ECEDEE', this)" title="素云灰"></div>
+  <div class="color-demo-dot" style="background:#E6F1F4;" onclick="switchBg('#E6F1F4', this)" title="湖水蓝"></div>
+  <div class="color-demo-dot" style="background:#DCE5F7;" onclick="switchBg('#DCE5F7', this)" title="烟波蓝"></div>
+  <div class="color-demo-dot" style="background:#4872AD;" onclick="switchBg('#4872AD', this)" title="深海蓝"></div>
+</div>
+
+<script>
+function switchBg(color, el) {
+  document.getElementById('appShell').style.background = color;
+  document.querySelectorAll('.color-demo-dot').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+}
+function setBg(color, card) {
+  document.getElementById('appShell').style.background = color;
+  document.querySelectorAll('.bgcolor-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.bgcolor-card .check-icon').forEach(i => i.remove());
+  card.classList.add('selected');
+  var row = card.querySelector('.label-row');
+  var icon = document.createElement('div');
+  icon.className = 'check-icon';
+  row.appendChild(icon);
+}
+
+// 关闭设置 → 切回聊天视图
+document.getElementById('closeSettings').addEventListener('click', function() {
+  var main = document.getElementById('mainArea');
+  main.innerHTML = `
+    <div class="chat-view">
+      <div class="chat-header">产品需求讨论</div>
+      <div class="chat-body">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style="opacity:0.15;"><rect x="6" y="8" width="36" height="32" rx="6" stroke="#8f959e" stroke-width="2"/><circle cx="24" cy="24" r="8" stroke="#8f959e" stroke-width="2"/></svg>
+        <span style="font-size:14px;">开始新的对话</span>
+      </div>
+      <div class="chat-input-bar"><div class="fake-input"></div></div>
+    </div>
+  `;
+  document.getElementById('iconSettings').classList.remove('active');
+});
+
+// 点击设置图标 → 重新打开
+document.getElementById('iconSettings').addEventListener('click', function() {
+  location.reload();
+});
+</script>
+
+</body>
+</html>

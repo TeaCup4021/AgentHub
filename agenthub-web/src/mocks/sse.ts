@@ -1,4 +1,4 @@
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, Artifact, Message } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, SSEError, Artifact, Message } from "@/types";
 import { mockAgents, mockConversations } from "./data";
 import { addMockMessage, getLastUserMessage, getMockAgents } from "./handlers";
 import { generateId } from "@/lib/utils";
@@ -10,6 +10,7 @@ interface MockSSEOptions {
   onAgentStatus?: (data: SSEAgentStatus) => void;
   onThinking?: (data: SSEThinking) => void;
   onMessageEnd?: (data: SSEMessageEnd) => void;
+  onError?: (data: SSEError) => void;
   onConnectionError?: (error: Event) => void;
 }
 
@@ -58,6 +59,7 @@ export function createMockSSEStream(
 ): () => void {
   let cancelled = false;
   const messageId = `msg-${generateId()}`;
+  const taskId = `task-${generateId()}`;
 
   const conversation = mockConversations.find((c) => c.id === conversationId);
   const isGroup = conversation?.type === "group";
@@ -91,6 +93,9 @@ export function createMockSSEStream(
         break;
       case "message_end":
         callbacks.onMessageEnd?.(data as SSEMessageEnd);
+        break;
+      case "error":
+        callbacks.onError?.(data as SSEError);
         break;
     }
   };
@@ -143,6 +148,7 @@ export function createMockSSEStream(
     // Stagger each agent's lifecycle over ~1.5s, overlapping with text streaming
     agents.forEach((agent, i) => {
       const lifeStart = agentDelay + i * 600;
+      const subtaskId = `sub-${generateId()}`;
       setTimeout(() => {
         if (cancelled) return;
         sendEvent("agent_status", {
@@ -150,7 +156,8 @@ export function createMockSSEStream(
           event_id: `evt-${generateId()}`,
           conversation_id: conversationId,
           message_id: messageId,
-          subtask_id: `sub-${generateId()}`,
+          task_id: taskId,
+          subtask_id: subtaskId,
           agent: { id: agent.id, name: agent.name },
           status: "queued",
           progress: 0,
@@ -164,7 +171,8 @@ export function createMockSSEStream(
           event_id: `evt-${generateId()}`,
           conversation_id: conversationId,
           message_id: messageId,
-          subtask_id: `sub-${generateId()}`,
+          task_id: taskId,
+          subtask_id: subtaskId,
           agent: { id: agent.id, name: agent.name },
           status: "running",
           progress: 30,
@@ -178,7 +186,8 @@ export function createMockSSEStream(
           event_id: `evt-${generateId()}`,
           conversation_id: conversationId,
           message_id: messageId,
-          subtask_id: `sub-${generateId()}`,
+          task_id: taskId,
+          subtask_id: subtaskId,
           agent: { id: agent.id, name: agent.name },
           status: "running",
           progress: 70,
@@ -192,7 +201,8 @@ export function createMockSSEStream(
           event_id: `evt-${generateId()}`,
           conversation_id: conversationId,
           message_id: messageId,
-          subtask_id: `sub-${generateId()}`,
+          task_id: taskId,
+          subtask_id: subtaskId,
           agent: { id: agent.id, name: agent.name },
           status: "success",
           progress: 100,
@@ -291,9 +301,9 @@ export function createMockSSEStream(
     }
   }
 
-  const shouldDisconnect = localStorage.getItem("mock_fail_mode") === "sse_disconnect";
+  const shouldDisconnect = sessionStorage.getItem("mock_fail_mode") === "sse_disconnect";
   if (shouldDisconnect) {
-    localStorage.removeItem("mock_fail_mode");
+    sessionStorage.removeItem("mock_fail_mode");
     const disconnectAt = baseDelay + Math.min(delay - baseDelay, 800);
     setTimeout(() => {
       if (cancelled) return;

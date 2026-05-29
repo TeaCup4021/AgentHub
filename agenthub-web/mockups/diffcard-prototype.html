@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DiffCard Design Prototype — AgentHub</title>
+<style>
+  /* ================================================================
+     CSS Variables — Semi Design compatible + extended tokens
+     ================================================================ */
+  :root {
+    --color-bg-base: #0f0f13;
+    --color-bg-elevated: #18181f;
+    --color-bg-sidebar: #141419;
+    --color-bg-overlay: #1c1c26;
+    --color-border: #2a2a36;
+    --color-border-light: #22222c;
+    --color-text-primary: #e8e8ed;
+    --color-text-secondary: #a0a0b0;
+    --color-text-tertiary: #6b6b7b;
+    --color-text-disabled: #48485a;
+    --color-primary: #4f7dff;
+    --color-primary-hover: #6b91ff;
+    --color-primary-active: #3a5fd9;
+    --color-danger: #f54f4f;
+    --color-danger-bg: rgba(245,79,79,0.08);
+    --color-success: #1fbf75;
+    --color-success-bg: rgba(31,191,117,0.08);
+    --color-warning: #f0a030;
+    --color-info: #4f7dff;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 30px rgba(0,0,0,0.5);
+    --font-size-xs: 11px;
+    --font-size-sm: 12px;
+    --font-size-md: 13px;
+    --font-size-lg: 15px;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", "Source Code Pro", Consolas, monospace;
+    --font-sans: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.25s ease;
+  }
+
+  /* Light theme */
+  [data-theme="light"] {
+    --color-bg-base: #f8f8fb;
+    --color-bg-elevated: #ffffff;
+    --color-bg-sidebar: #f2f2f6;
+    --color-bg-overlay: #fcfcfe;
+    --color-border: #e0e0e8;
+    --color-border-light: #eeeef2;
+    --color-text-primary: #1a1a28;
+    --color-text-secondary: #6b6b7e;
+    --color-text-tertiary: #9b9bae;
+    --color-text-disabled: #c0c0d0;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 30px rgba(0,0,0,0.12);
+  }
+
+  /* ================================================================
+     Reset & Base
+     ================================================================ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-bg-base);
+    color: var(--color-text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* Background grain texture */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.75' numOctaves='4' stitchTiles='stitch' type='fractalNoise'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    opacity: 0.4;
+  }
+
+  /* ================================================================
+     Page Header
+     ================================================================ */
+  .page-header {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .page-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: var(--color-text-primary);
+  }
+  .page-header p {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-tertiary);
+    margin-top: 4px;
+  }
+  .theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-elevated);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-sm);
+  }
+  .theme-toggle:hover {
+    color: var(--color-text-primary);
+    border-color: var(--color-primary);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* ================================================================
+     Demo Container
+     ================================================================ */
+  .demo-container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .demo-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 600;
+    margin-bottom: -12px;
+    padding-left: 2px;
+  }
+
+  /* ================================================================
+     DiffCard Component
+     ================================================================ */
+  .diffcard {
+    position: relative;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-normal), border-color var(--transition-normal);
+    /* Size defaults — overridden by JS on resize */
+    width: 100%;
+    min-width: 400px;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: box-shadow 0.25s, border-color 0.25s;
+  }
+  .diffcard:hover {
+    box-shadow: var(--shadow-md);
+  }
+  .diffcard.resizing {
+    user-select: none;
+    pointer-events: none;
+  }
+  .diffcard.resizing .diffcard-resize-handle { pointer-events: auto; }
+  .diffcard.resizing .diffcard-divider { pointer-events: auto; }
+
+  /* ---- Header ---- */
+  .diffcard-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border-light);
+    background: var(--color-bg-sidebar);
+    flex-shrink: 0;
+  }
+  .diffcard-header .file-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    opacity: 0.6;
+  }
+  .diffcard-header .file-name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-family: var(--font-mono);
+    letter-spacing: -0.2px;
+  }
+  .diffcard-header .lang-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: var(--radius-sm);
+    background: rgba(79,125,255,0.1);
+    color: var(--color-primary);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  .diffcard-header .stats {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: var(--font-size-xs);
+    font-family: var(--font-mono);
+    font-weight: 500;
+  }
+  .diffcard-header .stats .added {
+    color: var(--color-success);
+  }
+  .diffcard-header .stats .removed {
+    color: var(--color-danger);
+  }
+  .diffcard-header .stats .total {
+    color: var(--color-text-tertiary);
+    font-size: 10px;
+  }
+
+  /* ---- Body (code panels) ---- */
+  .diffcard-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .diffcard-body .code-panel {
+    flex: 1;
+    overflow: auto;
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    line-height: 1.65;
+    white-space: pre;
+    color: var(--color-text-primary);
+    position: relative;
+  }
+  .diffcard-body .code-panel.old {
+    background: var(--color-danger-bg);
+  }
+  .diffcard-body .code-panel.new {
+    background: var(--color-success-bg);
+  }
+  .diffcard-body .code-panel .panel-label {
+    position: sticky;
+    top: 0;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 6px;
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: var(--font-sans);
+  }
+  .diffcard-body .code-panel.old .panel-label {
+    color: var(--color-danger);
+    background: rgba(245,79,79,0.12);
+  }
+  .diffcard-body .code-panel.new .panel-label {
+    color: var(--color-success);
+    background: rgba(31,191,117,0.12);
+  }
+
+  /* Line numbers */
+  .code-line {
+    display: flex;
+    min-height: 1.65em;
+  }
+  .code-line .ln {
+    flex-shrink: 0;
+    width: 28px;
+    text-align: right;
+    padding-right: 12px;
+    color: var(--color-text-disabled);
+    user-select: none;
+    font-size: 11px;
+  }
+  .code-line .code {
+    flex: 1;
+    white-space: pre;
+  }
+  .code-line.added .code { color: var(--color-success); }
+  .code-line.removed .code { color: var(--color-danger); }
+
+  /* ---- Divider (vertical, draggable) ---- */
+  .diffcard-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 10;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition-fast);
+  }
+  .diffcard-divider::after {
+    content: "";
+    width: 2px;
+    height: 100%;
+    background: var(--color-border);
+    border-radius: 1px;
+    transition: background var(--transition-fast), width var(--transition-fast);
+  }
+  .diffcard-divider:hover::after,
+  .diffcard-divider.active::after {
+    width: 3px;
+    background: var(--color-primary);
+  }
+  .diffcard-divider .grip-dots {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    pointer-events: none;
+  }
+  .diffcard-divider:hover .grip-dots,
+  .diffcard-divider.active .grip-dots {
+    opacity: 1;
+  }
+  .diffcard-divider .grip-dots span {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--color-primary);
+  }
+
+  /* ---- Resize handle (bottom-right) ---- */
+  .diffcard-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    z-index: 20;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+  .diffcard:hover .diffcard-resize-handle,
+  .diffcard-resize-handle.active {
+    opacity: 1;
+  }
+  .diffcard-resize-handle::before {
+    content: "";
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
+    border-radius: 0 0 3px 0;
+    transition: border-color var(--transition-fast);
+  }
+  .diffcard-resize-handle:hover::before,
+  .diffcard-resize-handle.active::before {
+    border-color: var(--color-primary);
+  }
+
+  /* ================================================================
+     Card-2: Second example (short diff)
+     ================================================================ */
+  .diffcard-short {
+    width: 600px;
+    min-width: 400px;
+  }
+
+  /* ================================================================
+     Info tooltip
+     ================================================================ */
+  .info-bar {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 16px;
+    background: var(--color-bg-overlay);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+  }
+  .info-bar .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .info-bar .dot.resizing { background: var(--color-warning); animation: pulse 1.5s ease-in-out infinite; }
+  .info-bar .dot.default { background: var(--color-text-disabled); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ================================================================
+     Scrollbar styling
+     ================================================================ */
+  .code-panel::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  .code-panel::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .code-panel::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+  }
+  .code-panel::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-disabled);
+  }
+  .code-panel::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* ================================================================
+     Responsive
+     ================================================================ */
+  @media (max-width: 600px) {
+    .demo-container { padding: 0 8px; }
+    .diffcard { min-width: 300px; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- Theme Toggle -->
+  <button class="theme-toggle" onclick="toggleTheme()" title="切换主题" aria-label="切换深浅色主题">
+    <span class="icon-sun" style="display:none">☀</span>
+    <span class="icon-moon">☾</span>
+  </button>
+
+  <!-- Page Header -->
+  <div class="page-header">
+    <h1>DiffCard · 设计原型</h1>
+    <p>可拖拽调整尺寸 · 分隔线拖拽调节比例 · 代码横向滚动 · 行数统计</p>
+  </div>
+
+  <!-- Info Bar -->
+  <div class="info-bar" style="margin-bottom:24px;">
+    <span class="dot default" id="status-dot"></span>
+    <span id="status-text">拖拽右下角 ↖ 调整卡片尺寸 · 拖拽中间分隔线 ↔ 调整面板比例</span>
+  </div>
+
+  <!-- Demo Cards Container -->
+  <div class="demo-container">
+
+    <!-- Label -->
+    <div class="demo-label">示例 1 · 长代码行 diff（拖拽查看）</div>
+
+    <!-- DiffCard 1: Long code lines, resizable -->
+    <div class="diffcard" id="diffcard1" style="width:100%; height:320px;">
+      <!-- Header -->
+      <div class="diffcard-header">
+        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+        <span class="file-name">src/middleware/auth.ts</span>
+        <span class="lang-tag">typescript</span>
+        <div class="stats">
+          <span class="added">+8 行</span>
+          <span class="removed">-4 行</span>
+          <span class="total">24 → 28</span>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div class="diffcard-body" id="diffcard1-body">
+        <!-- Left: Old -->
+        <div class="code-panel old" id="diffcard1-old">
+          <span class="panel-label">旧版本</span>
+<div class="code-line removed"><span class="ln"> 1</span><span class="code">export function authMiddleware(req: Request) {</span></div>
+<div class="code-line"><span class="ln"> 2</span><span class="code">  const token = req.headers.get("Authorization")?.replace("Bearer ", "");</span></div>
+<div class="code-line removed"><span class="ln"> 3</span><span class="code">  if (token === "admin") return true;</span></div>
+<div class="code-line removed"><span class="ln"> 4</span><span class="code">  if (token === "superadmin_mega_secret_key_do_not_share") return true; // very long comment here to demonstrate horizontal overflow behavior</span></div>
+<div class="code-line"><span class="ln"> 5</span><span class="code">  return false;</span></div>
+<div class="code-line"><span class="ln"> 6</span><span class="code">}</span></div>
+        </div>
+
+        <!-- Divider -->
+        <div class="diffcard-divider" id="diffcard1-divider">
+          <div class="grip-dots"><span></span><span></span><span></span></div>
+        </div>
+
+        <!-- Right: New -->
+        <div class="code-panel new" id="diffcard1-new">
+          <span class="panel-label">新版本</span>
+<div class="code-line added"><span class="ln"> 1</span><span class="code">import { verifyToken } from "@/lib/jwt";</span></div>
+<div class="code-line added"><span class="ln"> 2</span><span class="code">import { UnauthorizedError } from "@/lib/errors";</span></div>
+<div class="code-line added"><span class="ln"> 3</span><span class="code"></span></div>
+<div class="code-line added"><span class="ln"> 4</span><span class="code">export async function authMiddleware(req: Request): Promise<UserPayload> {</span></div>
+<div class="code-line"><span class="ln"> 5</span><span class="code">  const token = req.headers.get("Authorization")?.replace("Bearer ", "");</span></div>
+<div class="code-line added"><span class="ln"> 6</span><span class="code">  if (!token) throw new UnauthorizedError("未登录，请先登录后再试");</span></div>
+<div class="code-line added"><span class="ln"> 7</span><span class="code">  const payload = await verifyToken(token);</span></div>
+<div class="code-line added"><span class="ln"> 8</span><span class="code">  if (!payload) throw new UnauthorizedError("Token 已过期或无效，请重新登录");</span></div>
+<div class="code-line added"><span class="ln"> 9</span><span class="code">  return payload;</span></div>
+<div class="code-line"><span class="ln">10</span><span class="code">}</span></div>
+        </div>
+      </div>
+
+      <!-- Resize Handle -->
+      <div class="diffcard-resize-handle" id="diffcard1-handle" title="拖拽调整卡片大小"></div>
+    </div>
+
+    <!-- Label -->
+    <div class="demo-label" style="margin-top:8px;">示例 2 · CSS 文件 diff（固定宽度对比）</div>
+
+    <!-- DiffCard 2: CSS diff, short -->
+    <div class="diffcard diffcard-short" id="diffcard2" style="width:600px; height:380px;">
+      <div class="diffcard-header">
+        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+        <span class="file-name">src/styles/theme.css</span>
+        <span class="lang-tag">css</span>
+        <div class="stats">
+          <span class="added">+5 行</span>
+          <span class="removed">-2 行</span>
+          <span class="total">42 → 45</span>
+        </div>
+      </div>
+
+      <div class="diffcard-body" id="diffcard2-body">
+        <div class="code-panel old" id="diffcard2-old">
+          <span class="panel-label">旧版本</span>
+<div class="code-line"><span class="ln">1</span><span class="code">:root {</span></div>
+<div class="code-line"><span class="ln">2</span><span class="code">  --color-primary: #3b82f6;</span></div>
+<div class="code-line"><span class="ln">3</span><span class="code">  --color-bg: #ffffff;</span></div>
+<div class="code-line removed"><span class="ln">4</span><span class="code">  --radius: 4px;</span></div>
+<div class="code-line removed"><span class="ln">5</span><span class="code">  --shadow: 0 1px 3px rgba(0,0,0,0.1);</span></div>
+<div class="code-line"><span class="ln">6</span><span class="code">}</span></div>
+        </div>
+
+        <div class="diffcard-divider" id="diffcard2-divider">
+          <div class="grip-dots"><span></span><span></span><span></span></div>
+        </div>
+
+        <div class="code-panel new" id="diffcard2-new">
+          <span class="panel-label">新版本</span>
+<div class="code-line"><span class="ln">1</span><span class="code">:root {</span></div>
+<div class="code-line"><span class="ln">2</span><span class="code">  --color-primary: #4f7dff;</span></div>
+<div class="code-line"><span class="ln">3</span><span class="code">  --color-bg: #ffffff;</span></div>
+<div class="code-line added"><span class="ln">4</span><span class="code">  --radius-sm: 4px;</span></div>
+<div class="code-line added"><span class="ln">5</span><span class="code">  --radius-md: 6px;</span></div>
+<div class="code-line added"><span class="ln">6</span><span class="code">  --radius-lg: 10px;</span></div>
+<div class="code-line added"><span class="ln">7</span><span class="code">  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);</span></div>
+<div class="code-line added"><span class="ln">8</span><span class="code">  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);</span></div>
+<div class="code-line"><span class="ln">9</span><span class="code">}</span></div>
+        </div>
+      </div>
+
+      <div class="diffcard-resize-handle" id="diffcard2-handle" title="拖拽调整卡片大小"></div>
+    </div>
+
+  </div>
+
+<script>
+  // ================================================================
+  // Theme Toggle
+  // ================================================================
+  function toggleTheme() {
+    const html = document.documentElement;
+    const current = html.getAttribute("data-theme");
+    const next = current === "dark" ? "light" : "dark";
+    html.setAttribute("data-theme", next);
+    const sun = document.querySelector(".icon-sun");
+    const moon = document.querySelector(".icon-moon");
+    sun.style.display = next === "light" ? "none" : "inline";
+    moon.style.display = next === "light" ? "inline" : "none";
+  }
+
+  // ================================================================
+  // Divider Drag — adjust left/right panel ratio
+  // ================================================================
+  function setupDividerDrag(cardId) {
+    const card = document.getElementById(cardId);
+    const body = card.querySelector(".diffcard-body");
+    const divider = card.querySelector(".diffcard-divider");
+    const oldPanel = card.querySelector(".code-panel.old");
+    const newPanel = card.querySelector(".code-panel.new");
+
+    if (!divider || !oldPanel || !newPanel || !body) return;
+
+    let dragging = false;
+    let startX = 0;
+    let startOldWidth = 0;
+    let startNewWidth = 0;
+
+    divider.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      dragging = true;
+      divider.classList.add("active");
+      card.classList.add("resizing");
+      startX = e.clientX;
+      startOldWidth = oldPanel.getBoundingClientRect().width;
+      startNewWidth = newPanel.getBoundingClientRect().width;
+      updateStatus(true, "分隔线拖拽中...");
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const totalWidth = startOldWidth + startNewWidth;
+      let newOld = startOldWidth + dx;
+      let newNew = startNewWidth - dx;
+
+      // Minimum each panel: 120px
+      const minPanel = 120;
+      if (newOld < minPanel) { newOld = minPanel; newNew = totalWidth - minPanel; }
+      if (newNew < minPanel) { newNew = minPanel; newOld = totalWidth - minPanel; }
+
+      const oldPercent = (newOld / totalWidth) * 100;
+      const newPercent = (newNew / totalWidth) * 100;
+
+      oldPanel.style.flex = "none";
+      oldPanel.style.width = oldPercent + "%";
+      newPanel.style.flex = "none";
+      newPanel.style.width = newPercent + "%";
+
+      // Reposition divider
+      divider.style.left = oldPercent + "%";
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (dragging) {
+        dragging = false;
+        divider.classList.remove("active");
+        card.classList.remove("resizing");
+        updateStatus(false, "拖拽右下角 ↖ 调整卡片尺寸 · 拖拽中间分隔线 ↔ 调整面板比例");
+      }
+    });
+  }
+
+  // ================================================================
+  // Resize Handle Drag — adjust card width/height
+  // ================================================================
+  function setupResizeDrag(cardId) {
+    const card = document.getElementById(cardId);
+    const handle = card.querySelector(".diffcard-resize-handle");
+
+    if (!handle) return;
+
+    let dragging = false;
+    let startX = 0, startY = 0;
+    let startWidth = 0, startHeight = 0;
+
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragging = true;
+      handle.classList.add("active");
+      card.classList.add("resizing");
+      startX = e.clientX;
+      startY = e.clientY;
+      startWidth = card.getBoundingClientRect().width;
+      startHeight = card.getBoundingClientRect().height;
+      updateStatus(true, "调整卡片大小中... (最小 400×200)");
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      let newWidth = Math.max(400, startWidth + dx);
+      let newHeight = Math.max(200, startHeight + dy);
+      card.style.width = newWidth + "px";
+      card.style.height = newHeight + "px";
+      card.style.flex = "none";
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (dragging) {
+        dragging = false;
+        handle.classList.remove("active");
+        card.classList.remove("resizing");
+        updateStatus(false, "拖拽右下角 ↖ 调整卡片尺寸 · 拖拽中间分隔线 ↔ 调整面板比例");
+      }
+    });
+  }
+
+  // ================================================================
+  // Status bar
+  // ================================================================
+  function updateStatus(active, text) {
+    const dot = document.getElementById("status-dot");
+    const txt = document.getElementById("status-text");
+    dot.className = "dot" + (active ? " resizing" : " default");
+    txt.textContent = text;
+  }
+
+  // ================================================================
+  // Initialize
+  // ================================================================
+  function init() {
+    setupDividerDrag("diffcard1");
+    setupResizeDrag("diffcard1");
+    setupDividerDrag("diffcard2");
+    setupResizeDrag("diffcard2");
+  }
+
+  // Initialize on load
+  init();
+
+  // On card 2, also sync divider position
+  const card2Divider = document.getElementById("diffcard2-divider");
+  if (card2Divider) {
+    card2Divider.style.left = "50%";
+  }
+  const card1Divider = document.getElementById("diffcard1-divider");
+  if (card1Divider) {
+    card1Divider.style.left = "50%";
+  }
+
+  console.log("%c DiffCard Prototype Ready %c|%c 可拖拽右下角调整尺寸 · 拖拽分隔线调整比例 · 代码区横向滚动",
+    "color:#4f7dff;font-weight:bold;", "color:#6b6b7b;", "color:#a0a0b0;");
+</script>
+</body>
+</html>

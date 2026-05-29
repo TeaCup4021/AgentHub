@@ -48,6 +48,17 @@ export function useUpdateAgent(id: string) {
   });
 }
 
+export function useAgentCapabilities() {
+  return useQuery({
+    queryKey: ["agents", "capabilities"],
+    queryFn: async () => {
+      const res = await agentApi.capabilities();
+      return res.data.data;
+    },
+    staleTime: 60000,
+  });
+}
+
 export function useDeleteAgent() {
   const qc = useQueryClient();
   return useMutation({
