@@ -584,3 +584,155 @@
 - `backend/app/services/project.py`（本次新增）
 - `backend/app/api/v1/projects.py`（本次新增）
 - `backend/alembic/versions/0005_add_projects.py`（本次新增）
+
+## 41) CLI Agent 本地引擎接入（新增于 2026-05-30 Claude Code + Codex CLI 集成）
+
+### 41.1 概述
+
+AgentHub 新增两种 **CLI Agent 类型**，将本地安装的 Claude Code CLI 和 Codex CLI 作为一等 Agent 接入系统。CLI Agent 不走云端 LLM API，而是通过本地子进程执行，具备真实文件系统读写、Shell 命令执行、代码搜索与编辑能力。
+
+### 41.2 Provider 标识
+
+| Provider 值 | Agent 名称（种子数据） | 执行引擎 |
+|---|---|---|
+| `claude-code-cli` | Claude Code CLI | `claude -p` 子进程 |
+| `codex-cli` | Codex CLI | `codex exec` 子进程 |
+
+**前端创建 Agent 时**，Provider 下拉已增加 `"Claude Code CLI"` 和 `"Codex CLI"` 选项（`CreateAgentModal.tsx`）。
+
+### 41.3 执行路径
+
+**单聊模式**：
+- `GET /stream?prompt=...` → `stream_conversation` 检测 ConversationParticipants 中的 Agent provider
+- 若为 CLI provider → 路由到 `_cli_sse_stream()`，直接启动本地 CLI 子进程流式返回结果
+- SSE 事件格式与 ADK 流式完全一致：`message_start` → `token`* → `message_end`
+
+**群聊/编排模式**：
+- `CoordinatorBuilder` 检测到 CLI provider 时，创建带 `before_model_callback` 的 ADK `LlmAgent`
+- `before_model_callback` 拦截模型调用，提取 `llm_request` 中的用户任务，转发给 CLI 子进程执行
+- 返回 `LlmResponse` 包装 CLI 输出，Coordinator 通过 `request_task_<name>` 调度（与 LLM Agent 完全对等）
+
+**工具调用**：
+- `@register_builtin("claude_code")` 和 `@register_builtin("codex_cli")` 注册为 ADK FunctionTool
+- 任何 LLM Agent 可通过 `tool_config: {"type": "builtin", "name": "claude_code"}` 调用
+- 工具注册在 `ToolLoader.load()` 首次调用时懒加载触发（`_ensure_builtins_loaded()`）
+
+### 41.4 子进程执行机制
+
+- **跨平台**：Windows 使用 `subprocess.Popen(shell=True)` + `asyncio.to_thread()` 线程池执行；Unix 直接 `subprocess.Popen`（不用 shell）。此方案绕过 Python 3.14 asyncio 事件循环对 subprocess 的限制（`BaseEventLoop._make_subprocess_transport` 抛出 `NotImplementedError`）
+- **输出解析**：Claude Code `stream-json` 逐行 JSON 解析 → 6 种事件类型（`text`/`thinking`/`result`/`error`/`progress`/`tool_use`）；Codex CLI 逐行文本事件
+- **超时控制**：`asyncio.timeout()` + `subprocess.TimeoutExpired` → kill 进程
+- **环境变量注入**：子进程继承 `os.environ` + `CLICOLOR=0` `FORCE_COLOR=0` `NO_COLOR=1` 确保纯文本输出
+
+### 41.5 新增环境变量
+
+| 变量名 | 默认值 | 说明 |
+|---|---|---|
+| `CLAUDE_CODE_CLI_PATH` | `claude` | Claude Code CLI 可执行文件路径 |
+| `CODEX_CLI_PATH` | `codex` | Codex CLI 可执行文件路径 |
+| `CLI_DEFAULT_WORKSPACE` | `.` | CLI 子进程工作目录（默认项目根目录） |
+| `CLAUDE_CODE_TIMEOUT_SECONDS` | `300` | Claude Code 单次执行超时（秒） |
+| `CLAUDE_CODE_MAX_BUDGET_USD` | `5.0` | Claude Code 单次最大 API 费用（美元） |
+| `CLAUDE_CODE_ALLOWED_TOOLS` | `Bash,Read,Edit,Write,Glob,Grep` | Claude Code 允许的工具列表 |
+| `CODEX_CLI_TIMEOUT_SECONDS` | `300` | Codex CLI 单次执行超时（秒） |
+| `CODEX_CLI_MODEL` | `deepseek-v4-pro` | Codex CLI 默认模型 |
+| `OPENAI_BASE_URL` | `null` | OpenAI/LiteLLM 自定义 API 地址（本期新增，之前遗漏） |
+
+### 41.6 种子 Agent 变更
+
+- `seed.py` 的 `DEFAULT_AGENTS` 新增 `Claude Code CLI`（provider=`claude-code-cli`）和 `Codex CLI`（provider=`codex-cli`）
+- **种子去重逻辑变更**：从"存在任意 Agent 则跳过全部"改为"按 Agent 名称逐个检查是否存在，仅添加缺失的 Agent"（`select(Agent.name)` + 集合查重）
+- 已有数据库的旧 Agent 不会被覆盖，同名 Agent 自动跳过
+
+### 41.7 前端变更
+
+- **Agent 创建/编辑**：Provider 下拉新增 `"claude-code-cli"`（Claude Code CLI）和 `"codex-cli"`（Codex CLI）；模型下拉新增对应默认选项
+- **对话创建**：Agent 列表中会显示 CLI Agent（`isActive=true`），可选为单聊或群聊成员
+- **流式渲染**：CLI Agent 的 SSE 事件格式（`message_start` → `token` → `message_end`）与 ADK Agent 完全一致，前端无需特殊处理
+- **空回复处理**：CLI 执行失败时 `message_end.finish_reason="error"`，消息 `status="failed"`，前端行为与 LLM Agent 失败一致
+
+### 41.8 Agent 查询方式
+
+- **ConversationParticipants 表**：会话与 Agent 的关联通过 `conversation_participants` 表存储（`participant_type='agent'`），`Conversation` ORM 模型本身**无 `agent_ids` 列**
+- **查询示例**：`SELECT participant_id FROM conversation_participants WHERE conversation_id=$1 AND participant_type='agent'`
+- **CLI Agent 路由**：`stream_conversation` 通过此查询获取 Agent 列表，再判断 provider 是否属于 `CLI_PROVIDERS`
+
+### 41.9 实现文件
+
+**新增**：
+- `backend/app/services/adk/cli_runner.py` — `BaseCliRunner`、`ClaudeCodeRunner`、`CodexCliRunner` + 工厂函数
+- `backend/app/services/adk/cli_tools.py` — `@register_builtin("claude_code")` + `@register_builtin("codex_cli")`
+
+**修改**：
+- `backend/app/core/config.py` — CLI 相关环境变量 + `OPENAI_BASE_URL`
+- `backend/app/core/seed.py` — 种子 Agent 新增 + 去重逻辑变更
+- `backend/app/services/adk/tool_loader.py` — `_ensure_builtins_loaded()` 懒加载
+- `backend/app/services/adk/coordinator_builder.py` — CLI provider 检测 → `before_model_callback` 拦截
+- `backend/app/api/v1/conversations.py` — `_cli_sse_stream()` + 单聊 CLI 路由 + `ConversationParticipant` 查询
+- `backend/.env` / `.env.example` — CLI 路径、工作目录、缺失字段补充
+- `agenthub-web/src/components/agent/CreateAgentModal.tsx` — Provider/Model 下拉新增 CLI 选项
+
+## 42) Codex CLI 特殊约束与已知差异（新增于 2026-05-31）
+
+### 42.1 与 Claude Code CLI 的能力差异
+
+| | Claude Code CLI | Codex CLI |
+|---|---|---|
+| 文件读取 | Bash/Read/Glob/Grep 工具 | workspace-write sandbox |
+| 文件写入 | Edit/Write 工具 | workspace-write sandbox（工作目录内） |
+| 命令执行 | Bash 工具 | 不支持 |
+| 输出方式 | token 级流式（`stream-json`） | 整行输出（无 token 级流式） |
+| 权限控制 | `--permission-mode bypassPermissions` | `-s workspace-write`（sandbox 模式） |
+| Windows 传参 | 直接 `.exe` + `-p` 参数 | 通过 **stdin 管道**传 prompt |
+
+### 42.2 子进程执行机制（跨平台）
+
+- **通用方案**：`subprocess.Popen` + `asyncio.to_thread()` 线程池，避免 Python 3.14 asyncio 事件循环对子进程的限制
+- **Windows 特殊处理**：解析 npm 全局安装的 `.cmd` shim 文件，找到实际可执行文件直接调用：
+  - Claude Code → `node_modules/@anthropic-ai/claude-code/bin/claude.exe`（直接执行）
+  - Codex CLI → `node node_modules/@openai/codex/bin/codex.js`（node 解释执行）
+- **Codex 中文 prompt 传递**：**必须通过 stdin 管道**传入（`codex exec -` 从 stdin 读取），禁止用命令行参数传递中文——Windows 命令行编码（GBK/CP936）会导致 UTF-8 中文损毁
+- **Codex 流式结束**：Codex 输出响应后 stdout 保持打开约 20 秒（telemetry/cleanup），需通过 **idle timeout**（`_idle_timeout=3.0s`）检测输出停止后主动 kill 进程并结束 SSE 流
+
+### 42.3 Windows 命令行编码问题（重要）
+
+**问题**：Windows 命令行使用系统活动代码页（中文系统为 GBK/CP936），通过 `cmd.exe` 或 `shell=True` 传递中文参数时，UTF-8 字符被错误转换为 ANSI 编码，导致子进程收到的 prompt 为乱码。
+
+**解决方案**：
+1. 不使用 `cmd.exe /c` 或 `shell=True`（两者都会触发编码转换）
+2. 解析 `.cmd` shim 文件找到实际可执行文件路径
+3. 使用 `subprocess.Popen([exe, arg1, arg2, ...], shell=False)` 直接调用，参数通过 `CreateProcessW`（UTF-16）传递
+4. Codex CLI 额外通过 **stdin 管道**传入 prompt（`codex exec -`），彻底避开命令行编码问题
+
+### 42.4 Codex CLI 启动参数
+
+当前 Codex CLI 的默认启动参数：
+```
+node codex.js exec - -m deepseek-v4-pro -s workspace-write
+```
+- `-`：从 stdin 读取 prompt
+- `-m deepseek-v4-pro`：使用的模型（可通过 `CODEX_CLI_MODEL` 环境变量覆盖）
+- `-s workspace-write`：允许在工作目录内创建和修改文件（默认 `read-only` 仅可读）
+
+### 42.5 Codex CLI 与其他 Agent 的输出差异
+
+- **Codex CLI** 输出为整行文本，SSE `token` 事件数量较少（每条输出行一个 `token` 事件），无 `thinking` 事件
+- **Claude Code CLI** 输出为 `stream-json` 格式，包含 `thinking`、`text`、`tool_use` 等多种事件类型，token 级增量
+- 前端对两种 CLI Agent 的 SSE 事件处理逻辑**完全一致**（`message_start` → `token` → `message_end`），无需区分
+
+### 42.6 环境变量补充
+
+| 变量名 | 默认值 | 说明 |
+|---|---|---|
+| `CLAUDE_CODE_CLI_PATH` | `claude` | Claude Code CLI 路径，Windows 建议配完整路径 |
+| `CODEX_CLI_PATH` | `codex` | Codex CLI 路径，Windows 建议配完整路径 |
+| `CLI_DEFAULT_WORKSPACE` | `.` | 两个 CLI 的默认工作目录（建议设为项目根目录） |
+| `OPENAI_BASE_URL` | `null` | Codex CLI 使用的 API 地址（若不使用官方 OpenAI API） |
+
+### 42.7 Codex CLI 开发注意事项
+
+- **启动参数不要用中文**：命令行传参中文在 Windows 上必然损毁，必须用 stdin
+- **默认模型需与 API 提供商匹配**：若使用中转 API（如 DeepSeek），需确认模型名在 API 提供商的支持列表中
+- **sandbox 默认值**：若不指定 `-s`，Codex 默认 `read-only`，用户可能困惑为什么不能创建文件
+- **idle timeout**：3 秒已足够覆盖 Codex 正常输出间隔；若用户使用慢速 API 可适当调大 `_idle_timeout`
+- **不要使用 `shell=True`**：会导致中文和其他非 ASCII 字符编码损毁

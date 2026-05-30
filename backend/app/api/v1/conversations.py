@@ -9,17 +9,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import settings
 from app.core.database import get_db, async_session_maker
 from app.schemas.conversation import ConversationCreate, ConversationUpdate, ConversationResponse, PinMessageRequest
 from app.schemas.base import Page
 from app.models.conversation import Conversation
+from app.models.conversation_participant import ConversationParticipant
+from app.models.agent import Agent as AgentModel
 from app.models.message_pin import MessagePin
 from app.models.orchestrator_task import OrchestratorTask
 from app.models.message_mention import MessageMention
 from app.services.conversation import ConversationService
 from app.services.adapters.adk_to_sse import ADKToSSETranslator
 from app.services.adk.runner import AgentHubRunner, build_single_chat_agent
-from app.services.adk.coordinator_builder import CoordinatorBuilder
+from app.services.adk.coordinator_builder import CoordinatorBuilder, CLI_PROVIDERS
+from app.services.adk.cli_runner import get_claude_runner, get_codex_runner, CliEvent
 from app.services.adk.workflow_builder import WorkflowBuilder
 from app.services.adk.execution_tracer import ExecutionTracer
 from app.services.adk.merge_aggregator import MergeAggregator
@@ -158,6 +162,84 @@ def _parse_sse_data(payload: str) -> Optional[dict]:
             except json.JSONDecodeError:
                 return None
     return None
+
+
+async def _cli_sse_stream(
+    conv_id: UUID, provider: str, prompt: Optional[str],
+) -> AsyncGenerator[str, None]:
+    """Stream CLI tool output as SSE events."""
+    prompt_text = (prompt or "Hello").strip()
+    runner = get_claude_runner() if provider == "claude-code-cli" else get_codex_runner()
+    message_id = str(uuid4())
+    provider_label = "Claude Code" if provider == "claude-code-cli" else "Codex CLI"
+
+    has_error = False
+    accumulated = ""
+    token_index = 0
+
+    logger.info("CLI stream start: conv=%s provider=%s prompt=%.50s", conv_id, provider, prompt_text)
+
+    yield _format_sse("message_start", {
+        "version": "v1", "event_id": str(uuid4()),
+        "conversation_id": str(conv_id), "message_id": message_id,
+        "sender": {"type": "agent", "id": provider, "name": provider_label},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    try:
+        timeout = (
+            settings.CLAUDE_CODE_TIMEOUT_SECONDS if provider == "claude-code-cli"
+            else settings.CODEX_CLI_TIMEOUT_SECONDS
+        )
+        async for event in runner.run_stream(prompt=prompt_text, timeout=timeout):
+            if event.event_type == "text":
+                accumulated += event.content
+                token_index += 1
+                yield _format_sse("token", {
+                    "version": "v1", "event_id": str(uuid4()),
+                    "conversation_id": str(conv_id), "message_id": message_id,
+                    "delta": event.content, "index": token_index,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+            elif event.event_type == "error":
+                has_error = True
+                yield _format_sse("error", {
+                    "version": "v1", "event_id": str(uuid4()),
+                    "conversation_id": str(conv_id), "message_id": message_id,
+                    "code": "CLI_ERROR", "message": event.content,
+                    "retryable": True,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+    except Exception as e:
+        has_error = True
+        logger.exception("CLI stream failed for conv=%s", conv_id)
+        yield _format_sse("error", {
+            "version": "v1", "event_id": str(uuid4()),
+            "conversation_id": str(conv_id), "message_id": message_id,
+            "code": "CLI_EXECUTION_ERROR", "message": str(e),
+            "retryable": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+
+    try:
+        async with async_session_maker() as db:
+            await MessageService.persist_stream_message(
+                db=db, conv_id=conv_id, message_id=message_id,
+                sender_name=provider_label,
+                content=accumulated,
+                status="failed" if has_error else "done",
+            )
+            await db.commit()
+    except Exception:
+        logger.exception("Persist CLI stream message failed")
+
+    yield _format_sse("message_end", {
+        "version": "v1", "event_id": str(uuid4()),
+        "conversation_id": str(conv_id), "message_id": message_id,
+        "finish_reason": "error" if has_error else "completed",
+        "usage": {"input_tokens": 0, "output_tokens": len(accumulated)},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
 
 
 async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -> AsyncGenerator[str, None]:
@@ -837,6 +919,29 @@ async def stream_conversation(
             _dag_workflow_stream(conv_id, user_id, prompt, confirmed_task, db),
             media_type="text/event-stream",
         )
+
+    # CLI agent single-chat routing: check if conversation uses a CLI-backed agent
+    conv = await db.get(Conversation, conv_id)
+    if conv:
+        parts_result = await db.execute(
+            select(ConversationParticipant.participant_id).where(
+                ConversationParticipant.conversation_id == conv_id,
+                ConversationParticipant.participant_type == "agent",
+            )
+        )
+        agent_ids = parts_result.scalars().all()
+        if agent_ids:
+            agents_result = await db.execute(
+                select(AgentModel).where(AgentModel.id.in_(agent_ids))
+            )
+            conv_agents = agents_result.scalars().all()
+            cli_agents = [a for a in conv_agents if (a.provider or "").lower() in CLI_PROVIDERS]
+            if cli_agents:
+                cli_provider = (cli_agents[0].provider or "").lower()
+                return StreamingResponse(
+                    _cli_sse_stream(conv_id, cli_provider, prompt),
+                    media_type="text/event-stream",
+                )
 
     if _use_adk_stream():
         return StreamingResponse(

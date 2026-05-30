@@ -24,12 +24,29 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: Optional[str] = None
     ANTHROPIC_BASE_URL: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    OPENAI_BASE_URL: Optional[str] = None
 
     # Auth
     AUTH_SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
     AUTH_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     AUTH_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     AUTH_ALGORITHM: str = "HS256"
+
+    # CLI tool paths
+    CLAUDE_CODE_CLI_PATH: str = "claude"
+    CODEX_CLI_PATH: str = "codex"
+
+    # Claude Code CLI
+    CLAUDE_CODE_TIMEOUT_SECONDS: int = 300
+    CLAUDE_CODE_MAX_BUDGET_USD: float = 5.0
+    CLAUDE_CODE_ALLOWED_TOOLS: str = "Bash,Read,Edit,Write,Glob,Grep"
+
+    # Codex CLI
+    CODEX_CLI_TIMEOUT_SECONDS: int = 300
+    CODEX_CLI_MODEL: str = "deepseek-v4-pro"
+
+    # Default workspace for CLI tools
+    CLI_DEFAULT_WORKSPACE: str = "."
 
     # Email (verification code)
     EMAIL_API_KEY: str = ""

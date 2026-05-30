@@ -13,11 +13,15 @@ interface CreateAgentModalProps {
 const PROVIDERS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "litellm", label: "LiteLLM" },
+  { value: "claude-code-cli", label: "Claude Code CLI" },
+  { value: "codex-cli", label: "Codex CLI" },
 ];
 
 const MODELS_BY_PROVIDER: Record<string, string[]> = {
   anthropic: ["claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-7"],
   litellm: ["openai/gpt-5", "anthropic/claude-haiku-4-5"],
+  "claude-code-cli": ["claude-code-default"],
+  "codex-cli": ["deepseek-v4-pro", "deepseek-v4-flash"],
 };
 
 const AVAILABLE_TOOLS = [

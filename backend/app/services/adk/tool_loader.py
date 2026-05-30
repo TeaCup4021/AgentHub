@@ -56,11 +56,19 @@ class ToolLoader:
         ``"agent_tool"`` entries.
     """
 
+    _builtins_loaded: bool = False
+
     def __init__(
         self,
         agent_models: dict[str, AgentModel] | None = None,
     ) -> None:
         self._agent_models = agent_models or {}
+
+    @classmethod
+    def _ensure_builtins_loaded(cls) -> None:
+        if not cls._builtins_loaded:
+            from app.services.adk import cli_tools  # noqa: F401  triggers @register_builtin
+            cls._builtins_loaded = True
 
     def load(self, tool_config: dict | None) -> list:
         """Parse tool_config and return ADK Tool list.
@@ -74,6 +82,7 @@ class ToolLoader:
               ]
             }
         """
+        self._ensure_builtins_loaded()
         if not tool_config:
             return []
 
