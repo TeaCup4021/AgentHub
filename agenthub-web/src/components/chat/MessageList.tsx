@@ -2,13 +2,13 @@ import { useState, useCallback, useEffect, useRef, useLayoutEffect, memo } from 
 import { Spin, Badge } from "@douyinfe/semi-ui";
 import { motion } from "framer-motion";
 import { useChatStore } from "@/stores/chatStore";
-import { CardRenderer } from "@/components/cards";
 import { AgentDetailPopover } from "./AgentDetailPopover";
 import { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
 import { MarkdownBubble } from "./MarkdownBubble";
 import { MessageActions } from "./MessageActions";
 import { formatTime, formatFullTime } from "@/lib/formatTime";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { CardRenderer } from "@/components/cards";
 import type { Agent, Message, ThinkingStep } from "@/types";
 import { ThinkingBlock } from "./ThinkingBlock";
 

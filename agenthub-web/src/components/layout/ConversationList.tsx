@@ -8,7 +8,6 @@ import {
   Dropdown,
   Badge,
   Empty,
-  Typography,
 } from "@douyinfe/semi-ui";
 import {
   IconSearch,
@@ -28,7 +27,7 @@ import { formatRelativeTime, truncate } from "@/lib/utils";
 import { CreateAgentModal, AgentManageModal } from "@/components/agent";
 import { ConversationSkeleton } from "@/components/chat/Skeleton";
 import { exportConversation } from "@/lib/exportConversation";
-import type { Agent, Conversation, Message } from "@/types";
+import type { Agent, Conversation, Message, PaginatedData } from "@/types";
 
 const pinIcon = <IconMapPin />;
 const editIcon = <IconEdit />;
@@ -52,11 +51,14 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [showCreateAgent, setShowCreateAgent] = useState(false);
-  const [showManageAgents, setShowManageAgents] = useState(false);
+  const showManageAgents = useUIStore((s) => s.manageAgentsOpen);
+  const setShowManageAgents = useUIStore((s) => s.setManageAgentsOpen);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [contextVisibleId, setContextVisibleId] = useState<string | null>(null);
 
   const activeId = useChatStore((s) => s.activeConversationId);
   const searchQuery = useChatStore((s) => s.searchQuery);
@@ -131,8 +133,8 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
 
     const prevData = qc.getQueryData(["conversations"]);
 
-    qc.setQueryData(["conversations"], (old: Conversation[] | undefined) =>
-      old ? old.filter((c) => c.id !== idToDelete) : old,
+    qc.setQueryData(["conversations"], (old: PaginatedData<Conversation> | undefined) =>
+      old ? { ...old, list: old.list.filter((c) => c.id !== idToDelete), total: old.total - 1 } : old,
     );
 
     deleteConversation.mutate(idToDelete, {
@@ -164,31 +166,63 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
   }, [batchMode, exitBatchMode]);
 
   const newConvTrigger = useUIStore((s) => s.newConvTrigger);
+  const resetNewConvTrigger = useUIStore((s) => s.resetNewConvTrigger);
   useEffect(() => {
-    if (newConvTrigger > 0) openNewDialog();
+    if (newConvTrigger > 0) {
+      openNewDialog();
+      resetNewConvTrigger();
+    }
   }, [newConvTrigger]);
 
   const handleBatchArchive = useCallback(() => {
-    let count = 0;
-    for (const id of selectedIds) {
-      updateConversation.mutate({ id, isArchived: true });
-      if (activeId === id) setActiveConversation(null);
-      count++;
-    }
-    toast.success(`已归档 ${count} 个对话`);
+    const ids = [...selectedIds];
+    const prevData = qc.getQueryData(["conversations"]);
+
+    qc.setQueryData(["conversations"], (old: PaginatedData<Conversation> | undefined) =>
+      old ? { ...old, list: old.list.map((c) => ids.includes(c.id) ? { ...c, isArchived: true } : c) } : old,
+    );
+    if (activeId && ids.includes(activeId)) setActiveConversation(null);
+
+    let failed = false;
+    Promise.all(ids.map((id) =>
+      updateConversation.mutateAsync({ id, isArchived: true }).catch(() => { failed = true; })
+    )).finally(() => {
+      if (failed) {
+        if (prevData) qc.setQueryData(["conversations"], prevData);
+        toast.error("部分归档失败，请刷新后重试");
+      } else {
+        toast.success("已归档 " + ids.length + " 个对话");
+      }
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    });
+
     exitBatchMode();
-  }, [selectedIds, updateConversation, activeId, setActiveConversation, exitBatchMode]);
+  }, [selectedIds, updateConversation, activeId, setActiveConversation, exitBatchMode, qc]);
 
   const handleBatchDelete = useCallback(() => {
-    let count = 0;
-    for (const id of selectedIds) {
-      deleteConversation.mutate(id);
-      if (activeId === id) setActiveConversation(null);
-      count++;
-    }
-    toast.success(`已删除 ${count} 个对话`);
+    const ids = [...selectedIds];
+    const prevData = qc.getQueryData(["conversations"]);
+
+    qc.setQueryData(["conversations"], (old: PaginatedData<Conversation> | undefined) =>
+      old ? { ...old, list: old.list.filter((c) => !ids.includes(c.id)), total: Math.max(0, old.total - ids.length) } : old,
+    );
+    if (activeId && ids.includes(activeId)) setActiveConversation(null);
+
+    let failed = false;
+    Promise.all(ids.map((id) =>
+      deleteConversation.mutateAsync(id).catch(() => { failed = true; })
+    )).finally(() => {
+      if (failed) {
+        if (prevData) qc.setQueryData(["conversations"], prevData);
+        toast.error("部分删除失败，请刷新后重试");
+      } else {
+        toast.success("已删除 " + ids.length + " 个对话");
+      }
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    });
+
     exitBatchMode();
-  }, [selectedIds, deleteConversation, activeId, setActiveConversation, exitBatchMode]);
+  }, [selectedIds, deleteConversation, activeId, setActiveConversation, exitBatchMode, qc]);
 
   const handleExport = useCallback((conv: Conversation) => {
     const messagesData = qc.getQueryData(["messages", conv.id]);
@@ -211,22 +245,32 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
   }, [qc]);
 
   const renderConversationItem = (conv: Conversation, isArchived: boolean) => {
+    const closeMenu = () => setContextVisibleId(null);
+
+    const inBatch = batchMode && selectedIds.size > 0;
+
     const menu = isArchived
       ? [
-          { node: "item" as const, itemKey: "unarchive", name: "取消归档", icon: <IconRestore />, onClick: () => handleUnarchive(conv.id) },
+          { node: "item" as const, itemKey: "unarchive", name: "取消归档", icon: <IconRestore />, onClick: () => { closeMenu(); handleUnarchive(conv.id); } },
           { node: "divider" as const },
-          { node: "item" as const, itemKey: "delete", name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger", onClick: () => { setConfirmDeleteId(conv.id); } },
+          inBatch
+            ? { node: "item" as const, itemKey: "delete_batch", name: `批量删除 (${selectedIds.size} 项)`, icon: deleteIcon, className: "semi-dropdown-item-danger", onClick: () => { closeMenu(); setConfirmBatchDelete(true); } }
+            : { node: "item" as const, itemKey: "delete", name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger", onClick: () => { closeMenu(); setConfirmDeleteId(conv.id); } },
         ]
       : [
           ...(conv.isPinned
-            ? [{ node: "item" as const, itemKey: "unpin", name: "取消置顶", icon: pinIcon, onClick: () => handlePin(conv) }]
-            : [{ node: "item" as const, itemKey: "pin", name: "置顶", icon: pinIcon, onClick: () => handlePin(conv) }]
+            ? [{ node: "item" as const, itemKey: "unpin", name: "取消置顶", icon: pinIcon, onClick: () => { closeMenu(); handlePin(conv); } }]
+            : [{ node: "item" as const, itemKey: "pin", name: "置顶", icon: pinIcon, onClick: () => { closeMenu(); handlePin(conv); } }]
           ),
-          { node: "item" as const, itemKey: "rename", name: "重命名", icon: editIcon, onClick: () => handleRenameStart(conv) },
-          { node: "item" as const, itemKey: "archive", name: "归档", icon: archiveIcon, onClick: () => handleArchive(conv.id) },
-          { node: "item" as const, itemKey: "export", name: "导出", icon: downloadIcon, onClick: () => handleExport(conv) },
+          { node: "item" as const, itemKey: "rename", name: "重命名", icon: editIcon, onClick: () => { closeMenu(); handleRenameStart(conv); } },
+          inBatch
+            ? { node: "item" as const, itemKey: "archive_batch", name: `批量归档 (${selectedIds.size} 项)`, icon: archiveIcon, onClick: () => { closeMenu(); handleBatchArchive(); } }
+            : { node: "item" as const, itemKey: "archive", name: "归档", icon: archiveIcon, onClick: () => { closeMenu(); handleArchive(conv.id); } },
+          { node: "item" as const, itemKey: "export", name: "导出", icon: downloadIcon, onClick: () => { closeMenu(); handleExport(conv); } },
           { node: "divider" as const },
-          { node: "item" as const, itemKey: "delete", name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger", onClick: () => { setConfirmDeleteId(conv.id); } },
+          inBatch
+            ? { node: "item" as const, itemKey: "delete_batch", name: `批量删除 (${selectedIds.size} 项)`, icon: deleteIcon, className: "semi-dropdown-item-danger", onClick: () => { closeMenu(); setConfirmBatchDelete(true); } }
+            : { node: "item" as const, itemKey: "delete", name: "删除", icon: deleteIcon, className: "semi-dropdown-item-danger", onClick: () => { closeMenu(); setConfirmDeleteId(conv.id); } },
         ];
 
     return (
@@ -235,6 +279,8 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
         trigger="contextMenu"
         position="right"
         menu={menu}
+        visible={contextVisibleId === conv.id}
+        onVisibleChange={(v) => setContextVisibleId(v ? conv.id : null)}
       >
         <div
           onClick={() => {
@@ -335,9 +381,6 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
         gap: 8,
         padding: "14px 16px 10px",
       }}>
-        <Typography.Title heading={6} style={{ flex: 1, margin: 0, color: "var(--color-text-primary)" }}>
-          AgentHub
-        </Typography.Title>
         <Button
           icon={<IconPlus />}
           theme="borderless"
@@ -592,6 +635,22 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
       >
         <p style={{ fontSize: "var(--font-size-md)", color: "var(--color-text-secondary)" }}>
           删除后不可恢复，确定要删除这个对话吗？
+        </p>
+      </Modal>
+
+      <Modal
+        visible={confirmBatchDelete}
+        title="批量删除对话"
+        onCancel={() => setConfirmBatchDelete(false)}
+        onOk={() => { handleBatchDelete(); setConfirmBatchDelete(false); }}
+        okButtonProps={{ theme: "solid", type: "danger" }}
+        cancelButtonProps={{ theme: "borderless" }}
+        okText="删除"
+        maskClosable
+        style={{ width: 320 }}
+      >
+        <p style={{ fontSize: "var(--font-size-md)", color: "var(--color-text-secondary)" }}>
+          删除后不可恢复，确定要删除选中的 {selectedIds.size} 个对话吗？
         </p>
       </Modal>
 

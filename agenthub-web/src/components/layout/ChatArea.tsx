@@ -1,22 +1,24 @@
 import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Banner, Button, Empty, Spin } from "@douyinfe/semi-ui";
-import { IconComment } from "@douyinfe/semi-icons";
+import { Banner, Button, Spin } from "@douyinfe/semi-ui";
 import { useChatStore } from "@/stores/chatStore";
 import { useMessages } from "@/hooks/useMessages";
 import { useAgents } from "@/hooks/useAgents";
 import { useCreateConversation, useUpdateAnyConversation } from "@/hooks";
 import { createSSEStream } from "@/lib/sse";
 import { messageApi } from "@/lib/api";
-import { ChatHeader, MessageList, ChatInput } from "@/components/chat";
+import { ChatHeader, MessageList, ChatInput, WelcomePage } from "@/components/chat";
 import { AgentProgressBar } from "@/components/chat/AgentProgressBar";
 import { AgentDashboard } from "@/components/chat/AgentDashboard";
 import { MentionSwitchDialog } from "@/components/chat/MentionSwitchDialog";
+import { ReActPanel } from "@/components/chat/ReActPanel";
+import { ArtifactWorkbench } from "@/components/chat/ArtifactWorkbench";
 import { useDashboardStore } from "@/stores/dashboardStore";
+import { useUIStore } from "@/stores/uiStore";
 import { useTokenUsageStore, estimateCost } from "@/stores/tokenUsageStore";
 import type { InfiniteData } from "@tanstack/react-query";
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, SSEError, Conversation, Message, MessageListData } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, SSEError, Conversation, Message, MessageListData, PlanSubtask } from "@/types";
 
 interface ChatAreaProps {
   conversations: Conversation[];
@@ -35,8 +37,10 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const disconnectRef = useRef<(() => void) | null>(null);
   const streamMsgIdRef = useRef<string | null>(null);
   const streamAgentRef = useRef<string>("");
+  const streamSenderIdRef = useRef<string>("");
   const lastPromptRef = useRef<string>("");
-  const retryRef = useRef({ count: 0, timeoutId: null as ReturnType<typeof setTimeout> | null });
+  const planMetaRef = useRef<PlanSubtask[] | null>(null);
+  const retryRef = useRef({ timeoutId: null as ReturnType<typeof setTimeout> | null });
 
   const connectionStatus = useChatStore((s) => s.connectionStatus);
   const retryCount = useChatStore((s) => s.retryCount);
@@ -56,6 +60,9 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     hasNextPage,
     isFetchingNextPage,
     isLoading: isMessagesLoading,
+    isError: isMessagesError,
+    error: messagesError,
+    refetch: refetchMessages,
     fetchNextPage,
   } = useMessages(activeId ?? "");
   const messageSearch = useChatStore((s) => s.messageSearch);
@@ -72,7 +79,16 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const createConversation = useCreateConversation();
   const updateConversation = useUpdateAnyConversation();
 
+  const triggerNewConv = useUIStore((s) => s.triggerNewConv);
+  const setManageAgentsOpen = useUIStore((s) => s.setManageAgentsOpen);
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation);
+  const setDagTaskId = useChatStore((s) => s.setDagTaskId);
+
   const conversation = conversations.find((c) => c.id === activeId);
+  const artifactCount = useMemo(
+    () => rawMessages.reduce((sum, m) => sum + (m.artifacts?.length ?? 0), 0),
+    [rawMessages],
+  );
 
   interface SwitchData {
     content: string;
@@ -81,6 +97,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     externalAgentNames: string[];
   }
   const [switchData, setSwitchData] = useState<SwitchData | null>(null);
+  const [viewMode, setViewMode] = useState<"chat" | "artifacts">("chat");
   const sendRef = useRef<(convId: string, content: string, mentions: string[]) => void>(null!);
 
   useEffect(() => {
@@ -92,6 +109,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     streamAgentRef.current = "";
     setIsStreaming(false);
     clearAgentStatuses();
+    setDagTaskId(null);
 
     return () => {
       disconnectRef.current?.();
@@ -109,11 +127,14 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       if (useChatStore.getState().connectionStatus === 'reconnecting') {
         setConnectionStatus('connected');
         setRetryCount(0);
-        retryRef.current.count = 0;
       }
       streamMsgIdRef.current = data.message_id;
       streamAgentRef.current = data.sender.name;
+      streamSenderIdRef.current = data.sender.id;
       initStreaming(data.message_id);
+      if (data.sender.type === "orchestrator" && data.meta?.plan) {
+        planMetaRef.current = data.meta.plan;
+      }
     },
     onToken: (data: SSEToken) => {
       if (streamMsgIdRef.current) appendToken(streamMsgIdRef.current, data.delta);
@@ -122,6 +143,9 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       if (streamMsgIdRef.current) appendArtifact(streamMsgIdRef.current, data.artifact);
     },
     onAgentStatus: (data: SSEAgentStatus) => {
+      if (data.task_id) {
+        useChatStore.getState().setDagTaskId(data.task_id);
+      }
       updateAgentStatus({
         agentId: data.agent.id,
         agentName: data.agent.name,
@@ -140,6 +164,13 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       }
     },
     onMessageEnd: (data: SSEMessageEnd) => {
+      if (data.finish_reason === "plan_draft" && planMetaRef.current) {
+        useChatStore.getState().setPendingPlan({
+          planId: streamMsgIdRef.current ?? "",
+          subtasks: planMetaRef.current,
+        });
+        planMetaRef.current = null;
+      }
       if (streamMsgIdRef.current) {
         finalizeStreaming(streamMsgIdRef.current);
         streamMsgIdRef.current = null;
@@ -161,20 +192,25 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           inputTokens: data.usage.input_tokens,
           outputTokens: data.usage.output_tokens,
           totalTokens: data.usage.input_tokens + data.usage.output_tokens,
-          estimatedCost: estimateCost(data.usage.input_tokens, data.usage.output_tokens, conv.agentIds[0]),
+          estimatedCost: estimateCost(
+            data.usage.input_tokens,
+            data.usage.output_tokens,
+            agents.find((a) => a.id === streamSenderIdRef.current)?.model,
+          ),
         });
       }
     },
     onError: (data: SSEError) => {
       toast.error(data.message || "Agent 响应出错");
       setIsStreaming(false);
+      setDagTaskId(null);
+      clearAgentStatuses();
     },
   }), [qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
 
   const executeSend = useCallback((convId: string, content: string, mentions: string[], conv: Conversation | undefined) => {
     setConnectionStatus('connected');
     setRetryCount(0);
-    retryRef.current.count = 0;
     if (retryRef.current.timeoutId) {
       clearTimeout(retryRef.current.timeoutId);
       retryRef.current.timeoutId = null;
@@ -252,25 +288,22 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     setIsStreaming(true);
     lastPromptRef.current = content;
 
+    const streamMode = conv?.type === "group" ? "auto_orchestrate" : undefined;
+
     const onConnectionError = () => {
       const MAX_RETRIES = 3;
       const delays = [1000, 2000, 4000];
-      const attempt = retryRef.current.count;
+      const attempt = useChatStore.getState().retryCount;
 
       if (attempt >= MAX_RETRIES) {
         setConnectionStatus('failed');
         setIsStreaming(false);
-        if (streamMsgIdRef.current) {
-          finalizeStreaming(streamMsgIdRef.current);
-          streamMsgIdRef.current = null;
-        }
         qc.invalidateQueries({ queryKey: ["messages", convId] });
         return;
       }
 
       setConnectionStatus('reconnecting');
       setRetryCount(attempt + 1);
-      retryRef.current.count = attempt + 1;
 
       const delay = delays[attempt];
       retryRef.current.timeoutId = setTimeout(() => {
@@ -281,17 +314,16 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           onConnectionError: () => {
             setConnectionStatus('failed');
             setIsStreaming(false);
-            if (streamMsgIdRef.current) { finalizeStreaming(streamMsgIdRef.current); streamMsgIdRef.current = null; }
             qc.invalidateQueries({ queryKey: ["messages", convId] });
           },
-        }, lastPromptRef.current);
+        }, lastPromptRef.current, streamMode);
       }, delay);
     };
 
     disconnectRef.current = createSSEStream(convId, {
       ...buildCallbacks(convId, conv),
       onConnectionError,
-    }, content);
+    }, content, streamMode);
   }, [activeId, qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
 
   sendRef.current = (convId: string, content: string, mentions: string[]) => {
@@ -339,6 +371,55 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     window.addEventListener("regenerate-message", onRegenerate);
     return () => window.removeEventListener("regenerate-message", onRegenerate);
   }, [handleRegenerate]);
+
+  const handleConfirmPlan = useCallback((planId: string, subtasks: PlanSubtask[]) => {
+    if (!activeId || !conversation) return;
+    const plan = subtasks.map((st) => ({
+      subtask_id: st.subtask_id,
+      agent_id: st.agent.id,
+      instruction: st.instruction,
+    }));
+    messageApi.send(activeId, { content: "", mode: "confirm_plan", plan_id: planId, plan }).then(() => {
+      useChatStore.getState().setPendingPlan(null);
+      qc.invalidateQueries({ queryKey: ["messages", activeId] });
+      disconnectRef.current?.();
+      setIsStreaming(true);
+      const callbacks = buildCallbacks(activeId, conversation);
+      disconnectRef.current = createSSEStream(activeId, {
+        ...callbacks,
+        onConnectionError: () => {
+          setConnectionStatus("failed");
+          setIsStreaming(false);
+        },
+      }, undefined, "auto_orchestrate");
+    }).catch(() => {
+      toast.error("确认计划失败，请重试");
+    });
+  }, [activeId, conversation, qc, setIsStreaming, buildCallbacks, setConnectionStatus]);
+
+  const handleAdjustPlan = useCallback((subtasks: PlanSubtask[]) => {
+    const current = useChatStore.getState().pendingPlan;
+    if (current) {
+      useChatStore.getState().setPendingPlan({ ...current, subtasks });
+    }
+  }, []);
+
+  useEffect(() => {
+    const onConfirm = (e: Event) => {
+      const { planId, subtasks } = (e as CustomEvent).detail as { planId: string; subtasks: PlanSubtask[] };
+      handleConfirmPlan(planId, subtasks);
+    };
+    const onAdjust = (e: Event) => {
+      const { subtasks } = (e as CustomEvent).detail as { subtasks: PlanSubtask[] };
+      handleAdjustPlan(subtasks);
+    };
+    window.addEventListener("orchestrator-confirm", onConfirm);
+    window.addEventListener("orchestrator-adjust", onAdjust);
+    return () => {
+      window.removeEventListener("orchestrator-confirm", onConfirm);
+      window.removeEventListener("orchestrator-adjust", onAdjust);
+    };
+  }, [handleConfirmPlan, handleAdjustPlan]);
 
   const handleSend = useCallback(async (content: string, mentions: string[]) => {
     if (!activeId || !conversation) return;
@@ -415,7 +496,6 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     if (!activeId || !conversation) return;
     setConnectionStatus('connected');
     setRetryCount(0);
-    retryRef.current.count = 0;
     executeSend(activeId, "", [], conversation);
   }, [activeId, conversation, setConnectionStatus, setRetryCount, executeSend]);
 
@@ -432,6 +512,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     }
     setIsStreaming(false);
     clearAgentStatuses();
+    setDagTaskId(null);
     if (retryRef.current.timeoutId) {
       clearTimeout(retryRef.current.timeoutId);
       retryRef.current.timeoutId = null;
@@ -440,19 +521,27 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   if (!conversation) {
     return (
-      <div style={{ display: "flex", height: "100%", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <Empty
-          image={<IconComment style={{ fontSize: 64, color: "var(--color-text-disabled)" }} />}
-          title="选择或创建一个对话开始"
-          description="与 AI Agent 协作，生成代码、文档和更多产出"
-        />
-      </div>
+      <WelcomePage
+        conversations={conversations}
+        agents={agents}
+        onSelectConversation={setActiveConversation}
+        onNewConversation={triggerNewConv}
+        onManageAgents={() => setManageAgentsOpen(true)}
+      />
     );
   }
 
   return (
     <div className="flex h-full flex-col">
-      <ChatHeader conversation={conversation} agents={agents} />
+      <ChatHeader conversation={conversation} agents={agents} messageHitCount={messageSearch ? filteredMessages.length : undefined} />
+      <div style={{ display: "flex", borderBottom: "1px solid var(--color-border-light)", background: "var(--color-bg-elevated)" }}>
+        <TabButton active={viewMode === "chat"} count={rawMessages.length} onClick={() => setViewMode("chat")}>聊天</TabButton>
+        <TabButton active={viewMode === "artifacts"} count={artifactCount} onClick={() => setViewMode("artifacts")}>产物</TabButton>
+      </div>
+      {viewMode === "artifacts" ? (
+        <ArtifactWorkbench messages={rawMessages} agents={agents.map((a) => ({ id: a.id, name: a.name }))} />
+      ) : (
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       {connectionStatus === 'reconnecting' && (
         <Banner
           type="warning"
@@ -483,7 +572,17 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           />
         </>
       )}
-      {isMessagesLoading ? (
+      {isMessagesError ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 32 }}>
+          <p style={{ fontSize: "var(--font-size-md)", color: "var(--color-text-secondary)" }}>
+            加载消息失败
+          </p>
+          <p style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-disabled)", maxWidth: 320, textAlign: "center" }}>
+            {messagesError instanceof Error ? messagesError.message : "请检查网络连接后重试"}
+          </p>
+          <Button size="small" onClick={() => refetchMessages()}>重试</Button>
+        </div>
+      ) : isMessagesLoading ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Spin size="large" />
         </div>
@@ -500,7 +599,16 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           searchText={messageSearch}
         />
       )}
-      {filteredMessages.length === 0 && !isStreaming && (
+      {filteredMessages.length === 0 && !isStreaming && messageSearch && rawMessages.length > 0 ? (
+        <div style={{ padding: "32px 16px", textAlign: "center" }}>
+          <p style={{ fontSize: "var(--font-size-md)", color: "var(--color-text-tertiary)" }}>
+            未找到匹配的消息
+          </p>
+          <p style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-disabled)", marginTop: 4 }}>
+            尝试其他关键词
+          </p>
+        </div>
+      ) : filteredMessages.length === 0 && !isStreaming && !messageSearch ? (
         <div style={{
           padding: "0 16px 16px",
           display: "flex",
@@ -545,8 +653,12 @@ export function ChatArea({ conversations }: ChatAreaProps) {
             </button>
           ))}
         </div>
-      )}
+      ) : null}
       <ChatInput key={activeId} onSend={handleSend} onStop={handleStop} disabled={isStreaming} agents={agents} />
+      </div>
+      )}
+
+      <ReActPanel />
 
       {switchData && conversation && (
         <MentionSwitchDialog
@@ -559,5 +671,33 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         />
       )}
     </div>
+  );
+}
+
+function TabButton({ active, count, onClick, children }: { active: boolean; count: number; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "8px 16px",
+        fontSize: "var(--font-size-sm)",
+        fontWeight: active ? 600 : 400,
+        color: active ? "var(--color-primary)" : "var(--color-text-secondary)",
+        borderBottom: `2px solid ${active ? "var(--color-primary)" : "transparent"}`,
+        background: "transparent",
+        cursor: "pointer",
+        transition: "color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out)",
+        borderTop: "none",
+        borderLeft: "none",
+        borderRight: "none",
+      }}
+    >
+      {children}
+      {count > 0 && (
+        <span style={{ marginLeft: 4, fontSize: 10, color: "var(--color-text-tertiary)" }}>
+          {count}
+        </span>
+      )}
+    </button>
   );
 }

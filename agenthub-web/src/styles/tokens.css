@@ -9,17 +9,21 @@
   --color-danger: #d54941;
   --color-info: #3370ff;
 
-  --color-bg-app: #f0f2f6;
+  /* 三层颜色体系: 底层(页面) > 中层(卡片/模块) > 上层(输入框) */
+  --color-bg-app: #dce5f7;
   --color-bg-sidebar: #ffffff;
   --color-bg-chat: #ffffff;
-  --color-bg-elevated: #fafbfc;
+  --color-bg-elevated: #f5f6f9;
 
-  /* 覆盖 Semi UI 背景 token — 必须用完整 rgba() 值，裸数字是无效 CSS 颜色 */
-  --semi-color-bg-0: rgba(240,242,246,1);
+  /* 覆盖 Semi UI 背景 token — bg-0 给 Card 等容器用(白色)，bg-1~4 逐层加深 */
+  --semi-color-bg-0: rgba(255,255,255,1);
   --semi-color-bg-1: rgba(255,255,255,1);
-  --semi-color-bg-2: rgba(250,251,252,1);
-  --semi-color-bg-3: rgba(244,245,247,1);
-  --semi-color-bg-4: rgba(238,240,243,1);
+  --semi-color-bg-2: rgba(248,249,251,1);
+  --semi-color-bg-3: rgba(242,244,247,1);
+  --semi-color-bg-4: rgba(236,239,243,1);
+
+  /* 输入框/表单控件背景 — 区别于卡片白色，形成凹入交互感 */
+  --semi-color-fill-0: rgba(241,244,249,1);
   --color-bg-hover: rgba(0, 0, 0, 0.05);
   --color-bg-active: rgba(51, 112, 255, 0.12);
   --color-bg-mask: rgba(0, 0, 0, 0.3);
@@ -36,8 +40,10 @@
   --color-text-link: #3370ff;
   --color-text-white: #ffffff;
 
-  --color-border-light: #e5e6eb;
-  --color-border-medium: #d0d3d7;
+  --color-border-light: #e8eaef;
+  --color-border-medium: #d3d6dc;
+  --color-card-border: rgba(0, 0, 0, 0.06);
+  --color-stat-bg: #f7f8fc;
 
   --radius-xs: 2px;
   --radius-sm: 4px;
@@ -46,12 +52,13 @@
   --radius-xl: 16px;
   --radius-round: 50%;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.06);
 
-  --radius-card: 12px;
+  --radius-card: 8px;
+  --radius-input: 6px;
   --app-padding: 8px;
 
   --space-xs: 4px;
@@ -105,8 +112,15 @@
 
   --color-border-light: #3a3a3a;
   --color-border-medium: #4a4a4a;
+  --color-card-border: rgba(255, 255, 255, 0.08);
+  --color-stat-bg: #2a2a2a;
+
+  --semi-color-fill-0: rgba(255, 255, 255, 0.06);
+  --semi-color-fill-1: rgba(255, 255, 255, 0.10);
+  --semi-color-fill-2: rgba(255, 255, 255, 0.14);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.3);
 }

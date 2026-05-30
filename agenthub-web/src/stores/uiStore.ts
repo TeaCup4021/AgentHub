@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 export type Theme = "light" | "dark" | "system";
+export type BgColor = "#ECEDEE" | "#E6F1F4" | "#DCE5F7" | "#4872AD";
 
 function loadTheme(): Theme {
   try {
@@ -8,6 +9,14 @@ function loadTheme(): Theme {
     if (saved === "light" || saved === "dark" || saved === "system") return saved;
   } catch { /* not available */ }
   return "system";
+}
+
+function loadBgColor(): BgColor {
+  try {
+    const saved = localStorage.getItem("agenthub-bgcolor");
+    if (saved === "#ECEDEE" || saved === "#E6F1F4" || saved === "#DCE5F7" || saved === "#4872AD") return saved;
+  } catch { /* */ }
+  return "#DCE5F7";
 }
 
 function persistTheme(theme: Theme) {
@@ -21,14 +30,29 @@ interface UIState {
   sidebarWidth: number;
   previewPanelOpen: boolean;
   theme: Theme;
+  bgColor: BgColor;
+  settingsOpen: boolean;
   newConvTrigger: number;
+  manageAgentsOpen: boolean;
+  selectedProjectId: string | null;
 
   toggleSidebar: () => void;
   setSidebarWidth: (w: number) => void;
   openPreview: () => void;
   closePreview: () => void;
   setTheme: (theme: Theme) => void;
+  setBgColor: (color: BgColor) => void;
+  setSettingsOpen: (open: boolean) => void;
   triggerNewConv: () => void;
+  resetNewConvTrigger: () => void;
+  setManageAgentsOpen: (open: boolean) => void;
+  setSelectedProjectId: (id: string | null) => void;
+}
+
+function loadSelectedProjectId(): string | null {
+  try {
+    return localStorage.getItem("agenthub-project-id");
+  } catch { return null; }
 }
 
 function loadSidebarWidth(): number {
@@ -47,7 +71,11 @@ export const useUIStore = create<UIState>((set) => ({
   sidebarWidth: loadSidebarWidth(),
   previewPanelOpen: false,
   theme: loadTheme(),
+  bgColor: loadBgColor(),
+  settingsOpen: false,
   newConvTrigger: 0,
+  manageAgentsOpen: false,
+  selectedProjectId: loadSelectedProjectId(),
 
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSidebarWidth: (w) => set({ sidebarWidth: w }),
@@ -57,5 +85,19 @@ export const useUIStore = create<UIState>((set) => ({
     persistTheme(theme);
     set({ theme });
   },
+  setBgColor: (color) => {
+    try { localStorage.setItem("agenthub-bgcolor", color); } catch { /* */ }
+    set({ bgColor: color });
+  },
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
   triggerNewConv: () => set((s) => ({ newConvTrigger: s.newConvTrigger + 1 })),
+  resetNewConvTrigger: () => set({ newConvTrigger: 0 }),
+  setManageAgentsOpen: (open) => set({ manageAgentsOpen: open }),
+  setSelectedProjectId: (id) => {
+    try {
+      if (id) localStorage.setItem("agenthub-project-id", id);
+      else localStorage.removeItem("agenthub-project-id");
+    } catch { /* */ }
+    set({ selectedProjectId: id });
+  },
 }));

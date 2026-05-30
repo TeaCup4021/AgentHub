@@ -21,6 +21,7 @@ function isThisWeek(a: Date, b: Date): boolean {
 
 export function formatTime(isoString: string): string {
   const d = new Date(isoString);
+  if (isNaN(d.getTime())) return "";
   const now = new Date();
   const hours = d.getHours().toString().padStart(2, "0");
   const mins = d.getMinutes().toString().padStart(2, "0");

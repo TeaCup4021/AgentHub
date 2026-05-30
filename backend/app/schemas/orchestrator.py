@@ -1,5 +1,6 @@
 from uuid import UUID
 from typing import List, Optional
+from pydantic import Field
 from app.schemas.base import BaseSchema
 
 
@@ -15,3 +16,25 @@ class SubTaskPlan(BaseSchema):
 
 class OrchestratorPlan(BaseSchema):
     subtasks: List[SubTaskPlan]
+
+
+class DagNode(BaseSchema):
+    subtask_id: str
+    agent_id: str
+    agent_name: str
+    instruction: str
+    status: str
+    latency_ms: Optional[int] = None
+    output_message_id: Optional[str] = None
+
+
+class DagEdge(BaseSchema):
+    from_node: str = Field(alias="from")
+    to_node: str = Field(alias="to")
+
+
+class DagResponse(BaseSchema):
+    task_id: str
+    status: str
+    nodes: List[DagNode]
+    edges: List[DagEdge]

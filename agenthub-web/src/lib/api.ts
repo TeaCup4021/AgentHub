@@ -19,6 +19,13 @@ import type {
   GetMessageListResponse,
   ApiResponse,
   Message,
+  CreateProjectRequest,
+  CreateProjectResponse,
+  GetProjectListResponse,
+  GetProjectDetailResponse,
+  UpdateProjectRequest,
+  UpdateProjectResponse,
+  GetDagResponse,
 } from "@/types";
 
 // [后端对接] Vite 代理 /api → localhost:8080，见 vite.config.ts
@@ -104,7 +111,12 @@ api.interceptors.response.use(
 
 export const conversationApi = {
   create(data: CreateConversationRequest) {
-    return api.post<CreateConversationResponse>("/conversations", data);
+    return api.post<CreateConversationResponse>("/conversations", {
+      title: data.title,
+      type: data.type,
+      agentIds: data.agentIds,
+      projectId: data.projectId,
+    });
   },
 
   list(params?: ConversationListParams) {
@@ -160,12 +172,22 @@ export const agentApi = {
   delete(id: string) {
     return api.delete<ApiResponse<void>>(`/agents/${id}`);
   },
+
+  capabilities() {
+    return api.get<ApiResponse<string[]>>("/agents/capabilities");
+  },
 };
 
 export interface AgentVerifyRequest {
   provider: string;
   model: string;
   systemPrompt?: string;
+}
+
+export interface ConfirmPlanItem {
+  subtask_id: string;
+  agent_id: string;
+  instruction: string;
 }
 
 // [后端对接] mode: direct(单聊) / auto_orchestrate(群聊) / confirm_plan(确认计划)
@@ -175,6 +197,8 @@ export interface SendMessageRequest {
   mentions?: string[];
   parentMessageId?: string;
   mode?: "auto_orchestrate" | "direct" | "confirm_plan";
+  plan_id?: string;
+  plan?: ConfirmPlanItem[];
 }
 
 export interface SendMessageResponse extends ApiResponse<Message> {}
@@ -184,9 +208,9 @@ export const messageApi = {
     return api.post<SendMessageResponse>(`/conversations/${conversationId}/messages`, data);
   },
 
-  list(conversationId: string, cursor?: string, limit = 50) {
+  list(conversationId: string, cursor?: string, limit = 50, senderType?: string, senderId?: string) {
     return api.get<GetMessageListResponse>(`/conversations/${conversationId}/messages`, {
-      params: { cursor, limit },
+      params: { cursor, limit, senderType, senderId },
     });
   },
 
@@ -196,6 +220,47 @@ export const messageApi = {
 
   getArtifacts(messageId: string) {
     return api.get<GetArtifactsResponse>(`/messages/${messageId}/artifacts`);
+  },
+};
+
+export const projectApi = {
+  list() {
+    return api.get<GetProjectListResponse>("/projects");
+  },
+
+  detail(id: string) {
+    return api.get<GetProjectDetailResponse>(`/projects/${id}`);
+  },
+
+  create(data: CreateProjectRequest) {
+    return api.post<CreateProjectResponse>("/projects", data);
+  },
+
+  update(id: string, data: UpdateProjectRequest) {
+    return api.patch<UpdateProjectResponse>(`/projects/${id}`, data);
+  },
+
+  delete(id: string) {
+    return api.delete<void>(`/projects/${id}`);
+  },
+};
+
+export const orchestratorApi = {
+  dag(taskId: string) {
+    return api.get<GetDagResponse>(`/orchestrator/tasks/${taskId}/dag`);
+  },
+};
+
+export const authApi = {
+  changePassword(oldPassword: string, newPassword: string) {
+    return api.patch<ApiResponse<{ status: string; message: string }>>("/auth/password", {
+      old_password: oldPassword,
+      new_password: newPassword,
+    });
+  },
+
+  updateProfile(data: { name?: string; avatarUrl?: string }) {
+    return api.patch<ApiResponse<import("@/stores/authStore").User>>("/auth/me", data);
   },
 };
 

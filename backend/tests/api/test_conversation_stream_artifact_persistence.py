@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from backend.app.api.v1 import conversations
+from app.api.v1 import conversations
 
 
 @pytest.mark.asyncio

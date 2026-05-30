@@ -111,9 +111,8 @@ const filtered = useMemo(() => raw.filter(...), [raw]);
 
 ### Git 提交
 
-- 一个 Phase 一个 commit
-- commit message 格式：`feat: Phase N — 功能描述`
-- commit body 列出具体变更文件和新功能点
+- commit message 格式：`feat: 功能描述` 或 `fix: 修复描述`
+- 用户明确说"提交"时才提交，不自作主张
 
 ## 当前进度
 
@@ -122,17 +121,21 @@ const filtered = useMemo(() => raw.filter(...), [raw]);
 | 1 | 类型定义 + 基础设施 | ✅ 完成 |
 | 2 | P0 单聊核心链路 | ✅ 完成 |
 | 3 | P1 富媒体卡片 | ✅ 完成 |
-| Mock | Mock 数据系统 | ✅ 完成 |
-| 4 | Agent 管理 | ⏳ 待实现 |
-| 5 | 群聊 + Orchestrator | ⏳ 待实现 |
-| 6 | P2 @提及 + 部署卡片 | ⏳ 待实现 |
-| 7 | ReAct 推理可视化 | ⏳ 待实现 |
-| 8 | Agent 仪表盘 | ⏳ 待实现 |
-| 9 | LLM 配置 + Token 用量 | ⏳ 待实现 |
+| 4 | Agent 管理 | ✅ 完成 |
+| 4.5-4.7 | API 对齐 + 乐观发送 | ✅ 完成 |
+| 5 | 群聊 + Orchestrator | ✅ 完成 |
+| 6 | @提及 + 部署卡片 | ✅ 完成 |
+| 7 | ReAct 推理可视化 | ✅ 完成 |
+| 8 | Agent 仪表盘 | ✅ 完成 |
+| 9 | LLM 配置 + Token 用量 | ✅ 完成 |
+| P0 M1-M6 | 核心体验链路 (Markdown/shiki/自动滚底/时间戳/Toast/SSE断连) | ✅ 完成 |
+| P1 M7-M15 | 体验完整度 (暗色模式/代码行号/Agent管理/消息操作/会话增强/骨架屏/响应式/输入增强/Token图表) | ✅ 完成 |
+| P2 M16-M23 | 差异化亮点 (群聊全链路/ReAct面板/产物工作台/Agent对话式创建/会话分支/@提及增强/首页落地页/微动效) | 🔵 待开发 |
+| UI 重构 | Semi Design 全组件迁移 (6 Phase) | ✅ 完成 |
 
 ## 与后端协作
 
 - 前端优先使用 Mock 数据独立开发，不阻塞于后端进度
-- API 接口契约以前端架构文档第 5 节为准
+- API 接口契约以 [Orchestrator 接口契约](docs/specs/2026-05-26-orchestrator-api-contract.md) 和 [响应格式对齐约定](../docs/AgentHub%20响应格式与前后端对齐约定.md) 为准
 - 后端就绪后，切换环境变量对接真实 API
 - 接口字段变更需同步更新 `src/types/api.ts`

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>背景底色 v2 — 设计预览</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; height: 100vh; display: flex; background: #e8eaef; }
+
+/* ===== 左侧导航（固定白色） ===== */
+.nav { width: 200px; background: #fff; border-right: 1px solid #e8eaef; display: flex; flex-direction: column; padding: 16px 0; flex-shrink: 0; }
+.nav-title { font-size: 13px; font-weight: 600; color: #8f959e; padding: 0 16px 8px; letter-spacing: 0.5px; }
+.nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 16px; cursor: pointer; font-size: 14px; color: #646a73; }
+.nav-item.active { background: rgba(51,112,255,0.08); color: #3370ff; font-weight: 500; }
+.nav-item svg { flex-shrink: 0; }
+
+/* ===== 内容区（固定白色 — 不随 bgColor 变化） ===== */
+.content { flex: 1; padding: 20px 24px; overflow-y: auto; background: #fff; }
+
+/* Section */
+.section-title { font-size: 15px; font-weight: 600; color: #1f2329; margin-bottom: 2px; }
+.section-sub { font-size: 12px; color: #8f959e; margin-bottom: 12px; }
+.section + .section { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e8eaef; }
+
+/* 主题卡片 */
+.theme-cards { display: flex; gap: 12px; }
+.theme-card { width: 180px; border-radius: 8px; border: 2px solid #e8eaef; background: #fff; padding: 10px; cursor: pointer; flex-shrink: 0; }
+.theme-card.selected { border-color: #3370ff; background: rgba(51,112,255,0.04); }
+.theme-thumb { height: 72px; border-radius: 4px; overflow: hidden; margin-bottom: 8px; position: relative; }
+.theme-label-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.theme-label { font-size: 13px; font-weight: 500; color: #1f2329; }
+.check-icon { width: 16px; height: 16px; background: #3370ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.check-icon::after { content: ''; display: block; width: 4px; height: 7px; border: 2px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px, -1px); }
+
+/* 浅色主题缩略图 */
+.thumb-light { background: #f5f6f7; }
+.thumb-light .t-topbar { height: 14px; background: #fff; border-bottom: 1px solid #e8eaef; display: flex; align-items: center; padding: 0 6px; gap: 3px; }
+.thumb-light .t-dot { width: 4px; height: 4px; border-radius: 50%; background: #e8eaef; }
+.thumb-light .t-body { display: flex; height: calc(100% - 14px); }
+.thumb-light .t-sidebar { width: 28px; background: #fff; border-right: 1px solid #e8eaef; padding: 4px 3px; display: flex; flex-direction: column; gap: 3px; }
+.thumb-light .t-sidebar-item { height: 5px; border-radius: 2px; background: #e8eaef; }
+.thumb-light .t-sidebar-item.active { background: #3370ff; }
+.thumb-light .t-main { flex: 1; padding: 4px; display: flex; flex-direction: column; gap: 3px; }
+.thumb-light .t-line { height: 4px; border-radius: 2px; background: #e8eaef; }
+
+/* ===== 背景底色卡片 v2：带场景预览 ===== */
+.bgcolor-cards { display: flex; gap: 12px; }
+.bgcolor-card {
+  width: 180px;
+  border-radius: 8px;
+  border: 2px solid #e8eaef;
+  background: #fff;
+  padding: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+.bgcolor-card.selected { border-color: #3370ff; background: rgba(51,112,255,0.04); }
+.bgcolor-card:hover:not(.selected) { border-color: #c0c4cc; }
+
+/* 场景预览缩略图：画布底色 + 白色悬浮面板 */
+.bgcolor-thumb {
+  height: 72px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  padding: 6px;
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+  /* bg color set inline per variant */
+}
+/* 模拟左侧图标栏 */
+.bgcolor-thumb .p-iconbar {
+  width: 10px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.85);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3px 0;
+  gap: 3px;
+}
+.bgcolor-thumb .p-iconbar span {
+  width: 5px; height: 5px;
+  border-radius: 2px;
+  background: rgba(0,0,0,0.12);
+  display: block;
+}
+.bgcolor-thumb .p-iconbar span.n {
+  background: rgba(51,112,255,0.5);
+}
+/* 模拟对话列表 */
+.bgcolor-thumb .p-convlist {
+  width: 44px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.85);
+  flex-shrink: 0;
+  padding: 3px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bgcolor-thumb .p-convlist span {
+  height: 5px; border-radius: 2px;
+  background: rgba(0,0,0,0.08);
+  display: block;
+}
+.bgcolor-thumb .p-convlist span.h { background: rgba(51,112,255,0.35); }
+/* 模拟聊天主区域 */
+.bgcolor-thumb .p-chat {
+  flex: 1;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.85);
+  padding: 3px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.bgcolor-thumb .p-chat span {
+  height: 4px; border-radius: 2px;
+  background: rgba(0,0,0,0.06);
+  display: block;
+}
+
+/* ===== LLM / Token (略) ===== */
+.mini-section { border: 1px dashed #e8eaef; border-radius: 6px; padding: 16px; text-align: center; color: #8f959e; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- 左侧导航（白色固定） -->
+<nav class="nav">
+  <div class="nav-title">设置</div>
+  <div class="nav-item active">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="3" stroke="#3370ff" stroke-width="1.5"/>
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="#3370ff" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    外观
+  </div>
+  <div class="nav-item">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="2" y="3" width="12" height="10" rx="2" stroke="#646a73" stroke-width="1.5"/>
+      <circle cx="6" cy="7" r="1.5" stroke="#646a73" stroke-width="1.2"/>
+      <path d="M9 6h3M9 8h2" stroke="#646a73" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M4 11c0-1.1.9-2 2-2s2 .9 2 2" stroke="#646a73" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+    LLM 配置
+  </div>
+  <div class="nav-item">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M2 12l3-4 3 2 3-5 3 3" stroke="#646a73" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="1" y="1" width="14" height="14" rx="2" stroke="#646a73" stroke-width="1.5"/>
+    </svg>
+    Token 用量
+  </div>
+</nav>
+
+<!-- 内容区（白色固定 — 整个设置页面不随 bgColor 变色） -->
+<main class="content">
+
+  <!-- 外观 -->
+  <section class="section" style="border-top: none; padding-top: 0; margin-top: 0;">
+    <div class="section-title">外观</div>
+    <div class="section-sub">选择界面主题，影响整体配色风格</div>
+
+    <div class="theme-cards" style="margin-bottom: 16px;">
+      <!-- 只展示一个主题卡片示意 -->
+      <div class="theme-card selected">
+        <div class="theme-thumb thumb-light">
+          <div class="t-topbar">
+            <div class="t-dot"></div><div class="t-dot"></div><div class="t-dot"></div>
+          </div>
+          <div class="t-body">
+            <div class="t-sidebar">
+              <div class="t-sidebar-item active"></div>
+              <div class="t-sidebar-item"></div>
+              <div class="t-sidebar-item"></div>
+              <div class="t-sidebar-item"></div>
+            </div>
+            <div class="t-main">
+              <div class="t-line" style="width:80%"></div>
+              <div class="t-line" style="width:60%"></div>
+              <div class="t-line" style="width:80%"></div>
+              <div class="t-line" style="width:40%"></div>
+              <div class="t-line" style="width:60%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="theme-label-row">
+          <span class="theme-label">浅色</span>
+          <div class="check-icon"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 背景底色 -->
+    <div style="font-size: 13px; font-weight: 600; color: #1f2329; margin-bottom: 2px;">背景底色</div>
+    <div style="font-size: 12px; color: #8f959e; margin-bottom: 10px;">调整聊天区的画布底色，仅影响浅色主题</div>
+
+    <div class="bgcolor-cards">
+      <!-- 素云灰 — 选中 -->
+      <div class="bgcolor-card selected">
+        <div class="bgcolor-thumb" style="background: #ECEDEE;">
+          <div class="p-iconbar"><span class="n"></span><span></span><span></span></div>
+          <div class="p-convlist"><span class="h"></span><span></span><span></span><span></span></div>
+          <div class="p-chat"><span style="width:80%"></span><span style="width:60%"></span><span style="width:70%"></span></div>
+        </div>
+        <div class="theme-label-row">
+          <span class="theme-label">素云灰</span>
+          <div class="check-icon"></div>
+        </div>
+      </div>
+
+      <!-- 湖水蓝 -->
+      <div class="bgcolor-card">
+        <div class="bgcolor-thumb" style="background: #E6F1F4;">
+          <div class="p-iconbar"><span class="n"></span><span></span><span></span></div>
+          <div class="p-convlist"><span class="h"></span><span></span><span></span><span></span></div>
+          <div class="p-chat"><span style="width:80%"></span><span style="width:60%"></span><span style="width:70%"></span></div>
+        </div>
+        <div class="theme-label-row">
+          <span class="theme-label">湖水蓝</span>
+        </div>
+      </div>
+
+      <!-- 烟波蓝 -->
+      <div class="bgcolor-card">
+        <div class="bgcolor-thumb" style="background: #DCE5F7;">
+          <div class="p-iconbar"><span class="n"></span><span></span><span></span></div>
+          <div class="p-convlist"><span class="h"></span><span></span><span></span><span></span></div>
+          <div class="p-chat"><span style="width:80%"></span><span style="width:60%"></span><span style="width:70%"></span></div>
+        </div>
+        <div class="theme-label-row">
+          <span class="theme-label">烟波蓝</span>
+        </div>
+      </div>
+
+      <!-- 深海蓝 -->
+      <div class="bgcolor-card">
+        <div class="bgcolor-thumb" style="background: #4872AD;">
+          <div class="p-iconbar"><span class="n"></span><span></span><span></span></div>
+          <div class="p-convlist"><span class="h"></span><span></span><span></span><span></span></div>
+          <div class="p-chat"><span style="width:80%"></span><span style="width:60%"></span><span style="width:70%"></span></div>
+        </div>
+        <div class="theme-label-row">
+          <span class="theme-label">深海蓝</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LLM 配置 -->
+  <section class="section">
+    <div class="section-title">LLM 配置</div>
+    <div class="section-sub">配置 AI 模型提供商及 API 密钥</div>
+    <div class="mini-section">… LLM 配置卡片（白色背景，不受 bgColor 影响）…</div>
+  </section>
+
+  <!-- Token 用量 -->
+  <section class="section">
+    <div class="section-title">Token 用量</div>
+    <div class="section-sub">本月累计消耗统计</div>
+    <div class="mini-section">… Token 统计面板（白色背景，不受 bgColor 影响）…</div>
+  </section>
+
+</main>
+
+</body>
+</html>

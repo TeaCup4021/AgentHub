@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.tools.verify_artifact_protocol import parse_sse_lines, validate_event_payload
+from tools.verify_artifact_protocol import parse_sse_lines, validate_event_payload
 
 
 def test_validate_required_fields_artifact_ok():

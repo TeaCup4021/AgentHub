@@ -1,17 +1,14 @@
-import { useEffect, lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useEffect, Suspense } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { ConfigProvider, Spin } from "@douyinfe/semi-ui";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { SettingsPage } from "@/components/settings/SettingsPage";
 import { LoginPage } from "@/components/auth";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
-
-const SettingsPage = lazy(() =>
-  import("@/components/settings").then((m) => ({ default: m.SettingsPage })),
-);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,12 +27,14 @@ function resolveTheme(theme: "light" | "dark" | "system"): "light" | "dark" {
 }
 
 const lightColors: Record<string, string> = {
-  /* 背景色 — 飞书风格柔和蓝灰 */
-  "--semi-color-bg-0": "rgba(240,242,246,1)",
+  /* 三层颜色体系: 底层(页面) > 中层(卡片/模块) > 上层(输入框) */
+  "--semi-color-bg-0": "rgba(255,255,255,1)",
   "--semi-color-bg-1": "rgba(255,255,255,1)",
-  "--semi-color-bg-2": "rgba(250,251,252,1)",
-  "--semi-color-bg-3": "rgba(244,245,247,1)",
-  "--semi-color-bg-4": "rgba(238,240,243,1)",
+  "--semi-color-bg-2": "rgba(248,249,251,1)",
+  "--semi-color-bg-3": "rgba(242,244,247,1)",
+  "--semi-color-bg-4": "rgba(236,239,243,1)",
+  /* 输入框/表单控件背景 — 区别于卡片白色，形成凹入交互感 */
+  "--semi-color-fill-0": "rgba(241,244,249,1)",
   "--semi-blue-5": "51,112,255",
   "--semi-blue-6": "43,95,217",
   "--semi-blue-7": "34,76,174",
@@ -77,6 +76,8 @@ const darkColors: Record<string, string> = {
   "--semi-color-bg-2": "rgba(42,42,42,1)",
   "--semi-color-bg-3": "rgba(51,51,51,1)",
   "--semi-color-bg-4": "rgba(58,58,58,1)",
+  "--semi-color-fill-0": "rgba(255,255,255,0.06)",
+  "--semi-color-fill-1": "rgba(255,255,255,0.10)",
   "--semi-blue-5": "92,143,255",
   "--semi-blue-6": "125,168,255",
   "--semi-blue-7": "74,114,204",
@@ -122,6 +123,7 @@ function applyThemeColors(resolved: "light" | "dark") {
 
 function ThemeSync() {
   const theme = useUIStore((s) => s.theme);
+  const bgColor = useUIStore((s) => s.bgColor);
 
   useEffect(() => {
     const resolved = resolveTheme(theme);
@@ -129,10 +131,12 @@ function ThemeSync() {
 
     if (resolved === "dark") {
       document.body.setAttribute("theme-mode", "dark");
+      document.body.style.removeProperty("--color-bg-app");
     } else {
       document.body.removeAttribute("theme-mode");
+      document.body.style.setProperty("--color-bg-app", bgColor);
     }
-  }, [theme]);
+  }, [theme, bgColor]);
 
   useEffect(() => {
     if (theme !== "system") return;
@@ -143,8 +147,10 @@ function ThemeSync() {
       applyThemeColors(resolved);
       if (mq.matches) {
         document.body.setAttribute("theme-mode", "dark");
+        document.body.style.removeProperty("--color-bg-app");
       } else {
         document.body.removeAttribute("theme-mode");
+        document.body.style.setProperty("--color-bg-app", useUIStore.getState().bgColor);
       }
     };
     mq.addEventListener("change", onChange);
@@ -185,6 +191,7 @@ function AuthInit({ children }: { children: React.ReactNode }) {
 
 function AnimatedRoutes() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   return (
     <AnimatePresence mode="wait">
@@ -201,7 +208,7 @@ function AnimatedRoutes() {
           <Route path="/settings" element={
             <ProtectedRoute>
               <Suspense fallback={<div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}><Spin size="large" /></div>}>
-                <SettingsPage />
+                <SettingsPage onClose={() => navigate("/")} />
               </Suspense>
             </ProtectedRoute>
           } />

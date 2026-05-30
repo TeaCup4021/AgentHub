@@ -1,5 +1,5 @@
 import type { AxiosInstance } from "axios";
-import { mockConversations, mockMessages, mockAgents } from "./data";
+import { mockConversations, mockMessages, mockAgents, mockProjects } from "./data";
 import { generateId } from "@/lib/utils";
 import type {
   ApiResponse,
@@ -17,9 +17,16 @@ function delay(ms = 50): Promise<void> {
 }
 
 function shouldFail(endpoint: string): string | null {
-  const mode = localStorage.getItem("mock_fail_mode");
+  const mode = sessionStorage.getItem("mock_fail_mode");
   if (mode === endpoint || mode === "all") {
-    localStorage.removeItem("mock_fail_mode");
+    const rawCount = sessionStorage.getItem("mock_fail_count");
+    const count = rawCount ? parseInt(rawCount, 10) : 1;
+    if (count > 1) {
+      sessionStorage.setItem("mock_fail_count", String(count - 1));
+    } else {
+      sessionStorage.removeItem("mock_fail_mode");
+      sessionStorage.removeItem("mock_fail_count");
+    }
     return mode;
   }
   return null;
@@ -47,7 +54,27 @@ function parseBody(config: { data?: unknown }): Record<string, unknown> {
 
 let conversations = [...mockConversations];
 let agents = [...mockAgents];
+let projects = [...mockProjects];
 const messages: Record<string, Message[]> = { ...mockMessages };
+
+const mockUser = {
+  id: "user-mock-1",
+  email: "test@agenthub.dev",
+  name: "测试用户",
+  password: "123456",
+  avatarUrl: null as string | null,
+  isVerified: true,
+};
+let registeredUsers: Array<typeof mockUser> = [{ ...mockUser }];
+const authCodes: Map<string, { code: string; expires: number }> = new Map();
+
+function makeToken(): { accessToken: string; refreshToken: string; expiresIn: number } {
+  return {
+    accessToken: `mock-ak-${generateId()}`,
+    refreshToken: `mock-rk-${generateId()}`,
+    expiresIn: 1800,
+  };
+}
 
 export function getMockAgents(): Agent[] {
   return agents;
@@ -74,6 +101,9 @@ export function addMockMessage(conversationId: string, message: Message) {
 function resetMockData() {
   conversations = JSON.parse(JSON.stringify(mockConversations));
   agents = JSON.parse(JSON.stringify(mockAgents));
+  projects = JSON.parse(JSON.stringify(mockProjects));
+  registeredUsers = [{ ...mockUser }];
+  authCodes.clear();
   for (const key of Object.keys(messages)) {
     delete messages[key];
   }
@@ -93,7 +123,16 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
     // GET /conversations
     if (method === "get" && url === "/conversations") {
       await delay();
-      const [status, body] = paginatedResponse(conversations);
+      const params = (config.params as { keyword?: string; projectId?: string; page?: number; pageSize?: number }) || {};
+      let filtered = conversations;
+      if (params.projectId) {
+        filtered = filtered.filter((c) => c.projectId === params.projectId);
+      }
+      if (params.keyword) {
+        const kw = params.keyword.toLowerCase();
+        filtered = filtered.filter((c) => c.title.toLowerCase().includes(kw));
+      }
+      const [status, body] = paginatedResponse(filtered, params.page, params.pageSize);
       config.adapter = () =>
         Promise.resolve({ data: body, status, statusText: "OK", headers: {}, config });
     }
@@ -109,6 +148,7 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
         type: body.type,
         ownerId: "00000000-0000-0000-0000-000000000001",
         agentIds: body.agentIds,
+        projectId: body.projectId,
         lastActiveAt: now,
         isPinned: false,
         isArchived: false,
@@ -210,11 +250,17 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
     else if (method === "get" && /^\/conversations\/[^/]+\/messages$/.test(url)) {
       const conversationId = url.split("/")[2];
       await delay();
-      const params = (config.params as { cursor?: string; limit?: number }) || {};
+      const params = (config.params as { cursor?: string; limit?: number; senderType?: string; senderId?: string }) || {};
       const cursor = params.cursor;
       const limit = params.limit || 50;
       let msgs = messages[conversationId] || [];
 
+      if (params.senderType) {
+        msgs = msgs.filter((m) => m.senderType === params.senderType);
+      }
+      if (params.senderId) {
+        msgs = msgs.filter((m) => m.senderId === params.senderId);
+      }
       if (cursor) {
         msgs = msgs.filter((m) => m.createdAt < cursor);
       }
@@ -225,6 +271,35 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].createdAt : null;
 
       const [, responseBody] = successResponse({ items, nextCursor, hasMore });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /orchestrator/tasks/:taskId/dag
+    if (method === "get" && /^\/orchestrator\/tasks\/[^/]+\/dag$/.test(url)) {
+      await delay();
+      const [, responseBody] = successResponse({
+        taskId: url.split("/")[3],
+        status: "completed",
+        nodes: [
+          { subtaskId: "s1", agentId: "agent-claude-code", agentName: "Claude Code", instruction: "实现登录页面", status: "completed", latencyMs: 3200, outputMessageId: "msg-2" },
+          { subtaskId: "s2", agentId: "agent-codex", agentName: "Codex", instruction: "添加表单验证", status: "completed", latencyMs: 2100, outputMessageId: "msg-5" },
+          { subtaskId: "s3", agentId: "agent-opencode", agentName: "OpenCode", instruction: "代码审查", status: "completed", latencyMs: 1800 },
+        ],
+        edges: [
+          { from: "s1", to: "s3" },
+          { from: "s2", to: "s3" },
+        ],
+      });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /agents/capabilities
+    if (method === "get" && url === "/agents/capabilities") {
+      await delay();
+      const caps = ["coding", "review", "refactoring", "debugging", "docs", "ui", "testing", "reasoning", "planning"];
+      const [, responseBody] = successResponse(caps);
       config.adapter = () =>
         Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
@@ -279,6 +354,205 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
         Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }
 
+    // POST /auth/send-code
+    if (method === "post" && url === "/auth/send-code") {
+      await delay(300);
+      const body = parseBody(config) as unknown as { email: string };
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      authCodes.set(body.email, { code, expires: Date.now() + 600000 });
+      const [, responseBody] = successResponse({ status: "ok", message: "验证码已发送" });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // POST /auth/register
+    else if (method === "post" && url === "/auth/register") {
+      await delay(200);
+      const body = parseBody(config) as unknown as { email: string; code: string; name: string; password: string };
+      const saved = authCodes.get(body.email);
+      if (!saved || saved.code !== body.code || saved.expires < Date.now()) {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 400, data: { code: 400, message: "验证码错误或已过期" } } });
+        return config;
+      }
+      if (registeredUsers.find((u) => u.email === body.email)) {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 409, data: { code: 409, message: "邮箱已注册" } } });
+        return config;
+      }
+      const user = {
+        id: `user-${generateId()}`,
+        email: body.email,
+        name: body.name,
+        password: body.password,
+        avatarUrl: null as string | null,
+        isVerified: false,
+      };
+      registeredUsers.push(user);
+      authCodes.delete(body.email);
+      const tokens = makeToken();
+      const [, responseBody] = successResponse({ ...tokens, tokenType: "bearer" });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 201, statusText: "OK", headers: {}, config });
+    }
+
+    // POST /auth/login
+    else if (method === "post" && url === "/auth/login") {
+      await delay(200);
+      const body = parseBody(config) as unknown as { email: string; password: string };
+      const user = registeredUsers.find((u) => u.email === body.email && u.password === body.password);
+      if (!user) {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 401, data: { code: 401, message: "邮箱或密码错误" } } });
+        return config;
+      }
+      const tokens = makeToken();
+      const [, responseBody] = successResponse({ ...tokens, tokenType: "bearer" });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // POST /auth/refresh
+    else if (method === "post" && url === "/auth/refresh") {
+      await delay(100);
+      const tokens = makeToken();
+      const [, responseBody] = successResponse({ ...tokens, tokenType: "bearer" });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // PATCH /auth/me
+    if (method === "patch" && url === "/auth/me") {
+      await delay(100);
+      const body = parseBody(config) as unknown as { name?: string; avatarUrl?: string };
+      const user = registeredUsers[registeredUsers.length - 1];
+      if (body.name) user.name = body.name;
+      if (body.avatarUrl !== undefined) user.avatarUrl = body.avatarUrl;
+      const [, responseBody] = successResponse({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        isVerified: user.isVerified,
+      });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /auth/me
+    else if (method === "get" && url === "/auth/me") {
+      await delay(100);
+      const authHeader = (config.headers as Record<string, string>)?.Authorization;
+      if (!authHeader?.startsWith("Bearer mock-ak-")) {
+        const user = registeredUsers[registeredUsers.length - 1];
+        const [, responseBody] = successResponse({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+          isVerified: user.isVerified,
+        });
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+      } else {
+        const [, responseBody] = successResponse({
+          id: mockUser.id,
+          email: mockUser.email,
+          name: mockUser.name,
+          avatarUrl: mockUser.avatarUrl,
+          isVerified: mockUser.isVerified,
+        });
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+      }
+    }
+
+    // PATCH /auth/password
+    else if (method === "patch" && url === "/auth/password") {
+      await delay();
+      const body = parseBody(config) as unknown as { old_password: string; new_password: string };
+      if (body.old_password === body.new_password) {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 400, data: { code: 400, message: "新密码不能与旧密码相同" } } });
+        return config;
+      }
+      const [, responseBody] = successResponse({ status: "ok", message: "密码已修改" });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /projects
+    if (method === "get" && url === "/projects") {
+      await delay();
+      const sorted = [...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      const [, responseBody] = successResponse(sorted);
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /projects/:id
+    else if (method === "get" && /^\/projects\/[^/]+$/.test(url)) {
+      const id = url.split("/").pop()!;
+      await delay();
+      const project = projects.find((p) => p.id === id);
+      if (project) {
+        const [, responseBody] = successResponse(project);
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+      } else {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 404, data: { code: 404, message: "项目不存在" } } });
+      }
+    }
+
+    // POST /projects
+    else if (method === "post" && url === "/projects") {
+      const body = parseBody(config) as unknown as { name: string; description?: string; defaultAgentIds?: string[] };
+      await delay();
+      const now = new Date().toISOString();
+      const project = {
+        id: `proj-${generateId()}`,
+        name: body.name,
+        description: body.description,
+        ownerId: "00000000-0000-0000-0000-000000000001",
+        defaultAgentIds: body.defaultAgentIds || [],
+        conversationCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      projects.push(project);
+      const [, responseBody] = successResponse(project);
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 201, statusText: "OK", headers: {}, config });
+    }
+
+    // PATCH /projects/:id
+    else if (method === "patch" && /^\/projects\/[^/]+$/.test(url)) {
+      const id = url.split("/").pop()!;
+      const body = parseBody(config) as unknown as { name?: string; description?: string; defaultAgentIds?: string[] };
+      await delay();
+      const idx = projects.findIndex((p) => p.id === id);
+      if (idx >= 0) {
+        projects[idx] = { ...projects[idx], ...body, updatedAt: new Date().toISOString() };
+        const [, responseBody] = successResponse(projects[idx]);
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+      } else {
+        config.adapter = () =>
+          Promise.reject({ response: { status: 404, data: { code: 404, message: "项目不存在" } } });
+      }
+    }
+
+    // DELETE /projects/:id
+    else if (method === "delete" && /^\/projects\/[^/]+$/.test(url)) {
+      const id = url.split("/").pop()!;
+      await delay();
+      projects = projects.filter((p) => p.id !== id);
+      const [, responseBody] = successResponse(null);
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 204, statusText: "OK", headers: {}, config });
+    }
+
     // POST /agents
     else if (method === "post" && url === "/agents") {
       const body = parseBody(config) as unknown as CreateAgentRequest;
@@ -306,6 +580,22 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       };
       agents.push(agent);
       const [, responseBody] = successResponse(agent);
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // POST /agents/verify
+    else if (method === "post" && url === "/agents/verify") {
+      await delay();
+      const [, responseBody] = successResponse({ status: "ok", message: "验证通过" });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /messages/:id/artifacts
+    else if (method === "get" && /^\/messages\/[^/]+\/artifacts$/.test(url)) {
+      await delay();
+      const [, responseBody] = successResponse([]);
       config.adapter = () =>
         Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }

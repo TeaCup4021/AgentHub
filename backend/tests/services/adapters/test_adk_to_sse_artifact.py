@@ -1,7 +1,7 @@
 import uuid
 from types import SimpleNamespace
 
-from backend.app.services.adapters.adk_to_sse import ADKToSSETranslator
+from app.services.adapters.adk_to_sse import ADKToSSETranslator
 
 
 def _event(*, custom_metadata=None, artifact_delta=None):

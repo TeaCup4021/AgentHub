@@ -1,7 +1,9 @@
 export { ChatHeader } from "./ChatHeader";
 export { MessageList } from "./MessageList";
 export { ChatInput } from "./ChatInput";
+export { WelcomePage } from "./WelcomePage";
 export { OrchestratorPlan } from "./OrchestratorPlan";
+export { OrchestratorSummary } from "./OrchestratorSummary";
 export { AgentProgressBar } from "./AgentProgressBar";
 export { AgentDetailPopover } from "./AgentDetailPopover";
 export { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
@@ -9,3 +11,5 @@ export { MentionSwitchDialog } from "./MentionSwitchDialog";
 export { ThinkingBlock } from "./ThinkingBlock";
 export { AgentDashboard } from "./AgentDashboard";
 export { MessageActions } from "./MessageActions";
+export { ReActPanel } from "./ReActPanel";
+export { ArtifactWorkbench } from "./ArtifactWorkbench";

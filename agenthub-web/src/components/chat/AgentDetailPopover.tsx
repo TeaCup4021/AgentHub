@@ -55,14 +55,16 @@ export function AgentDetailPopover({ agent, position, onClose }: AgentDetailPopo
               <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>提供商</span>
               <Tag size="small" color="grey">{agent.provider}</Tag>
             </div>
-            <div>
-              <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>能力</span>
-              <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {agent.capabilities.map((c) => (
-                  <Tag key={c} size="small" color="blue" type="ghost">{c}</Tag>
-                ))}
+            {agent.capabilities && agent.capabilities.length > 0 && (
+              <div>
+                <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>能力</span>
+                <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                  {agent.capabilities.map((c) => (
+                    <Tag key={c} size="small" color="blue" type="ghost">{c}</Tag>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
             {tools && tools.length > 0 && (
               <div>
                 <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>工具</span>

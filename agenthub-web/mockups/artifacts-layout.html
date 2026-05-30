@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Artifacts Layout V3 — AgentHub Design</title>
+<style>
+  :root {
+    --surface: #1e1e24; --surface-alt: #23232b;
+    --border: #31313b; --border-light: #2a2a34;
+    --text: #e8e8ee; --text-secondary: #9e9ead; --text-tertiary: #6a6a7a;
+    --accent: #5b8def; --accent-bg: rgba(91,141,239,0.1);
+    --add-text: #56d364; --add-bg: rgba(63,185,80,0.14); --add-gutter: rgba(63,185,80,0.2);
+    --del-text: #f7787a; --del-bg: rgba(248,81,73,0.14); --del-gutter: rgba(248,81,73,0.2);
+    --radius: 10px;
+    --font-mono: "JetBrains Mono","Cascadia Code","Fira Code","SF Mono",Consolas,monospace;
+    --font-sans: "PingFang SC","Microsoft YaHei",-apple-system,BlinkMacSystemFont,sans-serif;
+    --shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 2px 8px rgba(0,0,0,0.25);
+    --shadow-hover: 0 0 0 1px rgba(255,255,255,0.06), 0 6px 24px rgba(0,0,0,0.35);
+    --card-min-w: 320px; --card-min-h: 180px; --card-max-w: 1200px; --card-max-h: 700px;
+  }
+  [data-theme="light"] {
+    --surface: #ffffff; --surface-alt: #f8f8fb; --border: #e0e0e9; --border-light: #ececf2;
+    --text: #1a1a26; --text-secondary: #6b6b7d; --text-tertiary: #9898ae;
+    --accent: #3b6fd4; --accent-bg: rgba(59,111,212,0.08);
+    --add-text: #1a7f37; --add-bg: rgba(26,127,55,0.1); --add-gutter: rgba(26,127,55,0.16);
+    --del-text: #cf222e; --del-bg: rgba(207,34,46,0.1); --del-gutter: rgba(207,34,46,0.16);
+    --shadow: 0 0 0 1px rgba(0,0,0,0.04), 0 2px 8px rgba(0,0,0,0.06);
+    --shadow-hover: 0 0 0 1px rgba(0,0,0,0.06), 0 6px 24px rgba(0,0,0,0.1);
+  }
+
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:var(--font-sans);background:#18181c;color:var(--text);
+    padding:32px 24px 60px;display:flex;flex-direction:column;align-items:center;
+    transition:background .3s,color .3s;-webkit-font-smoothing:antialiased;
+  }
+  [data-theme="light"] body{background:#f3f3f7}
+
+  .theme-btn{
+    position:fixed;top:16px;right:16px;z-index:100;width:34px;height:34px;
+    border-radius:50%;border:1px solid var(--border);background:var(--surface);
+    color:var(--text-secondary);cursor:pointer;font-size:15px;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 1px 3px rgba(0,0,0,0.12);transition:all .2s;
+  }
+  .theme-btn:hover{color:var(--text);border-color:var(--accent)}
+
+  .page-header{text-align:center;margin-bottom:8px}
+  .page-header h1{font-size:20px;font-weight:700;letter-spacing:-.3px}
+  .page-header .sub{font-size:11px;color:var(--text-tertiary);margin-top:2px}
+
+  .hint{
+    display:flex;align-items:center;gap:8px;margin-bottom:28px;
+    padding:8px 14px;border-radius:8px;font-size:11px;color:var(--text-tertiary);
+    background:var(--surface);border:1px solid var(--border);
+  }
+  .hint-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;background:var(--text-tertiary);transition:.2s}
+  .hint-dot.on{background:#e09030;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+  .demo-wrap{width:100%;max-width:860px;display:flex;flex-direction:column;gap:32px}
+  .section{display:flex;flex-direction:column;gap:8px}
+  .section-label{font-size:10px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.7px;font-weight:700;padding-left:2px}
+
+  /* ================================================================
+     ARTIFACT LIST — vertical, one per row, full width
+     ================================================================ */
+  .artifact-list{
+    display:flex;flex-direction:column;gap:10px;
+  }
+
+  /* ================================================================
+     SHARED CARD BASE
+     ================================================================ */
+  .card{
+    width:100%;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);box-shadow:var(--shadow);
+    display:flex;flex-direction:column;overflow:hidden;
+    position:relative;
+    transition:box-shadow .25s,border-color .25s,width .3s ease,height .3s ease;
+  }
+  .card:hover{box-shadow:var(--shadow-hover)}
+  .card.resizing{user-select:none;transition:box-shadow .25s,border-color .25s}
+  .card.restoring{transition:width .35s cubic-bezier(.4,0,.2,1),height .35s cubic-bezier(.4,0,.2,1)}
+
+  .card__header{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 14px;border-bottom:1px solid var(--border-light);
+    flex-shrink:0;background:var(--surface);
+  }
+  .card__header .spacer{flex:1}
+  .card__icon{width:15px;height:15px;flex-shrink:0;color:var(--text-tertiary)}
+  .card__title{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--text)}
+  .card__badge{font-size:9px;font-weight:700;padding:1.5px 7px;border-radius:10px;text-transform:uppercase}
+  .card__badge--lang{background:var(--accent-bg);color:var(--accent)}
+  .card__badge--green{background:rgba(31,191,117,0.1);color:#1fbf75}
+  .card__badge--orange{background:rgba(240,160,48,0.1);color:#f0a030}
+  .card__badge--red{background:rgba(245,79,79,0.1);color:#f54f4f}
+  .card__badge--grey{background:rgba(158,158,173,0.1);color:var(--text-secondary)}
+
+  .card__body{flex:1;min-height:0;overflow:auto;position:relative}
+
+  /* ---- Reset button (header right, always visible) ---- */
+  .card__reset{
+    flex-shrink:0;width:26px;height:26px;border-radius:6px;
+    border:1px solid transparent;background:transparent;
+    color:var(--text-tertiary);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all .15s;position:relative;
+    margin-right:2px;
+  }
+  .card__reset:hover{
+    background:var(--surface-alt);border-color:var(--border);
+    color:var(--accent);
+  }
+  .card__reset:active{transform:scale(.93)}
+  .card__reset svg{width:13px;height:13px;pointer-events:none}
+  /* Tooltip */
+  .card__reset::after{
+    content:attr(data-tip);
+    position:absolute;top:-28px;left:50%;transform:translateX(-50%);
+    padding:3px 8px;border-radius:4px;
+    background:var(--text);color:var(--surface);
+    font-size:10px;font-family:var(--font-sans);white-space:nowrap;
+    pointer-events:none;opacity:0;transition:opacity .15s;
+  }
+  .card__reset:hover::after{opacity:1}
+
+  /* ---- Resize handle ---- */
+  .card__resize{
+    position:absolute;right:0;bottom:0;z-index:20;width:24px;height:24px;
+    cursor:nwse-resize;opacity:0;transition:opacity .15s;
+    display:flex;align-items:flex-end;justify-content:flex-end;
+    padding:5px 5px 6px 6px;border-radius:0 0 var(--radius) 0;
+  }
+  .card:hover .card__resize,.card__resize.active{opacity:1}
+  .card__resize svg{width:11px;height:11px;color:var(--text-tertiary);transition:color .15s;pointer-events:none}
+  .card__resize:hover svg,.card__resize.active svg{color:var(--accent)}
+
+  .card__body::-webkit-scrollbar{width:4px;height:4px}
+  .card__body::-webkit-scrollbar-track{background:transparent}
+  .card__body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+  /* Size indicator (shows dimensions next to reset) */
+  .card__size-label{
+    font-size:9px;font-family:var(--font-mono);color:var(--text-disabled);
+    opacity:0;transition:opacity .2s;margin-right:4px;
+  }
+  .card__size-label.visible{opacity:.6}
+
+  /* ================================================================
+     CODE CARD
+     ================================================================ */
+  .code-card .card__body{padding:10px 14px}
+  .code-card pre{
+    font-family:var(--font-mono);font-size:12px;line-height:1.6;
+    white-space:pre;color:var(--text);margin:0;
+  }
+  .code-card .kw{color:var(--accent)}
+  .code-card .str{color:var(--add-text)}
+  .code-card .cmt{color:var(--text-tertiary);font-style:italic}
+  .code-card .fn{color:#e8b84b}
+
+  /* ================================================================
+     DIFF CARD
+     ================================================================ */
+  .diff-card .card__body{display:flex;overflow:hidden}
+  .diff-pane{
+    flex:1;min-width:120px;overflow:auto;
+    font-family:var(--font-mono);font-size:12px;line-height:1.6;
+  }
+  .diff-line{display:flex;transition:filter .08s}
+  .diff-line:hover{filter:brightness(1.12)}
+  .diff-line__gutter{
+    display:flex;flex-shrink:0;align-items:center;
+    width:54px;padding-right:6px;user-select:none;font-size:10px;color:var(--text-tertiary);
+  }
+  .diff-line__ln{width:30px;text-align:right;opacity:.5}
+  .diff-line__sign{width:16px;text-align:center;font-weight:700;font-size:11px}
+  .diff-line__code{flex:1;white-space:pre;padding-right:14px;overflow-wrap:anywhere}
+
+  .diff-line--add{background:var(--add-bg);box-shadow:inset 3px 0 0 var(--add-text)}
+  .diff-line--add .diff-line__gutter{background:var(--add-gutter)}
+  .diff-line--add .diff-line__sign{color:var(--add-text);opacity:1}
+  .diff-line--add .diff-line__code{color:var(--add-text)}
+
+  .diff-line--del{background:var(--del-bg);box-shadow:inset 3px 0 0 var(--del-text)}
+  .diff-line--del .diff-line__gutter{background:var(--del-gutter)}
+  .diff-line--del .diff-line__sign{color:var(--del-text);opacity:1}
+  .diff-line--del .diff-line__code{color:var(--del-text)}
+
+  .diff-line--ctx .diff-line__code{color:var(--text-secondary)}
+  .diff-line--ctx .diff-line__sign{opacity:.3}
+
+  .diff-divider{
+    flex-shrink:0;width:7px;cursor:col-resize;background:var(--border-light);
+    display:flex;align-items:center;justify-content:center;
+    transition:background .15s;position:relative;z-index:10;
+  }
+  .diff-divider:hover,.diff-divider.active{background:var(--accent)}
+  .diff-divider-dots{
+    display:flex;flex-direction:column;gap:3px;align-items:center;
+    opacity:0;transition:opacity .12s;pointer-events:none;
+  }
+  .diff-divider:hover .diff-divider-dots,.diff-divider.active .diff-divider-dots{opacity:1}
+  .diff-divider-dots span{width:3px;height:3px;border-radius:50%;background:#fff}
+
+  .diff-pane::-webkit-scrollbar{width:4px;height:4px}
+  .diff-pane::-webkit-scrollbar-track{background:transparent}
+  .diff-pane::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+  /* ================================================================
+     DEPLOY STATUS CARD
+     ================================================================ */
+  .deploy-card .card__body{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:20px;gap:6px;text-align:center;
+  }
+  .deploy-card .status-icon{font-size:28px;line-height:1}
+  .deploy-card .status-text{font-size:13px;font-weight:600;color:var(--text)}
+  .deploy-card .status-url{font-size:10px;color:var(--accent);word-break:break-all;max-width:100%}
+
+  /* ================================================================
+     FILE CARD
+     ================================================================ */
+  .file-card .card__body{
+    display:flex;align-items:center;gap:14px;padding:16px 18px;
+  }
+  .file-card .file-icon-wrap{flex-shrink:0;width:40px;height:40px;border-radius:8px;background:var(--accent-bg);display:flex;align-items:center;justify-content:center}
+  .file-card .file-icon-wrap svg{width:20px;height:20px;color:var(--accent)}
+  .file-card .file-info{flex:1;min-width:0}
+  .file-card .file-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-card .file-meta{font-size:10px;color:var(--text-tertiary);margin-top:2px}
+  .file-card .file-dl{
+    flex-shrink:0;padding:6px 14px;border-radius:6px;border:1px solid var(--border);
+    background:var(--surface);color:var(--text-secondary);cursor:pointer;
+    font-size:11px;font-weight:600;font-family:var(--font-sans);
+    transition:all .15s;
+  }
+  .file-card .file-dl:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* ================================================================
+     PREVIEW CARD
+     ================================================================ */
+  .preview-card .card__body{padding:0;background:#fff;min-height:160px}
+  .preview-card .preview-placeholder{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    height:100%;color:var(--text-tertiary);font-size:12px;font-family:var(--font-sans);
+    background:#f8f8fb;
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-btn" onclick="toggleTheme()" title="切换主题">
+  <span class="icon-sun" hidden>☀</span><span class="icon-moon">☾</span>
+</button>
+
+<div class="page-header">
+  <h1>Artifacts Layout V3</h1>
+  <p class="sub">一行一张卡片 · 满宽不拥挤 · 各自可调大小 · 一键恢复默认 · 深浅主题</p>
+</div>
+
+<div class="hint">
+  <span class="hint-dot" id="hintDot"></span>
+  <span id="hintText">↘ 右下角拖拽调整尺寸 · ↺ 点击 header 重置按钮恢复默认 · 调过后卡片尺寸标签会亮起</span>
+</div>
+
+<div class="demo-wrap">
+
+  <!-- ============================================================
+       Scenario 1 — Single Code Card
+       ============================================================ -->
+  <div class="section">
+    <div class="section-label">场景 1 · 代码块 — 满宽、可调、可恢复</div>
+    <div class="artifact-list">
+      <div class="card code-card" id="s1-code" style="height:360px;" data-default-w="100%" data-default-h="360">
+        <div class="card__header">
+          <svg class="card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+          <span class="card__title">src/components/chat/ChatInput.tsx</span>
+          <span class="card__badge card__badge--lang">tsx</span>
+          <span class="spacer"></span>
+          <span class="card__size-label" id="s1-code-label">860×360</span>
+          <button class="card__reset" data-reset="s1-code" data-tip="恢复默认大小" title="恢复默认大小">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+          </button>
+        </div>
+        <div class="card__body">
+<pre><span class="kw">import</span> { useState, useRef, useCallback } <span class="kw">from</span> <span class="str">"react"</span>;
+<span class="kw">import</span> { TextArea, Button } <span class="kw">from</span> <span class="str">"@douyinfe/semi-ui"</span>;
+<span class="kw">import</span> { IconSend } <span class="kw">from</span> <span class="str">"@douyinfe/semi-icons"</span>;
+
+<span class="kw">interface</span> ChatInputProps {
+  onSend: (text: <span class="kw">string</span>) => <span class="kw">void</span>;
+  disabled?: <span class="kw">boolean</span>;
+}
+
+<span class="kw">export function</span> <span class="fn">ChatInput</span>({ onSend, disabled }: ChatInputProps) {
+  <span class="kw">const</span> [value, setValue] = useState(<span class="str">""</span>);
+  <span class="kw">const</span> isComposingRef = useRef(<span class="kw">false</span>);
+
+  <span class="kw">const</span> handleSend = useCallback(() => {
+    <span class="kw">const</span> text = value.trim();
+    <span class="kw">if</span> (!text || disabled) <span class="kw">return</span>;
+    onSend(text);
+    setValue(<span class="str">""</span>);
+  }, [value, disabled, onSend]);
+
+  <span class="kw">return</span> (
+    &lt;div className=<span class="str">"chat-input"</span>&gt;
+      &lt;TextArea value={value} onChange={setValue}
+        onCompositionStart={<span class="kw">()</span> => isComposingRef.current = <span class="kw">true</span>}
+        onCompositionEnd={<span class="kw">()</span> => isComposingRef.current = <span class="kw">false</span>}
+        onKeyDown={<span class="kw">(e)</span> => {
+          <span class="kw">if</span> (e.key === <span class="str">"Enter"</span> && !isComposingRef.current) handleSend();
+        }}
+      /&gt;
+    &lt;/div&gt;
+  );
+}</pre>
+        </div>
+        <div class="card__resize" data-resize="s1-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/><line x1="19" y1="17" x2="17" y2="19"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Scenario 2 — Multiple artifacts
+       ============================================================ -->
+  <div class="section">
+    <div class="section-label">场景 2 · 一次回复多个产物 — 各自独立调整、各自一键恢复</div>
+    <div class="artifact-list">
+
+      <!-- Diff -->
+      <div class="card diff-card" id="s2-diff" style="height:320px;" data-default-w="100%" data-default-h="320">
+        <div class="card__header">
+          <svg class="card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+          <span class="card__title">src/middleware/auth.ts</span>
+          <span class="card__badge card__badge--lang">ts</span>
+          <span class="spacer"></span>
+          <span style="font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--add-text)">+8</span>
+          <span style="color:var(--text-tertiary);margin:0 1px;font-size:10px">/</span>
+          <span style="font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--del-text)">−5</span>
+          <span class="card__size-label" id="s2-diff-label">860×320</span>
+          <button class="card__reset" data-reset="s2-diff" data-tip="恢复默认大小" title="恢复默认大小">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+          </button>
+        </div>
+        <div class="card__body" id="s2-diff-body">
+          <div class="diff-pane" id="s2-diff-left">
+            <div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">1</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">export function authMiddleware(req: Request) {</span></div>
+            <div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">2</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">  if (token === "admin") return true;  // hardcoded_check_no_longer_acceptable_for_production_compliance</span></div>
+            <div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">3</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">  if (token === "superadmin_secret_master_key_do_not_expose_in_production_environments") return true;</span></div>
+            <div class="diff-line diff-line--ctx"><div class="diff-line__gutter"><span class="diff-line__ln">4</span><span class="diff-line__sign"> </span></div><span class="diff-line__code">  return false;</span></div>
+            <div class="diff-line diff-line--del"><div class="diff-line__gutter"><span class="diff-line__ln">5</span><span class="diff-line__sign">−</span></div><span class="diff-line__code">}</span></div>
+          </div>
+          <div class="diff-divider" id="s2-diff-divider"><div class="diff-divider-dots"><span></span><span></span><span></span></div></div>
+          <div class="diff-pane" id="s2-diff-right">
+            <div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">1</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">import { verifyToken } from "@/lib/jwt";</span></div>
+            <div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">2</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">export async function authMiddleware(req: Request): Promise&lt;UserPayload&gt; {</span></div>
+            <div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">3</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  if (!token) throw new UnauthorizedError("未登录");</span></div>
+            <div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">4</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  const payload = await verifyToken(token);</span></div>
+            <div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">5</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">  return payload;</span></div>
+            <div class="diff-line diff-line--add"><div class="diff-line__gutter"><span class="diff-line__ln">6</span><span class="diff-line__sign">+</span></div><span class="diff-line__code">}</span></div>
+          </div>
+        </div>
+        <div class="card__resize" data-resize="s2-diff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/><line x1="19" y1="17" x2="17" y2="19"/></svg></div>
+      </div>
+
+      <!-- Code -->
+      <div class="card code-card" id="s2-code" style="height:260px;" data-default-w="100%" data-default-h="260">
+        <div class="card__header">
+          <svg class="card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+          <span class="card__title">Dockerfile</span>
+          <span class="card__badge card__badge--lang">docker</span>
+          <span class="spacer"></span>
+          <span class="card__size-label" id="s2-code-label">860×260</span>
+          <button class="card__reset" data-reset="s2-code" data-tip="恢复默认大小" title="恢复默认大小">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+          </button>
+        </div>
+        <div class="card__body">
+<pre><span class="kw">FROM</span> node:20-alpine
+<span class="kw">WORKDIR</span> /app
+<span class="kw">COPY</span> package*.json ./
+<span class="kw">RUN</span> npm ci --production
+<span class="kw">COPY</span> . .
+<span class="kw">EXPOSE</span> 3000
+<span class="kw">CMD</span> [<span class="str">"node"</span>, <span class="str">"dist/server.js"</span>]</pre>
+        </div>
+        <div class="card__resize" data-resize="s2-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/><line x1="19" y1="17" x2="17" y2="19"/></svg></div>
+      </div>
+
+      <!-- Deploy -->
+      <div class="card deploy-card" id="s2-deploy" style="height:180px;" data-default-w="100%" data-default-h="180">
+        <div class="card__header">
+          <svg class="card__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3"/></svg>
+          <span class="card__title">部署状态</span>
+          <span class="card__badge card__badge--green">已部署</span>
+          <span class="spacer"></span>
+          <span class="card__size-label" id="s2-deploy-label">860×180</span>
+          <button class="card__reset" data-reset="s2-deploy" data-tip="恢复默认大小" title="恢复默认大小">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+          </button>
+        </div>
+        <div class="card__body">
+          <div class="status-icon" style="color:var(--add-text)">&#10003;</div>
+          <div class="status-text">部署成功</div>
+          <a class="status-url" href="#" onclick="return false">https://app.example.com</a>
+        </div>
+        <div class="card__resize" data-resize="s2-deploy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><line x1="19" y1="5" x2="5" y2="19"/><line x1="19" y1="11" x2="11" y2="19"/><line x1="19" y1="17" x2="17" y2="19"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggleTheme(){
+  const h=document.documentElement;
+  const n=h.getAttribute("data-theme")==="dark"?"light":"dark";
+  h.setAttribute("data-theme",n);
+  document.querySelector(".icon-sun").hidden=n==="dark";
+  document.querySelector(".icon-moon").hidden=n==="light";
+}
+
+const MIN_W=320,MIN_H=140,MAX_W=1200,MAX_H=700;
+function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v))}
+
+// ================================================================
+// Resize
+// ================================================================
+function setupResize(cardId){
+  const card=document.getElementById(cardId);
+  const handle=card.querySelector("[data-resize]");
+  const label=document.getElementById(cardId+"-label");
+  if(!handle)return;
+  let dragging=false,sx,sy,sw,sh;
+  handle.addEventListener("mousedown",(e)=>{
+    e.preventDefault();e.stopPropagation();
+    dragging=true;handle.classList.add("active");card.classList.add("resizing");
+    sx=e.clientX;sy=e.clientY;
+    sw=card.getBoundingClientRect().width;sh=card.getBoundingClientRect().height;
+    setHint(true,"调整尺寸… (min "+MIN_W+"×"+MIN_H+", max "+MAX_W+"×"+MAX_H+")");
+  });
+  window.addEventListener("mousemove",(e)=>{
+    if(!dragging)return;
+    const w=clamp(sw+(e.clientX-sx),MIN_W,MAX_W);
+    const h=clamp(sh+(e.clientY-sy),MIN_H,MAX_H);
+    card.style.width=w+"px";
+    card.style.height=h+"px";
+    updateSizeLabel(label,w,h);
+  });
+  window.addEventListener("mouseup",()=>{
+    if(!dragging)return;
+    dragging=false;handle.classList.remove("active");card.classList.remove("resizing");
+    setHint(false,"↘ 右下角拖拽调整尺寸 · ↺ 点击 header 重置按钮恢复默认 · 调过后尺寸标签亮起");
+  });
+}
+
+// ================================================================
+// Reset
+// ================================================================
+function setupReset(cardId){
+  const card=document.getElementById(cardId);
+  const btn=card.querySelector("[data-reset]");
+  const label=document.getElementById(cardId+"-label");
+  if(!btn)return;
+
+  const defaultW=card.dataset.defaultW;
+  const defaultH=parseInt(card.dataset.defaultH);
+
+  btn.addEventListener("click",(e)=>{
+    e.stopPropagation();
+    card.classList.add("restoring");
+    card.style.width=defaultW;
+    card.style.height=defaultH+"px";
+
+    // update label
+    if(label){
+      const actualW=card.getBoundingClientRect().width;
+      label.textContent=Math.round(actualW)+"×"+defaultH;
+      label.classList.remove("visible");
+    }
+
+    card.addEventListener("transitionend",()=>{
+      card.classList.remove("restoring");
+    },{once:true});
+  });
+}
+
+function updateSizeLabel(label,w,h){
+  if(!label)return;
+  label.textContent=Math.round(w)+"×"+Math.round(h);
+  label.classList.add("visible");
+}
+
+// ================================================================
+// Diff divider
+// ================================================================
+function setupDiffDivider(cardId){
+  const card=document.getElementById(cardId);
+  const divider=card.querySelector(".diff-divider");
+  const panes=card.querySelectorAll(".diff-pane");
+  if(!divider||panes.length<2)return;
+  let dragging=false,sx,sw0,sw1;
+  divider.addEventListener("mousedown",(e)=>{
+    e.preventDefault();dragging=true;divider.classList.add("active");
+    sx=e.clientX;sw0=panes[0].getBoundingClientRect().width;sw1=panes[1].getBoundingClientRect().width;
+    setHint(true,"Diff 分隔线拖拽中… (每侧最小 120px)");
+  });
+  window.addEventListener("mousemove",(e)=>{
+    if(!dragging)return;
+    const dx=e.clientX-sx,total=sw0+sw1;
+    const w0=clamp(sw0+dx,120,total-120),w1=total-w0;
+    panes[0].style.flex="none";panes[0].style.width=(w0/total*100)+"%";
+    panes[1].style.flex="none";panes[1].style.width=(w1/total*100)+"%";
+  });
+  window.addEventListener("mouseup",()=>{
+    if(!dragging)return;dragging=false;divider.classList.remove("active");
+    setHint(false,"↘ 右下角拖拽调整尺寸 · ↺ 点击 header 重置按钮恢复默认 · 调过后尺寸标签亮起");
+  });
+}
+
+function setHint(on,text){
+  document.getElementById("hintDot").className="hint-dot"+(on?" on":"");
+  document.getElementById("hintText").textContent=text;
+}
+
+// Init
+setupResize("s1-code");setupReset("s1-code");
+setupResize("s2-diff");setupDiffDivider("s2-diff");setupReset("s2-diff");
+setupResize("s2-code");setupReset("s2-code");
+setupResize("s2-deploy");setupReset("s2-deploy");
+
+console.log("%c Artifacts Layout V3 · 就绪 %c— 重置默认大小 + 尺寸标签",
+  "color:#5b8def;font-weight:700","color:#9e9ead");
+</script>
+</body>
+</html>

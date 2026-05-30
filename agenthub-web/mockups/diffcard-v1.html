@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DiffCard — AgentHub Design Prototype</title>
+<style>
+  /* ================================================================
+     Tokens
+     ================================================================ */
+  :root {
+    --bg: #1b1b1f;
+    --bg-card: #212126;
+    --bg-card-hover: #25252c;
+    --border: #2e2e36;
+    --border-subtle: #282830;
+    --text: #e4e4e9;
+    --text-secondary: #9d9da8;
+    --text-tertiary: #6b6b78;
+    --green: #3fb950;
+    --green-bg: rgba(63,185,80,0.12);
+    --green-bg-strong: rgba(63,185,80,0.18);
+    --red: #f85149;
+    --red-bg: rgba(248,81,73,0.12);
+    --red-bg-strong: rgba(248,81,73,0.18);
+    --blue: #58a6ff;
+    --blue-bg: rgba(88,166,255,0.1);
+    --orange: #d2991d;
+    --orange-bg: rgba(210,153,29,0.12);
+    --radius-sm: 6px;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "SF Mono", Consolas, monospace;
+    --font-sans: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+    --shadow-card: 0 0 0 1px rgba(255,255,255,0.04), 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-card-hover: 0 0 0 1px rgba(255,255,255,0.06), 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  [data-theme="light"] {
+    --bg: #f5f5f7;
+    --bg-card: #ffffff;
+    --bg-card-hover: #fafafa;
+    --border: #e4e4e9;
+    --border-subtle: #eeeef2;
+    --text: #1a1a24;
+    --text-secondary: #6b6b7b;
+    --text-tertiary: #9b9bab;
+    --green: #1a7f37;
+    --green-bg: rgba(26,127,55,0.08);
+    --green-bg-strong: rgba(26,127,55,0.14);
+    --red: #cf222e;
+    --red-bg: rgba(207,34,46,0.08);
+    --red-bg-strong: rgba(207,34,46,0.14);
+    --blue: #0969da;
+    --blue-bg: rgba(9,105,218,0.08);
+    --orange: #9a6700;
+    --orange-bg: rgba(154,103,0,0.1);
+    --shadow-card: 0 0 0 1px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-card-hover: 0 0 0 1px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 40px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: background 0.3s, color 0.3s;
+  }
+
+  /* ---- Theme Toggle ---- */
+  .theme-btn {
+    position: fixed; top: 16px; right: 16px; z-index: 100;
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--bg-card);
+    color: var(--text-secondary); cursor: pointer; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-card); transition: all 0.2s;
+  }
+  .theme-btn:hover { color: var(--text); border-color: var(--blue); }
+
+  /* ---- Page Header ---- */
+  .page-header { text-align: center; margin-bottom: 36px; }
+  .page-header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .page-header p { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+
+  /* ---- Demo Container ---- */
+  .demo-wrap { width: 100%; max-width: 820px; display: flex; flex-direction: column; gap: 32px; }
+  .demo-section { display: flex; flex-direction: column; gap: 10px; }
+  .demo-label { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 600; }
+
+  /* ================================================================
+     DIFF CARD
+     ================================================================ */
+  .diff-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    width: 100%;
+    min-width: 380px;
+  }
+  .diff-card:hover { box-shadow: var(--shadow-card-hover); }
+  .diff-card.resizing { user-select: none; }
+
+  /* ---- Header ---- */
+  .diff-card__header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    flex-shrink: 0;
+  }
+  .diff-card__header .file-icon {
+    width: 15px; height: 15px; flex-shrink: 0; color: var(--text-tertiary);
+  }
+  .diff-card__header .file-name {
+    font-size: 12px; font-weight: 600; color: var(--text);
+    font-family: var(--font-mono); font-size: 11.5px;
+  }
+  .diff-card__header .lang-badge {
+    font-size: 9.5px; font-weight: 600; padding: 1px 6px; border-radius: 10px;
+    background: var(--blue-bg); color: var(--blue);
+  }
+  .diff-card__header .spacer { flex: 1; }
+  .diff-card__header .stat {
+    font-size: 10.5px; font-family: var(--font-mono); font-weight: 500;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .diff-card__header .stat.add { color: var(--green); }
+  .diff-card__header .stat.del { color: var(--red); }
+
+  /* ---- Diff Body ---- */
+  .diff-card__body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .diff-pane {
+    flex: 1;
+    overflow: auto;
+    min-width: 120px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    background: var(--bg-card);
+  }
+
+  /* ---- Diff Line ---- */
+  .diff-line {
+    display: flex;
+    min-height: 1.6em;
+    padding: 0 12px;
+    transition: background 0.1s;
+  }
+  .diff-line .ln {
+    flex-shrink: 0; width: 38px; text-align: right; padding-right: 12px;
+    color: var(--text-tertiary); user-select: none; font-size: 11px;
+    opacity: 0.5; padding-top: 1px;
+  }
+  .diff-line .prefix {
+    flex-shrink: 0; width: 14px; text-align: center; font-weight: 700;
+    user-select: none; margin-right: 4px; padding-top: 1px;
+  }
+  .diff-line .code {
+    flex: 1; white-space: pre; overflow-wrap: anywhere; padding-top: 1px;
+  }
+
+  .diff-line.add { background: var(--green-bg); }
+  .diff-line.add .prefix { color: var(--green); }
+  .diff-line.del { background: var(--red-bg); }
+  .diff-line.del .prefix { color: var(--red); }
+  .diff-line.ctx { color: var(--text-secondary); }
+
+  /* ---- Divider ---- */
+  .diff-card__divider {
+    position: absolute; top: 0; bottom: 0; width: 5px;
+    cursor: col-resize; z-index: 10;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .diff-card__divider::after {
+    content: ""; width: 1px; height: 100%;
+    background: var(--border-subtle); transition: all 0.15s;
+  }
+  .diff-card__divider:hover::after,
+  .diff-card__divider.active::after {
+    width: 2px; background: var(--blue);
+  }
+
+  /* ---- Resize Handle ---- */
+  .diff-card__resize {
+    position: absolute; right: 0; bottom: 0;
+    width: 22px; height: 22px; cursor: nwse-resize; z-index: 20;
+    opacity: 0; transition: opacity 0.15s;
+    display: flex; align-items: flex-end; justify-content: flex-end;
+    padding: 4px;
+  }
+  .diff-card:hover .diff-card__resize,
+  .diff-card__resize.active { opacity: 1; }
+  .diff-card__resize svg {
+    width: 12px; height: 12px; color: var(--text-tertiary); transition: color 0.15s;
+  }
+  .diff-card__resize:hover svg,
+  .diff-card__resize.active svg { color: var(--blue); }
+
+  /* ---- Scrollbar ---- */
+  .diff-pane::-webkit-scrollbar { width: 4px; height: 4px; }
+  .diff-pane::-webkit-scrollbar-track { background: transparent; }
+  .diff-pane::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .diff-pane::-webkit-scrollbar-corner { background: transparent; }
+
+  /* ================================================================
+     Unified Diff (single pane) — ChatGPT style
+     ================================================================ */
+  .diff-card--unified .diff-card__body { flex-direction: column; }
+  .diff-card--unified .diff-pane { width: 100%; }
+
+  /* ================================================================
+     Status bar
+     ================================================================ */
+  .status-bar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); font-size: 11px; color: var(--text-tertiary);
+  }
+  .status-bar .dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .status-bar .dot.on { background: var(--orange); animation: pulse 1.5s infinite; }
+  .status-bar .dot.off { background: var(--text-tertiary); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+</style>
+</head>
+<body>
+
+<button class="theme-btn" onclick="toggleTheme()" title="切换主题" aria-label="切换深浅色">
+  <span class="icon-sun" hidden>☀</span><span class="icon-moon">☾</span>
+</button>
+
+<div class="page-header">
+  <h1>DiffCard — 设计原型</h1>
+  <p>ChatGPT / Gemini 风格 · 实际 diff 高亮 · 拖拽调整尺寸 & 面板比例</p>
+</div>
+
+<div class="demo-wrap">
+
+  <!-- Status -->
+  <div class="status-bar">
+    <span class="dot off" id="dot"></span>
+    <span id="status">↕ 拖拽中间分隔线调整面板比例 · ↖ 拖拽右下角调整卡片尺寸</span>
+  </div>
+
+  <!-- Example 1: Side-by-side diff (like GitHub PR) -->
+  <div class="demo-section">
+    <div class="demo-label">示例 1 · 并排对比（GitHub PR 风格）· 长代码行横向滚动</div>
+    <div class="diff-card" id="card1" style="height:340px;">
+      <div class="diff-card__header">
+        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+        <span class="file-name">src/middleware/auth.ts</span>
+        <span class="lang-badge">TypeScript</span>
+        <span class="spacer"></span>
+        <span class="stat add">+7</span>
+        <span class="stat del">−4</span>
+      </div>
+
+      <div class="diff-card__body" id="card1-body">
+        <!-- LEFT: old -->
+        <div class="diff-pane" id="card1-left">
+<div class="diff-line del"><span class="ln">1</span><span class="prefix">-</span><span class="code">export function authMiddleware(req: Request) {</span></div>
+<div class="diff-line ctx"><span class="ln">2</span><span class="prefix"> </span><span class="code">  const token = req.headers.get("Authorization")?.replace("Bearer ", "");</span></div>
+<div class="diff-line del"><span class="ln">3</span><span class="prefix">-</span><span class="code">  if (token === "admin") return true;  // super_simple_hardcoded_check_no_longer_acceptable_for_production_use_cases_and_compliance_requirements</span></div>
+<div class="diff-line del"><span class="ln">4</span><span class="prefix">-</span><span class="code">  if (token === "superadmin_mega_secret_key_do_not_share_ever_in_production_environments") return true;</span></div>
+<div class="diff-line ctx"><span class="ln">5</span><span class="prefix"> </span><span class="code">  return false;</span></div>
+<div class="diff-line ctx"><span class="ln">6</span><span class="prefix"> </span><span class="code">}</span></div>
+<div class="diff-line del"><span class="ln">7</span><span class="prefix">-</span><span class="code"></span></div>
+        </div>
+
+        <!-- Divider -->
+        <div class="diff-card__divider" id="card1-divider" style="left:50%;"></div>
+
+        <!-- RIGHT: new -->
+        <div class="diff-pane" id="card1-right">
+<div class="diff-line add"><span class="ln">1</span><span class="prefix">+</span><span class="code">import { verifyToken } from "@/lib/jwt";</span></div>
+<div class="diff-line add"><span class="ln">2</span><span class="prefix">+</span><span class="code">import { UnauthorizedError } from "@/lib/errors";</span></div>
+<div class="diff-line add"><span class="ln">3</span><span class="prefix">+</span><span class="code"></span></div>
+<div class="diff-line add"><span class="ln">4</span><span class="prefix">+</span><span class="code">export async function authMiddleware(req: Request): Promise<UserPayload> {</span></div>
+<div class="diff-line ctx"><span class="ln">5</span><span class="prefix"> </span><span class="code">  const token = req.headers.get("Authorization")?.replace("Bearer ", "");</span></div>
+<div class="diff-line add"><span class="ln">6</span><span class="prefix">+</span><span class="code">  if (!token) throw new UnauthorizedError("未登录");</span></div>
+<div class="diff-line add"><span class="ln">7</span><span class="prefix">+</span><span class="code">  const payload = await verifyToken(token);</span></div>
+<div class="diff-line add"><span class="ln">8</span><span class="prefix">+</span><span class="code">  return payload;</span></div>
+<div class="diff-line ctx"><span class="ln">9</span><span class="prefix"> </span><span class="code">}</span></div>
+<div class="diff-line ctx"><span class="ln">10</span><span class="prefix"> </span><span class="code"></span></div>
+        </div>
+      </div>
+
+      <div class="diff-card__resize" id="card1-resize" title="拖拽调整大小">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="20" y1="4" x2="4" y2="20"/><line x1="20" y1="10" x2="10" y2="20"/><line x1="20" y1="16" x2="16" y2="20"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example 2: Unified diff (like ChatGPT) -->
+  <div class="demo-section">
+    <div class="demo-label">示例 2 · 统一对比（ChatGPT / Gemini 风格）· 固定 640px 宽</div>
+    <div class="diff-card diff-card--unified" id="card2" style="width:640px; height:420px;">
+      <div class="diff-card__header">
+        <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+        <span class="file-name">src/components/chat/MessageList.tsx</span>
+        <span class="lang-badge">TSX</span>
+        <span class="spacer"></span>
+        <span class="stat add">+12</span>
+        <span class="stat del">−3</span>
+      </div>
+
+      <div class="diff-card__body" id="card2-body">
+        <div class="diff-pane" style="width:100%;">
+<div class="diff-line ctx"><span class="ln">22</span><span class="prefix"> </span><span class="code">export function MessageList({ conversationId }: Props) {</span></div>
+<div class="diff-line ctx"><span class="ln">23</span><span class="prefix"> </span><span class="code">  const messages = useChatStore((s) => s.messages);</span></div>
+<div class="diff-line del"><span class="ln">24</span><span class="prefix">-</span><span class="code">  const [searchQuery, setSearchQuery] = useState("");</span></div>
+<div class="diff-line add"><span class="ln">24</span><span class="prefix">+</span><span class="code">  const [searchQuery, setSearchQuery] = useState("");</span></div>
+<div class="diff-line add"><span class="ln">25</span><span class="prefix">+</span><span class="code">  const [searchVisible, setSearchVisible] = useState(false);</span></div>
+<div class="diff-line add"><span class="ln">26</span><span class="prefix">+</span><span class="code">  const searchInputRef = useRef&lt;HTMLInputElement&gt;(null);</span></div>
+<div class="diff-line ctx"><span class="ln">27</span><span class="prefix"> </span><span class="code"></span></div>
+<div class="diff-line del"><span class="ln">28</span><span class="prefix">-</span><span class="code">  const filteredMessages = messages.filter((m) =></span></div>
+<div class="diff-line del"><span class="ln">29</span><span class="prefix">-</span><span class="code">    m.content.toLowerCase().includes(searchQuery.toLowerCase())</span></div>
+<div class="diff-line del"><span class="ln">30</span><span class="prefix">-</span><span class="code">  );</span></div>
+<div class="diff-line add"><span class="ln">28</span><span class="prefix">+</span><span class="code">  const filteredMessages = useMemo(() => {</span></div>
+<div class="diff-line add"><span class="ln">29</span><span class="prefix">+</span><span class="code">    if (!searchQuery.trim()) return messages;</span></div>
+<div class="diff-line add"><span class="ln">30</span><span class="prefix">+</span><span class="code">    const q = searchQuery.toLowerCase();</span></div>
+<div class="diff-line add"><span class="ln">31</span><span class="prefix">+</span><span class="code">    return messages.filter((m) => {</span></div>
+<div class="diff-line add"><span class="ln">32</span><span class="prefix">+</span><span class="code">      const content = typeof m.content === "string" ? m.content : "";</span></div>
+<div class="diff-line add"><span class="ln">33</span><span class="prefix">+</span><span class="code">      return content.toLowerCase().includes(q);</span></div>
+<div class="diff-line add"><span class="ln">34</span><span class="prefix">+</span><span class="code">    });</span></div>
+<div class="diff-line add"><span class="ln">35</span><span class="prefix">+</span><span class="code">  }, [messages, searchQuery]);</span></div>
+<div class="diff-line ctx"><span class="ln">36</span><span class="prefix"> </span><span class="code"></span></div>
+<div class="diff-line ctx"><span class="ln">37</span><span class="prefix"> </span><span class="code">  return (</span></div>
+<div class="diff-line ctx"><span class="ln">38</span><span class="prefix"> </span><span class="code">    &lt;div className="message-list"&gt;</span></div>
+<div class="diff-line add"><span class="ln">39</span><span class="prefix">+</span><span class="code">      {searchVisible &amp;&amp; (</span></div>
+<div class="diff-line add"><span class="ln">40</span><span class="prefix">+</span><span class="code">        &lt;SearchBar ref={searchInputRef} value={searchQuery} onChange={setSearchQuery} /&gt;</span></div>
+<div class="diff-line add"><span class="ln">41</span><span class="prefix">+</span><span class="code">      )}</span></div>
+        </div>
+      </div>
+
+      <div class="diff-card__resize" id="card2-resize" title="拖拽调整大小">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="20" y1="4" x2="4" y2="20"/><line x1="20" y1="10" x2="10" y2="20"/><line x1="20" y1="16" x2="16" y2="20"/></svg>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function toggleTheme() {
+  const h = document.documentElement;
+  const next = h.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  h.setAttribute("data-theme", next);
+  document.querySelector(".icon-sun").hidden = next === "dark";
+  document.querySelector(".icon-moon").hidden = next === "light";
+}
+
+// ================================================================
+// Divider drag
+// ================================================================
+function setupDivider(cardId) {
+  const card = document.getElementById(cardId);
+  const body = card.querySelector(".diff-card__body");
+  const divider = card.querySelector(".diff-card__divider");
+  const panes = card.querySelectorAll(".diff-pane");
+  if (!divider || panes.length < 2) return;
+
+  let dragging = false, sx = 0, sw0 = 0, sw1 = 0;
+
+  divider.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    divider.classList.add("active");
+    card.classList.add("resizing");
+    sx = e.clientX;
+    sw0 = panes[0].getBoundingClientRect().width;
+    sw1 = panes[1].getBoundingClientRect().width;
+    setStatus(true, "分隔线拖拽中…");
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - sx;
+    const total = sw0 + sw1;
+    let w0 = Math.max(120, Math.min(total - 120, sw0 + dx));
+    let w1 = total - w0;
+    const p0 = (w0 / total) * 100;
+    const p1 = (w1 / total) * 100;
+    panes[0].style.flex = "none"; panes[0].style.width = p0 + "%";
+    panes[1].style.flex = "none"; panes[1].style.width = p1 + "%";
+    divider.style.left = p0 + "%";
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    divider.classList.remove("active");
+    card.classList.remove("resizing");
+    setStatus(false, "↕ 拖拽中间分隔线调整面板比例 · ↖ 拖拽右下角调整卡片尺寸");
+  });
+}
+
+// ================================================================
+// Resize drag
+// ================================================================
+function setupResize(cardId) {
+  const card = document.getElementById(cardId);
+  const handle = card.querySelector(".diff-card__resize");
+  if (!handle) return;
+
+  let dragging = false, sx = 0, sy = 0, sw = 0, sh = 0;
+
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dragging = true;
+    handle.classList.add("active");
+    card.classList.add("resizing");
+    sx = e.clientX; sy = e.clientY;
+    sw = card.getBoundingClientRect().width;
+    sh = card.getBoundingClientRect().height;
+    setStatus(true, "调整卡片尺寸… (min 380×180)");
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    card.style.width = Math.max(380, sw + (e.clientX - sx)) + "px";
+    card.style.height = Math.max(180, sh + (e.clientY - sy)) + "px";
+  });
+
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("active");
+    card.classList.remove("resizing");
+    setStatus(false, "↕ 拖拽中间分隔线调整面板比例 · ↖ 拖拽右下角调整卡片尺寸");
+  });
+}
+
+function setStatus(on, text) {
+  document.getElementById("dot").className = "dot " + (on ? "on" : "off");
+  document.getElementById("status").textContent = text;
+}
+
+// Init
+setupDivider("card1"); setupResize("card1");
+// Card 2 uses unified diff — only resize, no divider drag needed
+
+// Position dividers at 50%
+const d1 = document.getElementById("card1-divider");
+if (d1) d1.style.left = "50%";
+
+console.log(
+  "%c DiffCard · 设计原型就绪 %c|%c 并排对比 + 统一 diff · 拖拽调整 · 深/浅主题",
+  "color:#58a6ff;font-weight:bold;", "color:#6b6b78;", "color:#9d9da8;"
+);
+</script>
+</body>
+</html>

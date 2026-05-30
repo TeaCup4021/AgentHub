@@ -1,53 +1,115 @@
-export interface SubTask {
-  agentId: string;
-  agentName: string;
-  instruction: string;
-}
+import type { PlanSubtask } from "@/types";
 
 interface OrchestratorPlanProps {
   planId: string;
-  subtasks: SubTask[];
-  onConfirm: () => void;
-  onAdjust: (subtasks: SubTask[]) => void;
+  subtasks: PlanSubtask[];
+  onConfirm?: () => void;
+  onAdjust?: (subtasks: PlanSubtask[]) => void;
 }
 
 export function OrchestratorPlan({ planId, subtasks, onConfirm, onAdjust }: OrchestratorPlanProps) {
   if (subtasks.length === 0) return null;
 
+  const handleConfirm = () => {
+    if (onConfirm) {
+      onConfirm();
+    } else {
+      window.dispatchEvent(new CustomEvent("orchestrator-confirm", { detail: { planId, subtasks } }));
+    }
+  };
+
+  const handleAdjust = () => {
+    if (onAdjust) {
+      onAdjust(subtasks);
+    } else {
+      window.dispatchEvent(new CustomEvent("orchestrator-adjust", { detail: { subtasks } }));
+    }
+  };
+
   return (
-    <div className="px-4 py-3">
-      <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 max-w-[75%] mx-auto">
-        <div className="flex items-center gap-2 mb-3">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
+    <div style={{ padding: "8px 16px" }}>
+      <div style={{
+        border: "1px solid var(--color-border-light)",
+        background: "var(--color-bg-elevated)",
+        borderRadius: "var(--radius-lg)",
+        padding: 16,
+        maxWidth: "75%",
+        margin: "0 auto",
+        boxShadow: "var(--shadow-card)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
-          <span className="text-sm font-semibold text-purple-800">Orchestrator 任务拆解</span>
+          <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-text-primary)" }}>
+            Orchestrator 任务拆解
+          </span>
         </div>
 
-        <div className="space-y-2">
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {subtasks.map((task, i) => (
-            <div key={`${planId}-${i}`} className="flex items-center gap-2 text-xs text-purple-700 bg-white rounded px-3 py-2">
-              <span className="w-5 h-5 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+            <div key={`${planId}-${i}`} style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: "var(--font-size-xs)",
+              color: "var(--color-text-secondary)",
+              background: "var(--color-bg-hover)",
+              borderRadius: "var(--radius-sm)",
+              padding: "6px 10px",
+            }}>
+              <span style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 20,
+                height: 20,
+                borderRadius: "50%",
+                background: "var(--color-primary)",
+                color: "#fff",
+                fontSize: 10,
+                fontWeight: 700,
+                flexShrink: 0,
+              }}>
                 {i + 1}
               </span>
-              <span className="flex-1">{task.instruction}</span>
-              <span className="text-purple-500 shrink-0">@{task.agentName}</span>
+              <span style={{ flex: 1 }}>{task.instruction}</span>
+              <span style={{ color: "var(--color-primary)", flexShrink: 0, fontWeight: 500 }}>
+                @{task.agent.name}
+              </span>
             </div>
           ))}
         </div>
 
-        <div className="flex justify-end gap-2 mt-3">
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
           <button
             type="button"
-            onClick={() => onAdjust(subtasks)}
-            className="rounded-md px-3 py-1 text-xs text-purple-600 hover:bg-purple-100"
+            onClick={handleAdjust}
+            style={{
+              border: "1px solid var(--color-border-medium)",
+              borderRadius: "var(--radius-sm)",
+              background: "transparent",
+              padding: "4px 12px",
+              fontSize: "var(--font-size-xs)",
+              color: "var(--color-text-secondary)",
+              cursor: "pointer",
+            }}
           >
             调整分派
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            className="rounded-md bg-purple-600 px-3 py-1 text-xs text-white hover:bg-purple-700"
+            onClick={handleConfirm}
+            style={{
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--color-primary)",
+              padding: "4px 12px",
+              fontSize: "var(--font-size-xs)",
+              color: "#fff",
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
           >
             确认执行
           </button>

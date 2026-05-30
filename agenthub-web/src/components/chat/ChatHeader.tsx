@@ -9,9 +9,10 @@ type SearchMode = "off" | "conv" | "msg";
 interface ChatHeaderProps {
   conversation: Conversation;
   agents: Agent[];
+  messageHitCount?: number;
 }
 
-export function ChatHeader({ conversation, agents }: ChatHeaderProps) {
+export function ChatHeader({ conversation, agents, messageHitCount }: ChatHeaderProps) {
   const [searchMode, setSearchMode] = useState<SearchMode>("off");
   const [searchText, setSearchText] = useState("");
   const searchQuery = useChatStore((s) => s.searchQuery);
@@ -113,6 +114,11 @@ export function ChatHeader({ conversation, agents }: ChatHeaderProps) {
           >
             {searchMode === "msg" ? "消息" : "对话"}
           </Button>
+          {searchMode === "msg" && searchText && messageHitCount !== undefined && (
+            <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)", lineHeight: "32px", whiteSpace: "nowrap" }}>
+              找到 {messageHitCount} 条
+            </span>
+          )}
         </div>
       )}
     </div>

@@ -94,6 +94,7 @@ export interface Conversation {
   type: ConversationType;
   ownerId: string;
   agentIds: string[];
+  projectId?: string;
   isPinned: boolean;
   isArchived: boolean;
   lastActiveAt: string;
@@ -105,6 +106,7 @@ export interface CreateConversationParams {
   title: string;
   type: ConversationType;
   agentIds: string[];
+  projectId?: string;
 }
 
 export interface UpdateConversationParams {
@@ -182,12 +184,39 @@ export type SSEEventType =
   | "message_end"
   | "error";
 
+export interface PlanSubtask {
+  subtask_id: string;
+  agent: { id: string; name: string };
+  instruction: string;
+  priority: number;
+}
+
+export interface SummaryResult {
+  subtask_id: string;
+  status: "success" | "failed";
+  message_id: string;
+  error?: string;
+}
+
+export interface SSEMessageStartMeta {
+  plan?: PlanSubtask[];
+  subtask_id?: string;
+  plan_id?: string;
+  summary?: {
+    total: number;
+    success: number;
+    failed: number;
+    results: SummaryResult[];
+  };
+}
+
 export interface SSEMessageStart {
   version: string;
   event_id: string;
   conversation_id: string;
   message_id: string;
   sender: { type: string; id: string; name: string };
+  meta?: SSEMessageStartMeta | null;
   timestamp: string;
 }
 
@@ -215,6 +244,7 @@ export interface SSEAgentStatus {
   event_id: string;
   conversation_id: string;
   message_id: string;
+  task_id?: string;
   subtask_id: string;
   agent: { id: string; name: string };
   status: "queued" | "running" | "success" | "failed" | "timeout";
@@ -254,4 +284,28 @@ export interface SSEError {
   message: string;
   retryable: boolean;
   timestamp: string;
+}
+
+// ========== DAG 可视化 ==========
+
+export interface DagNode {
+  subtaskId: string;
+  agentId: string;
+  agentName: string;
+  instruction: string;
+  status: string;
+  latencyMs?: number;
+  outputMessageId?: string;
+}
+
+export interface DagEdge {
+  from: string;
+  to: string;
+}
+
+export interface DagResponse {
+  taskId: string;
+  status: string;
+  nodes: DagNode[];
+  edges: DagEdge[];
 }

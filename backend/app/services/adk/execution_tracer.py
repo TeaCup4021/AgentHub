@@ -37,6 +37,7 @@ class ExecutionTracer:
 
     def __init__(self) -> None:
         self.records: dict[str, ExecutionRecord] = {}
+        self._edges: list[dict] = []
 
     # -- adk callbacks (sync) ------------------------------------------------
 
@@ -70,9 +71,37 @@ class ExecutionTracer:
                 rec.output_message_id = message_id
                 break
 
+    # -- edge capture ---------------------------------------------------------
+
+    def capture_edges(self, edges: list) -> None:
+        """Capture ADK Workflow.edges as native DAG topology."""
+        self._edges = []
+        for edge in edges:
+            from_node = getattr(edge, "from_node", None)
+            to_node = getattr(edge, "to_node", None)
+            if from_node is None or to_node is None:
+                continue
+            from_name = getattr(from_node, "name", str(from_node))
+            to_name = getattr(to_node, "name", str(to_node))
+            self._edges.append({"from_node": from_name, "to_node": to_name})
+
     # -- data export ---------------------------------------------------------
 
     def get_dag_data(self, edges: list | None = None) -> dict:
+        _edges = edges or self._edges
+        # Convert ADK Edge objects to dicts if needed
+        edge_dicts: list[dict] = []
+        for e in _edges:
+            if isinstance(e, dict):
+                edge_dicts.append(e)
+            else:
+                from_node = getattr(e, "from_node", None)
+                to_node = getattr(e, "to_node", None)
+                if from_node is not None and to_node is not None:
+                    from_name = getattr(from_node, "name", str(from_node))
+                    to_name = getattr(to_node, "name", str(to_node))
+                    edge_dicts.append({"from_node": from_name, "to_node": to_name})
+
         nodes = []
         for rec in self.records.values():
             latency = None
@@ -86,7 +115,7 @@ class ExecutionTracer:
                 "error": rec.error,
                 "output_message_id": rec.output_message_id,
             })
-        return {"nodes": nodes, "edges": edges or []}
+        return {"nodes": nodes, "edges": edge_dicts}
 
     def get_subtask_metrics(self) -> dict[str, dict]:
         return {

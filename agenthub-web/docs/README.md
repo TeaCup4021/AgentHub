@@ -10,6 +10,7 @@
 |------|------|
 | [2026-05-21-agenthub-frontend-design.md](specs/2026-05-21-agenthub-frontend-design.md) | **前端产品设计方案** — 项目概述、功能范围(P0/P1/P2)、组件架构、数据流、SSE 协议、Orchestrator 交互、决策记录、OpenAkita 借鉴分析 |
 | [AgentHub-前端实施计划书-v2.md](AgentHub-前端实施计划书-v2.md) | **实施计划书 v2.0** — P0/P1/P2 共 23 个模块的完整 task 拆解、依赖安装汇总、后端协作备忘 |
+| [AgentHub前端优化任务清单.md](AgentHub前端优化任务清单.md) | **P0/P1/P2 优化任务清单** — 23 个模块的现状 vs 目标表，按优先级分级 |
 
 ---
 
@@ -103,7 +104,29 @@ Phase 1-9 完成后，重新按体验层级整理为三个优先级。这些 Spe
 
 ---
 
-## 九、开发日志与验证
+## 九、UI 重构 Design Token + 卡片升级 (2026-05-27)
+
+| 文档 | 说明 |
+|------|------|
+| [2026-05-27-design-token-refactor.md](specs/2026-05-27-design-token-refactor.md) | **Design Token 体系重构 Spec** — Semi DSM 对齐 + 飞书风格双主题 |
+| [2026-05-27-diff-card-upgrade.md](specs/2026-05-27-diff-card-upgrade.md) | **Diff 卡片升级 Spec** — 可拖拽 resize、分割线、reset 按钮 |
+| [2026-05-27-interaction-experience.md](specs/2026-05-27-interaction-experience.md) | **交互体验升级 Spec** — 三层递进 |
+| [2026-05-27-onboarding-wizard.md](specs/2026-05-27-onboarding-wizard.md) | **Onboarding 引导流程 Spec** — 待实现 |
+| [2026-05-27-project-workspace.md](specs/2026-05-27-project-workspace.md) | **多项目工作区 Spec** — 待实现 |
+| [2026-05-27-frontend-implementation-summary.md](specs/2026-05-27-frontend-implementation-summary.md) | **前端实现清单** — 各模块完成状态汇总 |
+
+## 十、代码审查与路线图 (2026-05-29)
+
+| 文档 | 说明 |
+|------|------|
+| [2026-05-29-bug-list-and-fix-plan.md](specs/2026-05-29-bug-list-and-fix-plan.md) | **Bug 清单与修复计划** — 13 个 Bug 分 P0/P1/P2 三级，含根因分析、修复方案、执行顺序 |
+| [2026-05-29-feature-backlog.md](specs/2026-05-29-feature-backlog.md) | **功能补全待办清单** — 18 项待开发功能，按 P1/P2/新规范 分类，标注依赖关系 |
+| [2026-05-29-development-roadmap.md](specs/2026-05-29-development-roadmap.md) | **开发路线图** — 7 轮执行序列（Bug → P1 → P2 → 新规范），含时间估算和甘特图 |
+| [2026-05-29-frontend-testing-spec.md](specs/2026-05-29-frontend-testing-spec.md) | **前端测试方案** — Vitest + Testing Library 技术栈、测试规范、分层策略、具体用例、配置和集成流程 |
+
+---
+
+## 十一、开发日志与验证
 
 | 文档 | 说明 |
 |------|------|
@@ -118,10 +141,10 @@ Phase 1-9 完成后，重新按体验层级整理为三个优先级。这些 Spe
 **按角色查找：**
 
 - **新人上手** → 先读「一、总体设计」两个文档
-- **了解当前进度** → 看「六、P0/P1/P2」三个 Spec，对比「九、开发日志」
+- **了解当前进度** → 看「六、P0/P1/P2」三个 Spec，对比「十一、开发日志」
 - **查找接口定义** → 「七、接口契约」+ 「三、API 对齐」
 - **实现新功能** → 找到对应 Phase 的 Spec + Plan，按 task 逐条实现
-- **排查问题** → 「九、开发日志」记录了主要的坑和解决方案
+- **排查问题** → 「十一、开发日志」记录了主要的坑和解决方案
 
 **按开发阶段查找：**
 
@@ -131,5 +154,8 @@ Phase 1-9 完成后，重新按体验层级整理为三个优先级。这些 Spe
 | Phase 4-6（群聊+Agent） | ✅ 完成 | phase-4/5/6 specs + plans |
 | Phase 7-9（面板扩展） | ✅ 完成 | phase-7/8/9 specs + plans |
 | P0（核心体验链路） | ✅ 完成 | 2026-05-26-p0-core-experience.md |
-| P1（体验完整度） | ✅ 完成 | 2026-05-26-p1-experience-completeness.md |
-| P2（差异化亮点） | 🔵 待开发 | 2026-05-26-p2-highlights.md |
+| P1（体验完整度） | ✅ 完成 | 2026-05-26-p1-experience-completeness.md — 2026-05-30 全量完成 |
+| P2（差异化亮点） | ✅ 完成 | 2026-05-26-p2-highlights.md — 2026-05-30 全量完成 |
+| 代码审查 | 📋 2026-05-29 | 13 个 Bug + 18 项功能 → [路线图](specs/2026-05-29-development-roadmap.md) |
+| 前后端对齐 | ✅ 2026-05-30 | [对齐差距分析](specs/2026-05-30-frontend-backend-alignment-gaps.md) — 34 个端点全量审计 |
+| 群聊集成排查 | ✅ 2026-05-30 | [Bug 排查报告](specs/2026-05-30-group-chat-integration-bugs.md) — 群聊前后端集成前审查 |
