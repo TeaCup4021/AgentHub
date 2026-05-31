@@ -3,12 +3,25 @@ import type { PlanSubtask } from "@/types";
 interface OrchestratorPlanProps {
   planId: string;
   subtasks: PlanSubtask[];
+  plannerAgentName?: string | null;
   onConfirm?: () => void;
   onAdjust?: (subtasks: PlanSubtask[]) => void;
+  onRefine?: (feedback: string) => void;
 }
 
-export function OrchestratorPlan({ planId, subtasks, onConfirm, onAdjust }: OrchestratorPlanProps) {
+export function OrchestratorPlan({
+  planId,
+  subtasks,
+  plannerAgentName,
+  onConfirm,
+  onAdjust,
+  onRefine,
+}: OrchestratorPlanProps) {
   if (subtasks.length === 0) return null;
+
+  const planBy = plannerAgentName
+    ? `由 @${plannerAgentName} 制定`
+    : "由系统自动制定";
 
   const handleConfirm = () => {
     if (onConfirm) {
@@ -37,12 +50,18 @@ export function OrchestratorPlan({ planId, subtasks, onConfirm, onAdjust }: Orch
         margin: "0 auto",
         boxShadow: "var(--shadow-card)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
           <span style={{ fontSize: "var(--font-size-sm)", fontWeight: 600, color: "var(--color-text-primary)" }}>
-            Orchestrator 任务拆解
+            执行计划
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 10 }}>
+          {planBy} · {subtasks.length} 个子任务
+          <span style={{ marginLeft: 8, color: "var(--color-primary)" }}>
+            {plannerAgentName ? "→ DAG 模式执行" : "→ Coordinator 模式执行"}
           </span>
         </div>
 

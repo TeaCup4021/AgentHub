@@ -16,6 +16,8 @@ class SubTaskPlan(BaseSchema):
 
 class OrchestratorPlan(BaseSchema):
     subtasks: List[SubTaskPlan]
+    planner_agent_id: Optional[UUID] = None
+    planner_agent_name: Optional[str] = None
 
 
 class DagNode(BaseSchema):

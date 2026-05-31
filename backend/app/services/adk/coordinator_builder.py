@@ -2,13 +2,25 @@ from google.adk.agents import LlmAgent
 from google.adk.agents.base_agent import BaseAgent
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
+import re
 
 from app.models.agent import Agent as AgentModel
 from app.services.adk.execution_tracer import ExecutionTracer
-from app.services.adk.models import get_anthropic_llm, get_litellm
+from app.services.adk.models import get_anthropic_llm, get_litellm, get_deepseek_llm
 from app.services.adk.tool_loader import ToolLoader
 
 CLI_PROVIDERS = {"claude-code-cli", "codex-cli"}
+
+# Regex matching ADK template variables like {identifier} or {identifier?}
+_ADK_TEMPLATE_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\??\}")
+
+
+def _sanitize_for_adk_instruction(text: str) -> str:
+    """Replace {identifier} patterns with (identifier) to prevent ADK from
+    attempting session-state injection on text that is not meant to be a template."""
+    if not text:
+        return text
+    return _ADK_TEMPLATE_RE.sub(r"(\1)", text)
 
 
 class CoordinatorBuilder:
@@ -28,7 +40,7 @@ class CoordinatorBuilder:
         sub_agents = self._build_sub_agents(agent_models, execution_tracer)
         coordinator_kwargs: dict = {
             "name": "orchestrator",
-            "model": get_anthropic_llm(),
+            "model": get_deepseek_llm(),
             "instruction": self._build_coordinator_instruction(agent_models),
             "description": (
                 "Main orchestrator that coordinates sub-agents to complete tasks"
@@ -177,7 +189,7 @@ class CoordinatorBuilder:
     def _build_coordinator_instruction(self, agents: list[AgentModel]) -> str:
         agent_descriptions = "\n".join(
             f"- {a.name} (call: request_task_{self._sanitize_name(a.name)}): "
-            f"{a.system_prompt[:150] if a.system_prompt else 'No description'}"
+            f"{_sanitize_for_adk_instruction(a.system_prompt[:150]) if a.system_prompt else 'No description'}"
             for a in agents
         )
         return (

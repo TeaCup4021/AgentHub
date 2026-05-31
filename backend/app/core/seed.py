@@ -10,15 +10,15 @@ DEFAULT_AGENTS = [
     {
         "name": "Claude Opus",
         "provider": "anthropic",
-        "model": "claude-opus-4-7",
+        "model": "claude-sonnet-4-6",
         "system_prompt": "You are Claude Opus, a helpful AI assistant.",
         "capabilities": ["code", "chat", "analyze"],
     },
     {
         "name": "GPT-4o",
         "provider": "openai",
-        "model": "gpt-4o",
-        "system_prompt": "You are GPT-4o, a helpful AI assistant.",
+        "model": "gpt-5.2",
+        "system_prompt": "You are a helpful AI assistant.",
         "capabilities": ["code", "chat", "analyze"],
     },
     {

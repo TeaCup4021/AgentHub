@@ -40,18 +40,46 @@ async def create_message(
     db: AsyncSession = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    # confirm_plan: handle before message creation (does not create a Message)
-    if data.mode == "confirm_plan":
-        if not data.plan_id or not data.plan:
-            raise HTTPException(status_code=400, detail="plan_id and plan are required for confirm_plan mode")
+    from app.models.orchestrator_task import OrchestratorTask
+    from app.services.adk.workflow_builder import WorkflowBuilder
+    from app.schemas.orchestrator import OrchestratorPlan, SubTaskPlan
+    from app.models.orchestrator_subtask import OrchestratorSubtask
 
-        from app.models.orchestrator_task import OrchestratorTask
+    # ── refine_plan: user wants to modify the current plan via chat ─────
+    if data.mode == "refine_plan":
+        if not data.plan_id:
+            raise HTTPException(status_code=400, detail="plan_id is required for refine_plan mode")
 
         result = await db.execute(
             select(OrchestratorTask)
             .where(
                 OrchestratorTask.conversation_id == conv_id,
-                OrchestratorTask.status == "awaiting_confirmation",
+                OrchestratorTask.status == "plan_draft",
+            )
+            .order_by(OrchestratorTask.created_at.desc())
+            .limit(1)
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            raise HTTPException(status_code=404, detail="No plan_draft task found to refine")
+
+        task.status = "refining"
+        user_msg = await MessageService.create_message(
+            db=db, conv_id=conv_id, user_id=user_id, data=data,
+        )
+        await db.commit()
+        return user_msg
+
+    # ── confirm_plan: user approves the plan ────────────────────────────
+    if data.mode == "confirm_plan":
+        if not data.plan_id or not data.plan:
+            raise HTTPException(status_code=400, detail="plan_id and plan are required for confirm_plan mode")
+
+        result = await db.execute(
+            select(OrchestratorTask)
+            .where(
+                OrchestratorTask.conversation_id == conv_id,
+                OrchestratorTask.status.in_(["awaiting_confirmation", "plan_draft"]),
             )
             .order_by(OrchestratorTask.created_at.desc())
             .limit(1)
@@ -79,7 +107,6 @@ async def create_message(
             }
             for item in data.plan
         ]}
-        from app.schemas.orchestrator import OrchestratorPlan, SubTaskPlan
         plan_obj = OrchestratorPlan(subtasks=[
             SubTaskPlan(
                 subtask_id=item.get("subtask_id", item.get("subtaskId", f"sub-{uuid4().hex[:8]}")),
@@ -95,14 +122,11 @@ async def create_message(
 
         if new_plan_dict["subtasks"] != task.plan.get("subtasks", []) if task.plan else True:
             task.plan = new_plan_dict
-            from app.services.adk.workflow_builder import WorkflowBuilder
             WorkflowBuilder().build(plan_obj)
 
         task.status = "confirmed"
         task.result_summary = {"state_delta": {"plan_confirmed": True}}
 
-        # Create orchestrator_subtasks rows for each confirmed subtask
-        from app.models.orchestrator_subtask import OrchestratorSubtask
         existing_subtasks = await db.execute(
             select(OrchestratorSubtask).where(OrchestratorSubtask.task_id == task.id)
         )
@@ -121,16 +145,23 @@ async def create_message(
         await db.commit()
         return JSONResponse(content={"code": 200, "data": None, "message": "ok"})
 
+    # ── normal message ──────────────────────────────────────────────────
     user_msg = await MessageService.create_message(db=db, conv_id=conv_id, user_id=user_id, data=data)
 
     if data.mode == "auto_orchestrate" and data.mentions:
-        from app.models.orchestrator_task import OrchestratorTask
+        # Resolve planner_agent if specified
+        planner_agent_id = data.planner_agent_id
+        if planner_agent_id is not None:
+            planner_result = await db.execute(select(Agent).where(Agent.id == planner_agent_id))
+            if not planner_result.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="planner_agent_id not found")
 
         orch_task = OrchestratorTask(
             conversation_id=conv_id,
             trigger_message_id=user_msg["id"],
             status="planning",
             plan={},
+            planner_agent_id=planner_agent_id,
         )
         db.add(orch_task)
         await db.commit()

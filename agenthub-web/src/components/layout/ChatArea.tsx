@@ -8,7 +8,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { useCreateConversation, useUpdateAnyConversation } from "@/hooks";
 import { createSSEStream } from "@/lib/sse";
 import { messageApi } from "@/lib/api";
-import { ChatHeader, MessageList, ChatInput, WelcomePage } from "@/components/chat";
+import { ChatHeader, MessageList, ChatInput, WelcomePage, OrchestratorPlan } from "@/components/chat";
 import { AgentProgressBar } from "@/components/chat/AgentProgressBar";
 import { AgentDashboard } from "@/components/chat/AgentDashboard";
 import { MentionSwitchDialog } from "@/components/chat/MentionSwitchDialog";
@@ -39,7 +39,10 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const streamAgentRef = useRef<string>("");
   const streamSenderIdRef = useRef<string>("");
   const lastPromptRef = useRef<string>("");
-  const planMetaRef = useRef<PlanSubtask[] | null>(null);
+  const planMetaRef = useRef<{ plan: PlanSubtask[]; plannerAgentId?: string | null; plannerAgentName?: string | null } | null>(null);
+  const [plannerAgentId, setPlannerAgentId] = useState<string | null>(null);
+  const plannerAgentIdRef = useRef<string | null>(null);
+  useEffect(() => { plannerAgentIdRef.current = plannerAgentId; }, [plannerAgentId]);
   const retryRef = useRef({ timeoutId: null as ReturnType<typeof setTimeout> | null });
 
   const connectionStatus = useChatStore((s) => s.connectionStatus);
@@ -133,7 +136,11 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       streamSenderIdRef.current = data.sender.id;
       initStreaming(data.message_id);
       if (data.sender.type === "orchestrator" && data.meta?.plan) {
-        planMetaRef.current = data.meta.plan;
+        planMetaRef.current = {
+          plan: data.meta.plan,
+          plannerAgentId: data.meta.planner_agent_id,
+          plannerAgentName: data.meta.planner_agent_name,
+        };
       }
     },
     onToken: (data: SSEToken) => {
@@ -167,7 +174,9 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       if (data.finish_reason === "plan_draft" && planMetaRef.current) {
         useChatStore.getState().setPendingPlan({
           planId: streamMsgIdRef.current ?? "",
-          subtasks: planMetaRef.current,
+          subtasks: planMetaRef.current.plan,
+          plannerAgentId: planMetaRef.current.plannerAgentId,
+          plannerAgentName: planMetaRef.current.plannerAgentName,
         });
         planMetaRef.current = null;
       }
@@ -248,22 +257,72 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
     const msgMode = conv?.type === "group" ? "auto_orchestrate" : "direct";
     const optimisticId = optimisticMsg.id;
-    messageApi.send(convId, { content, mentions, mode: msgMode }).then((response) => {
+    const streamMode = conv?.type === "group" ? "auto_orchestrate" : undefined;
+
+    // Start SSE after POST completes to avoid race condition:
+    // POST creates the orchestrator task on the backend; SSE must arrive
+    // AFTER the task exists, otherwise the planner won't be triggered.
+    messageApi.send(convId, {
+      content,
+      mentions,
+      mode: msgMode,
+      planner_agent_id: conv?.type === "group" ? plannerAgentIdRef.current : undefined,
+    } as any).then((response) => {
       const realMsg = response.data?.data as Message | undefined;
-      if (!realMsg) return;
-      qc.setQueryData(
-        ["messages", activeId ?? convId],
-        (old: InfiniteData<MessageListData> | undefined) => {
-          if (!old) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((m) => (m.id === optimisticId ? realMsg : m)),
-            })),
-          };
-        },
-      );
+      if (realMsg) {
+        qc.setQueryData(
+          ["messages", activeId ?? convId],
+          (old: InfiniteData<MessageListData> | undefined) => {
+            if (!old) return old;
+            return {
+              ...old,
+              pages: old.pages.map((page) => ({
+                ...page,
+                items: page.items.map((m) => (m.id === optimisticId ? realMsg : m)),
+              })),
+            };
+          },
+        );
+      }
+
+      disconnectRef.current?.();
+      setIsStreaming(true);
+      lastPromptRef.current = content;
+
+      const onConnectionError = () => {
+        const MAX_RETRIES = 3;
+        const delays = [1000, 2000, 4000];
+        const attempt = useChatStore.getState().retryCount;
+
+        if (attempt >= MAX_RETRIES) {
+          setConnectionStatus('failed');
+          setIsStreaming(false);
+          qc.invalidateQueries({ queryKey: ["messages", convId] });
+          return;
+        }
+
+        setConnectionStatus('reconnecting');
+        setRetryCount(attempt + 1);
+
+        const delay = delays[attempt];
+        retryRef.current.timeoutId = setTimeout(() => {
+          disconnectRef.current?.();
+          const reconnectCallbacks = buildCallbacks(convId, conv);
+          disconnectRef.current = createSSEStream(convId, {
+            ...reconnectCallbacks,
+            onConnectionError: () => {
+              setConnectionStatus('failed');
+              setIsStreaming(false);
+              qc.invalidateQueries({ queryKey: ["messages", convId] });
+            },
+          }, lastPromptRef.current, streamMode);
+        }, delay);
+      };
+
+      disconnectRef.current = createSSEStream(convId, {
+        ...buildCallbacks(convId, conv),
+        onConnectionError,
+      }, content, streamMode);
     }).catch(() => {
       qc.setQueryData(
         ["messages", activeId ?? convId],
@@ -283,47 +342,6 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         duration: 5000,
       });
     });
-
-    disconnectRef.current?.();
-    setIsStreaming(true);
-    lastPromptRef.current = content;
-
-    const streamMode = conv?.type === "group" ? "auto_orchestrate" : undefined;
-
-    const onConnectionError = () => {
-      const MAX_RETRIES = 3;
-      const delays = [1000, 2000, 4000];
-      const attempt = useChatStore.getState().retryCount;
-
-      if (attempt >= MAX_RETRIES) {
-        setConnectionStatus('failed');
-        setIsStreaming(false);
-        qc.invalidateQueries({ queryKey: ["messages", convId] });
-        return;
-      }
-
-      setConnectionStatus('reconnecting');
-      setRetryCount(attempt + 1);
-
-      const delay = delays[attempt];
-      retryRef.current.timeoutId = setTimeout(() => {
-        disconnectRef.current?.();
-        const reconnectCallbacks = buildCallbacks(convId, conv);
-        disconnectRef.current = createSSEStream(convId, {
-          ...reconnectCallbacks,
-          onConnectionError: () => {
-            setConnectionStatus('failed');
-            setIsStreaming(false);
-            qc.invalidateQueries({ queryKey: ["messages", convId] });
-          },
-        }, lastPromptRef.current, streamMode);
-      }, delay);
-    };
-
-    disconnectRef.current = createSSEStream(convId, {
-      ...buildCallbacks(convId, conv),
-      onConnectionError,
-    }, content, streamMode);
   }, [activeId, qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
 
   sendRef.current = (convId: string, content: string, mentions: string[]) => {
@@ -423,6 +441,11 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   const handleSend = useCallback(async (content: string, mentions: string[]) => {
     if (!activeId || !conversation) return;
+
+    // In group chat, auto-include all conversation agents when no @mentions
+    if (conversation.type === "group" && mentions.length === 0) {
+      mentions = conversation.agentIds;
+    }
 
     const currentIds = conversation.agentIds;
     const externalIds = mentions.filter((id) => !currentIds.includes(id));
@@ -562,6 +585,42 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       )}
       {conversation.type === "group" && (
         <>
+          {/* Planner Selector */}
+          <div style={{
+            padding: "8px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            borderBottom: "1px solid var(--color-border-light)",
+            background: "var(--color-bg-subtle)",
+          }}>
+            <span style={{ fontSize: 12, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
+              任务分配:
+            </span>
+            <select
+              value={plannerAgentId ?? ""}
+              onChange={(e) => setPlannerAgentId(e.target.value || null)}
+              style={{
+                flex: 1,
+                fontSize: 12,
+                padding: "4px 8px",
+                borderRadius: 4,
+                border: "1px solid var(--color-border-medium)",
+                background: "var(--color-bg-white)",
+                color: "var(--color-text-primary)",
+              }}
+            >
+              <option value="">自动 (Orchestrator)</option>
+              {conversation.agentIds
+                .map((id) => agents.find((a) => a.id === id))
+                .filter(Boolean)
+                .map((a) => (
+                  <option key={a!.id} value={a!.id}>
+                    {a!.name}
+                  </option>
+                ))}
+            </select>
+          </div>
           <div onClick={toggleDashboard} className="cursor-pointer">
             <AgentProgressBar agents={agentStatuses} />
           </div>
@@ -571,6 +630,14 @@ export function ChatArea({ conversations }: ChatAreaProps) {
             onClose={() => setDashboardOpen(false)}
           />
         </>
+      )}
+      {/* Pending Plan Display */}
+      {useChatStore((s) => s.pendingPlan) && (
+        <OrchestratorPlan
+          planId={useChatStore((s) => s.pendingPlan)!.planId}
+          subtasks={useChatStore((s) => s.pendingPlan)!.subtasks}
+          plannerAgentName={useChatStore((s) => s.pendingPlan)!.plannerAgentName}
+        />
       )}
       {isMessagesError ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 32 }}>

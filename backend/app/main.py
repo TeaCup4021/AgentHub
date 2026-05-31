@@ -14,6 +14,7 @@ from app.core.exceptions import (
 )
 from app.api.router import api_router
 
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     async with async_session_maker() as db:

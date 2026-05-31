@@ -12,6 +12,8 @@ export type ConnectionStatus = 'connected' | 'reconnecting' | 'failed';
 export interface OrchestratorPendingPlan {
   planId: string;
   subtasks: PlanSubtask[];
+  plannerAgentId?: string | null;
+  plannerAgentName?: string | null;
 }
 
 interface ChatUIState {

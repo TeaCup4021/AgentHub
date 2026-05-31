@@ -393,7 +393,7 @@ class ClaudeCodeRunner(BaseCliRunner):
 
 class CodexCliRunner(BaseCliRunner):
     _use_stdin = True    # Avoid Windows cmdline encoding corruption for CJK
-    _idle_timeout = 3.0  # Codex keeps stdout open ~20s after response; cut early
+    _idle_timeout = 30.0  # Codex keeps stdout open after response; allow reasoning time
 
     def _build_args(self, prompt: str, **kwargs: Any) -> list[str]:
         model = kwargs.get("model", settings.CODEX_CLI_MODEL)

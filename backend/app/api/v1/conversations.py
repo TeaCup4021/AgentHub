@@ -21,7 +21,7 @@ from app.models.orchestrator_task import OrchestratorTask
 from app.models.message_mention import MessageMention
 from app.services.conversation import ConversationService
 from app.services.adapters.adk_to_sse import ADKToSSETranslator
-from app.services.adk.runner import AgentHubRunner, build_single_chat_agent
+from app.services.adk.runner import AgentHubRunner
 from app.services.adk.coordinator_builder import CoordinatorBuilder, CLI_PROVIDERS
 from app.services.adk.cli_runner import get_claude_runner, get_codex_runner, CliEvent
 from app.services.adk.workflow_builder import WorkflowBuilder
@@ -42,6 +42,21 @@ logger = logging.getLogger("agenthub.stream")
 
 def _format_sse(event_name: str, data: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(data)}\n\n"
+
+
+async def _error_sse_stream(code: str, message: str):
+    """Yield a single error SSE event and return."""
+    yield _format_sse("error", {
+        "version": "v1",
+        "event_id": str(uuid4()),
+        "conversation_id": "",
+        "message_id": "",
+        "code": code,
+        "message": message,
+        "retryable": True,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
 
 async def _mock_sse_stream(conv_id: UUID):
     message_id = str(uuid4())
@@ -242,9 +257,20 @@ async def _cli_sse_stream(
     })
 
 
-async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -> AsyncGenerator[str, None]:
+async def _adk_sse_stream(
+    conv_id: UUID,
+    user_id: UUID,
+    prompt: Optional[str],
+    agent_model: AgentModel,
+) -> AsyncGenerator[str, None]:
+    from app.services.adk.runner import build_agent_from_model
+
     prompt_text = (prompt or "Hello from AgentHub").strip()
-    agent = build_single_chat_agent()
+    logger.info(
+        "_adk_sse_stream: conv=%s agent=%s provider=%s model=%s prompt=%.80s...",
+        conv_id, agent_model.name, agent_model.provider, agent_model.model, prompt_text,
+    )
+    agent = build_agent_from_model(agent_model)
     runner = AgentHubRunner(agent=agent)
     translator = ADKToSSETranslator()
     event_stream = runner.stream_single_chat(
@@ -253,50 +279,18 @@ async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -
         message=prompt_text,
     )
     accumulators: dict = {}
-    async for payload in translator.translate(
-        event_stream=event_stream,
-        conversation_id=str(conv_id),
-    ):
-        event_type = await _parse_sse_event_type(payload)
-        event_data = _parse_sse_data(payload)
+    try:
+        async for payload in translator.translate(
+            event_stream=event_stream,
+            conversation_id=str(conv_id),
+        ):
+            event_type = await _parse_sse_event_type(payload)
+            event_data = _parse_sse_data(payload)
 
-        if event_type == "message_end" and event_data:
-            mid = event_data.get("message_id")
-            acc = accumulators.pop(mid, None) if mid else None
-            if acc and acc["content"]:
-                try:
-                    async with async_session_maker() as db:
-                        await MessageService.persist_stream_message(
-                            db=db,
-                            conv_id=conv_id,
-                            message_id=mid,
-                            sender_name=acc["sender_name"],
-                            content=acc["content"],
-                            status="done",
-                        )
-                        await db.commit()
-                except Exception:
-                    logger.exception("persist stream message failed")
-            yield payload
-        else:
-            yield payload
-
-            if event_type == "message_start" and event_data:
-                mid = event_data.get("message_id")
-                sender = event_data.get("sender", {})
-                if mid:
-                    accumulators[mid] = {
-                        "content": "",
-                        "sender_name": sender.get("name", "Agent") if isinstance(sender, dict) else "Agent",
-                    }
-            elif event_type == "token" and event_data:
-                mid = event_data.get("message_id")
-                if mid and mid in accumulators:
-                    accumulators[mid]["content"] += event_data.get("delta", "")
-            elif event_type == "error" and event_data:
+            if event_type == "message_end" and event_data:
                 mid = event_data.get("message_id")
                 acc = accumulators.pop(mid, None) if mid else None
-                if acc:
+                if acc and acc["content"]:
                     try:
                         async with async_session_maker() as db:
                             await MessageService.persist_stream_message(
@@ -304,17 +298,64 @@ async def _adk_sse_stream(conv_id: UUID, user_id: UUID, prompt: Optional[str]) -
                                 conv_id=conv_id,
                                 message_id=mid,
                                 sender_name=acc["sender_name"],
-                                content=acc.get("content", ""),
-                                status="failed",
+                                content=acc["content"],
+                                status="done",
                             )
                             await db.commit()
                     except Exception:
-                        logger.exception("persist stream error message failed")
+                        logger.exception("persist stream message failed")
+                yield payload
+            else:
+                yield payload
 
-        try:
-            await _persist_artifact_from_sse_payload(conv_id, payload)
-        except Exception:
-            logger.exception("persist artifact failed")
+                if event_type == "message_start" and event_data:
+                    mid = event_data.get("message_id")
+                    sender = event_data.get("sender", {})
+                    if mid:
+                        accumulators[mid] = {
+                            "content": "",
+                            "sender_name": sender.get("name", "Agent") if isinstance(sender, dict) else "Agent",
+                        }
+                elif event_type == "token" and event_data:
+                    mid = event_data.get("message_id")
+                    if mid and mid in accumulators:
+                        accumulators[mid]["content"] += event_data.get("delta", "")
+                elif event_type == "error" and event_data:
+                    logger.error(
+                        "_adk_sse_stream: error event conv=%s code=%s message=%s",
+                        conv_id, event_data.get("code", ""), event_data.get("message", ""),
+                    )
+                    mid = event_data.get("message_id")
+                    acc = accumulators.pop(mid, None) if mid else None
+                    if acc:
+                        try:
+                            async with async_session_maker() as db:
+                                await MessageService.persist_stream_message(
+                                    db=db,
+                                    conv_id=conv_id,
+                                    message_id=mid,
+                                    sender_name=acc["sender_name"],
+                                    content=acc.get("content", ""),
+                                    status="failed",
+                                )
+                                await db.commit()
+                        except Exception:
+                            logger.exception("persist stream error message failed")
+
+            try:
+                await _persist_artifact_from_sse_payload(conv_id, payload)
+            except Exception:
+                logger.exception("persist artifact failed")
+    except Exception:
+        logger.exception("_adk_sse_stream: unhandled exception conv=%s", conv_id)
+        yield _format_sse("error", {
+            "version": "v1", "event_id": str(uuid4()),
+            "conversation_id": str(conv_id), "message_id": "",
+            "code": "STREAM_ERROR",
+            "message": "流处理异常，请查看后端日志",
+            "retryable": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
 @router.get("", response_model=Page[ConversationResponse])
 async def get_conversations(
@@ -406,6 +447,10 @@ async def unpin_message(
     return
 
 
+_planning_locks: set[UUID] = set()
+_PLANNER_TIMEOUT_SECONDS = int(os.getenv("AGENTHUB_PLANNER_TIMEOUT", "90"))
+
+
 async def _orchestrator_plan_stream(
     conv_id: UUID,
     orch_task: OrchestratorTask,
@@ -415,6 +460,14 @@ async def _orchestrator_plan_stream(
     from app.models.message import Message as MsgModel
     from app.models.artifact import Artifact
 
+    # Prevent duplicate planning for the same conversation
+    if conv_id in _planning_locks:
+        logger.warning("Planner already running for conv=%s, bailing", conv_id)
+        orch_task.status = "failed"
+        await db.commit()
+        return
+    _planning_locks.add(conv_id)
+
     try:
         user_msg = await db.get(MsgModel, orch_task.trigger_message_id)
         mention_result = await db.execute(
@@ -422,28 +475,72 @@ async def _orchestrator_plan_stream(
         )
         mentions = [m.agent_id for m in mention_result.scalars().all()]
 
+        # Resolve planner agent if one was designated
+        planner_agent = None
+        planner_name = "Orchestrator"
+        if orch_task.planner_agent_id:
+            planner_agent = await db.get(AgentModel, orch_task.planner_agent_id)
+            if planner_agent:
+                planner_name = planner_agent.name
+                logger.info(
+                    "Agent-based planning: conv=%s planner=%s",
+                    conv_id, planner_agent.name,
+                )
+
         planner = OrchestratorPlanner()
-        result = await planner.plan(
-            db=db,
-            user_message=user_msg.content,
-            agent_ids=mentions,
-            conversation_id=conv_id,
+        result = await asyncio.wait_for(
+            planner.plan(
+                db=db,
+                user_message=user_msg.content,
+                agent_ids=mentions,
+                conversation_id=conv_id,
+                planner_agent=planner_agent,
+            ),
+            timeout=_PLANNER_TIMEOUT_SECONDS,
         )
-    except Exception:
-        logger.exception("Planner failed for conv=%s task=%s", conv_id, orch_task.id)
-        yield _format_sse("error", {
-            "version": "v1",
-            "event_id": str(uuid4()),
-            "conversation_id": str(conv_id),
-            "message_id": "",
-            "code": "PLANNER_ERROR",
-            "message": "任务拆解失败，请重试",
-            "retryable": True,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+    except asyncio.TimeoutError:
+        logger.warning("Planner timed out after %ss for conv=%s task=%s", _PLANNER_TIMEOUT_SECONDS, conv_id, orch_task.id)
+        orch_task.status = "failed"
+        await db.commit()
+        try:
+            yield _format_sse("error", {
+                "version": "v1",
+                "event_id": str(uuid4()),
+                "conversation_id": str(conv_id),
+                "message_id": "",
+                "code": "PLANNER_TIMEOUT",
+                "message": f"任务规划超时（{_PLANNER_TIMEOUT_SECONDS}s），请重试或简化需求",
+                "retryable": True,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+        except asyncio.CancelledError:
+            pass
+        return
+    except asyncio.CancelledError:
+        logger.warning("Planner cancelled (client disconnect) for conv=%s task=%s", conv_id, orch_task.id)
         orch_task.status = "failed"
         await db.commit()
         return
+    except Exception:
+        logger.exception("Planner failed for conv=%s task=%s", conv_id, orch_task.id)
+        try:
+            yield _format_sse("error", {
+                "version": "v1",
+                "event_id": str(uuid4()),
+                "conversation_id": str(conv_id),
+                "message_id": "",
+                "code": "PLANNER_ERROR",
+                "message": "任务拆解失败，请重试",
+                "retryable": True,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+        except asyncio.CancelledError:
+            pass
+        orch_task.status = "failed"
+        await db.commit()
+        return
+    finally:
+        _planning_locks.discard(conv_id)
 
     plan_msg = MsgModel(
         conversation_id=conv_id,
@@ -455,6 +552,8 @@ async def _orchestrator_plan_stream(
     await db.flush()
 
     plan_dict = result.plan.model_dump(mode="json")
+    plan_dict["planner_agent_id"] = str(orch_task.planner_agent_id) if orch_task.planner_agent_id else None
+    plan_dict["planner_agent_name"] = planner_name
     artifact = Artifact(
         conversation_id=conv_id,
         message_id=plan_msg.id,
@@ -463,7 +562,7 @@ async def _orchestrator_plan_stream(
     )
     db.add(artifact)
 
-    orch_task.status = "awaiting_confirmation"
+    orch_task.status = "plan_draft"
     orch_task.plan = plan_dict
     await db.commit()
 
@@ -483,8 +582,12 @@ async def _orchestrator_plan_stream(
         "event_id": str(uuid4()),
         "conversation_id": str(conv_id),
         "message_id": str(plan_msg.id),
-        "sender": {"type": "orchestrator", "id": "", "name": "Orchestrator"},
-        "meta": {"plan": plan_array},
+        "sender": {"type": "orchestrator", "id": str(orch_task.planner_agent_id or ""), "name": planner_name},
+        "meta": {
+            "plan": plan_array,
+            "planner_agent_id": str(orch_task.planner_agent_id) if orch_task.planner_agent_id else None,
+            "planner_agent_name": planner_name,
+        },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
@@ -506,6 +609,163 @@ async def _orchestrator_plan_stream(
         "event_id": str(uuid4()),
         "conversation_id": str(conv_id),
         "message_id": str(plan_msg.id),
+        "finish_reason": "plan_draft",
+        "usage": {},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+async def _orchestrator_refine_stream(
+    conv_id: UUID,
+    orch_task: OrchestratorTask,
+    db: AsyncSession,
+) -> AsyncGenerator[str, None]:
+    """Re-run the planner with user feedback to produce an updated plan."""
+    from app.services.adk.planner import OrchestratorPlanner
+    from app.models.message import Message as MsgModel
+    from app.models.artifact import Artifact
+    from app.schemas.orchestrator import OrchestratorPlan
+
+    logger.info("Plan refinement: conv=%s task=%s", conv_id, orch_task.id)
+
+    try:
+        # Load the plan and user feedback
+        current_plan_dict = orch_task.plan or {}
+        current_plan = OrchestratorPlan(**current_plan_dict) if current_plan_dict.get("subtasks") else None
+        if not current_plan or not current_plan.subtasks:
+            yield _format_sse("error", {
+                "version": "v1", "event_id": str(uuid4()),
+                "conversation_id": str(conv_id), "message_id": "",
+                "code": "NO_PLAN", "message": "无可修改的计划",
+                "retryable": False,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            orch_task.status = "failed"
+            await db.commit()
+            return
+
+        # Find the user's refinement message (most recent user message)
+        result = await db.execute(
+            select(MsgModel)
+            .where(
+                MsgModel.conversation_id == conv_id,
+                MsgModel.sender_type == "user",
+            )
+            .order_by(MsgModel.created_at.desc())
+            .limit(1)
+        )
+        user_msg = result.scalar_one_or_none()
+        if not user_msg:
+            raise ValueError("No user feedback message found")
+
+        # Load mentions from plan subtasks
+        agent_ids = [st.agent_id for st in current_plan.subtasks]
+
+        # Resolve planner agent
+        planner_agent = None
+        planner_name = "Orchestrator"
+        if orch_task.planner_agent_id:
+            planner_agent = await db.get(AgentModel, orch_task.planner_agent_id)
+            if planner_agent:
+                planner_name = planner_agent.name
+
+        planner = OrchestratorPlanner()
+        result = await asyncio.wait_for(
+            planner.refine(
+                db=db,
+                current_plan=current_plan,
+                user_feedback=user_msg.content,
+                agent_ids=agent_ids,
+                conversation_id=conv_id,
+                planner_agent=planner_agent,
+            ),
+            timeout=_PLANNER_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Plan refinement timed out conv=%s", conv_id)
+        orch_task.status = "plan_draft"  # back to draft so user can retry
+        await db.commit()
+        yield _format_sse("error", {
+            "version": "v1", "event_id": str(uuid4()),
+            "conversation_id": str(conv_id), "message_id": "",
+            "code": "PLANNER_TIMEOUT",
+            "message": f"计划修改超时，请重试",
+            "retryable": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        return
+    except Exception:
+        logger.exception("Plan refinement failed conv=%s", conv_id)
+        orch_task.status = "plan_draft"
+        await db.commit()
+        yield _format_sse("error", {
+            "version": "v1", "event_id": str(uuid4()),
+            "conversation_id": str(conv_id), "message_id": "",
+            "code": "REFINE_ERROR",
+            "message": "计划修改失败，请重试",
+            "retryable": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        return
+
+    # Persist the updated plan
+    plan_msg = MsgModel(
+        conversation_id=conv_id,
+        sender_type="orchestrator",
+        content=result.raw_text,
+        status="done",
+    )
+    db.add(plan_msg)
+    await db.flush()
+
+    plan_dict = result.plan.model_dump(mode="json")
+    plan_dict["planner_agent_id"] = str(orch_task.planner_agent_id) if orch_task.planner_agent_id else None
+    plan_dict["planner_agent_name"] = planner_name
+    artifact = Artifact(
+        conversation_id=conv_id,
+        message_id=plan_msg.id,
+        artifact_type="plan",
+        content=plan_dict,
+    )
+    db.add(artifact)
+
+    orch_task.status = "plan_draft"
+    orch_task.plan = plan_dict
+    await db.commit()
+
+    plan_array = [
+        {
+            "subtask_id": str(st.subtask_id),
+            "agent": {"id": str(st.agent_id), "name": st.agent_name},
+            "instruction": st.instruction,
+            "depends_on": st.depends_on,
+            "mode": st.mode,
+            "output_key": st.output_key,
+        }
+        for st in result.plan.subtasks
+    ]
+    yield _format_sse("message_start", {
+        "version": "v1", "event_id": str(uuid4()),
+        "conversation_id": str(conv_id), "message_id": str(plan_msg.id),
+        "sender": {"type": "orchestrator", "id": str(orch_task.planner_agent_id or ""), "name": planner_name},
+        "meta": {
+            "plan": plan_array,
+            "planner_agent_id": str(orch_task.planner_agent_id) if orch_task.planner_agent_id else None,
+            "planner_agent_name": planner_name,
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    for i, ch in enumerate(list(result.raw_text)):
+        yield _format_sse("token", {
+            "version": "v1", "event_id": str(uuid4()),
+            "conversation_id": str(conv_id), "message_id": str(plan_msg.id),
+            "delta": ch, "index": i,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        await asyncio.sleep(0.02)
+    yield _format_sse("message_end", {
+        "version": "v1", "event_id": str(uuid4()),
+        "conversation_id": str(conv_id), "message_id": str(plan_msg.id),
         "finish_reason": "plan_draft",
         "usage": {},
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -894,7 +1154,25 @@ async def stream_conversation(
             media_type="text/event-stream",
         )
 
+    # Phase 1.5: Plan refinement (status=refining) — user asked to modify plan
+    result = await db.execute(
+        select(OrchestratorTask)
+        .where(
+            OrchestratorTask.conversation_id == conv_id,
+            OrchestratorTask.status == "refining",
+        )
+        .order_by(OrchestratorTask.created_at.desc())
+        .limit(1)
+    )
+    refine_task = result.scalar_one_or_none()
+    if refine_task:
+        return StreamingResponse(
+            _orchestrator_refine_stream(conv_id, refine_task, db),
+            media_type="text/event-stream",
+        )
+
     # Phase 2: Plan confirmed — execute workflow
+    # Auto-route: agent-planned → DAG; LLM-planned → Coordinator
     result = await db.execute(
         select(OrchestratorTask)
         .where(
@@ -906,21 +1184,40 @@ async def stream_conversation(
     )
     confirmed_task = result.scalar_one_or_none()
 
-    if confirmed_task and orchestrate_mode == "auto_orchestrate":
-        # Coordinator mode: LLM dynamically schedules sub-agents
-        return StreamingResponse(
-            _coordinator_stream(conv_id, user_id, prompt, confirmed_task, db),
-            media_type="text/event-stream",
-        )
+    if confirmed_task:
+        if confirmed_task.planner_agent_id:
+            # Agent-planned → DAG mode (structured, predictable execution)
+            return StreamingResponse(
+                _dag_workflow_stream(conv_id, user_id, prompt, confirmed_task, db),
+                media_type="text/event-stream",
+            )
+        else:
+            # LLM-planned → Coordinator mode (dynamic scheduling)
+            return StreamingResponse(
+                _coordinator_stream(conv_id, user_id, prompt, confirmed_task, db),
+                media_type="text/event-stream",
+            )
 
-    if confirmed_task and orchestrate_mode == "auto_orchestrate_dag":
-        # Static DAG mode: Planner-generated dependency graph
-        return StreamingResponse(
-            _dag_workflow_stream(conv_id, user_id, prompt, confirmed_task, db),
-            media_type="text/event-stream",
+    # If a previous orchestration attempt failed, surface the error instead of
+    # silently falling through to single-agent CLI/ADK routing.
+    if orchestrate_mode:
+        failed_result = await db.execute(
+            select(OrchestratorTask)
+            .where(
+                OrchestratorTask.conversation_id == conv_id,
+                OrchestratorTask.status == "failed",
+            )
+            .order_by(OrchestratorTask.created_at.desc())
+            .limit(1)
         )
+        if failed_result.scalar_one_or_none():
+            return StreamingResponse(
+                _error_sse_stream("PLANNER_ERROR", "任务拆解失败，请重试"),
+                media_type="text/event-stream",
+            )
 
-    # CLI agent single-chat routing: check if conversation uses a CLI-backed agent
+    # Single-chat routing: always use the agent bound to this conversation.
+    # There is no default / fallback agent — the user must have selected one.
     conv = await db.get(Conversation, conv_id)
     if conv:
         parts_result = await db.execute(
@@ -935,17 +1232,31 @@ async def stream_conversation(
                 select(AgentModel).where(AgentModel.id.in_(agent_ids))
             )
             conv_agents = agents_result.scalars().all()
-            cli_agents = [a for a in conv_agents if (a.provider or "").lower() in CLI_PROVIDERS]
-            if cli_agents:
-                cli_provider = (cli_agents[0].provider or "").lower()
+            if conv_agents:
+                # CLI-backed agent → route to CLI stream
+                cli_agents = [a for a in conv_agents if (a.provider or "").lower() in CLI_PROVIDERS]
+                if cli_agents:
+                    cli_provider = (cli_agents[0].provider or "").lower()
+                    return StreamingResponse(
+                        _cli_sse_stream(conv_id, cli_provider, prompt),
+                        media_type="text/event-stream",
+                    )
+
+                # Non-CLI agent → use ADK stream with the conversation's bound agent
+                if _use_adk_stream():
+                    return StreamingResponse(
+                        _adk_sse_stream(conv_id, user_id, prompt, conv_agents[0]),
+                        media_type="text/event-stream",
+                    )
+
+                # ADK stream disabled and no CLI agent → not routable
                 return StreamingResponse(
-                    _cli_sse_stream(conv_id, cli_provider, prompt),
+                    _error_sse_stream("NO_STREAM_BACKEND", "ADK 流未启用且对话未绑定 CLI Agent"),
                     media_type="text/event-stream",
                 )
 
-    if _use_adk_stream():
-        return StreamingResponse(
-            _adk_sse_stream(conv_id, user_id, prompt),
-            media_type="text/event-stream",
-        )
-    return StreamingResponse(_mock_sse_stream(conv_id), media_type="text/event-stream")
+    # No agents bound to this conversation
+    return StreamingResponse(
+        _error_sse_stream("NO_AGENT", "该对话未绑定任何 Agent，请先选择 Agent"),
+        media_type="text/event-stream",
+    )

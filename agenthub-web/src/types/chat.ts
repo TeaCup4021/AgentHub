@@ -202,6 +202,8 @@ export interface SSEMessageStartMeta {
   plan?: PlanSubtask[];
   subtask_id?: string;
   plan_id?: string;
+  planner_agent_id?: string | null;
+  planner_agent_name?: string | null;
   summary?: {
     total: number;
     success: number;

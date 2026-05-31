@@ -10,8 +10,9 @@ class MessageCreate(BaseSchema):
     content_type: str = "text"
     mentions: List[UUID] = []
     parent_message_id: Optional[UUID] = None
-    mode: Optional[str] = None  # "direct" | "auto_orchestrate" | "confirm_plan"
-    plan_id: Optional[UUID] = None  # confirm_plan mode
+    mode: Optional[str] = None  # "direct" | "auto_orchestrate" | "refine_plan" | "confirm_plan"
+    planner_agent_id: Optional[UUID] = None  # auto_orchestrate mode: designated planner agent
+    plan_id: Optional[UUID] = None  # confirm_plan / refine_plan mode
     plan: Optional[List[dict]] = None  # confirm_plan mode: [{ subtask_id, agent_id, instruction }]
 
 

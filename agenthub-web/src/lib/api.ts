@@ -190,13 +190,14 @@ export interface ConfirmPlanItem {
   instruction: string;
 }
 
-// [后端对接] mode: direct(单聊) / auto_orchestrate(群聊) / confirm_plan(确认计划)
+// mode: direct / auto_orchestrate / refine_plan / confirm_plan
 export interface SendMessageRequest {
   content: string;
   contentType?: string;
   mentions?: string[];
   parentMessageId?: string;
-  mode?: "auto_orchestrate" | "direct" | "confirm_plan";
+  mode?: "auto_orchestrate" | "direct" | "refine_plan" | "confirm_plan";
+  planner_agent_id?: string | null;
   plan_id?: string;
   plan?: ConfirmPlanItem[];
 }
