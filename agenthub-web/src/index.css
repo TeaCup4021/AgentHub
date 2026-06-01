@@ -2,17 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* === 全局滚动条 === */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-card-border) transparent;
-}
-*::-webkit-scrollbar { width: 5px; height: 5px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: var(--color-card-border); border-radius: 4px; }
-*::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
-*::-webkit-scrollbar-corner { background: transparent; }
-
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -34,8 +23,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--color-danger); opacity: 0.4; }
-  50% { box-shadow: 0 0 0 6px var(--color-danger); opacity: 0; }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(213, 73, 65, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(213, 73, 65, 0); }
 }
 
 @keyframes scale-in {
@@ -45,7 +34,7 @@
 
 .streaming-cursor::after {
   content: "|";
-  animation: blink 1s step-end infinite;
+  animation: blink 1s ease-in-out infinite;
   color: var(--color-primary);
   font-weight: 300;
 }
@@ -56,20 +45,20 @@
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
-/* === 全局按压反馈（排除 Semi 组件库按钮） === */
-button:active:not(:disabled):not([class*="semi-button"]) {
+/* === 全局按压反馈 === */
+button:active:not(:disabled) {
   transform: scale(0.97);
-  transition: transform var(--duration-fast) var(--ease-out);
+  transition: transform 0.1s ease;
 }
 
 /* === Semi Modal 入场 === */
 .semi-modal-content {
-  animation: scale-in var(--duration-fast) var(--ease-out);
+  animation: scale-in 0.2s ease-out;
 }
 
 /* === 代码块折叠过渡 === */
 .shiki-code-block {
-  transition: max-height var(--duration-normal) var(--ease-out);
+  transition: max-height 0.3s ease;
 }
 
 /* === 减少动画偏好 === */
@@ -83,6 +72,12 @@ button:active:not(:disabled):not([class*="semi-button"]) {
   }
 }
 
+.streaming-cursor::after {
+  content: "|";
+  animation: blink 1s step-end infinite;
+  color: var(--color-primary);
+}
+
 .shiki-code-block code {
   counter-reset: line 0;
 }
@@ -94,13 +89,13 @@ button:active:not(:disabled):not([class*="semi-button"]) {
   display: inline-block;
   width: 2.5em;
   margin-right: 1em;
-  color: var(--color-text-tertiary);
+  color: #858585;
   text-align: right;
   user-select: none;
 }
 
 .message-bubble-wrap mark {
-  background: color-mix(in srgb, var(--color-warning) 35%, transparent);
+  background: rgba(255, 200, 0, 0.35);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
@@ -112,6 +107,17 @@ button:active:not(:disabled):not([class*="semi-button"]) {
 
 .semi-layout {
   background: var(--color-bg-app);
+}
+
+/* === 设置页卡片 — 飞书风格悬浮感 === */
+.settings-page .semi-card {
+  border: 1px solid var(--color-card-border);
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-card);
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+.settings-page .semi-card:hover {
+  box-shadow: var(--shadow-md);
 }
 
 /* === 输入框/表单控件 — 圆角 + 凹入填充 + 交互状态 === */
@@ -150,8 +156,8 @@ button:active:not(:disabled):not([class*="semi-button"]) {
 .artifact-card:hover { box-shadow: var(--shadow-md); }
 .artifact-card--resizing { user-select: none; }
 .artifact-card--restoring {
-  transition: width var(--duration-slow) var(--ease-in-out),
-              height var(--duration-slow) var(--ease-in-out) !important;
+  transition: width .35s cubic-bezier(.4,0,.2,1),
+              height .35s cubic-bezier(.4,0,.2,1) !important;
 }
 
 .artifact-card__body::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -166,7 +172,7 @@ button:active:not(:disabled):not([class*="semi-button"]) {
   border: 1px solid transparent; background: transparent;
   color: var(--color-text-tertiary); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: all var(--duration-fast) var(--ease-out); margin-right: 2px;
+  transition: all .15s; margin-right: 2px;
 }
 .artifact-card__reset:hover {
   background: var(--color-bg-hover); border-color: var(--color-card-border);
@@ -178,22 +184,23 @@ button:active:not(:disabled):not([class*="semi-button"]) {
 .artifact-card__resize {
   position: absolute; right: 0; bottom: 0; z-index: 20;
   width: 24px; height: 24px; cursor: nwse-resize;
-  opacity: 0; transition: opacity var(--duration-fast) var(--ease-out);
+  opacity: 0; transition: opacity .15s;
   display: flex; align-items: flex-end; justify-content: flex-end;
   padding: 5px 5px 6px 6px;
   border-radius: 0 0 var(--radius-card) 0;
 }
 .artifact-card:hover .artifact-card__resize,
 .artifact-card__resize.active { opacity: 1; }
-.artifact-card__resize svg { width: 11px; height: 11px; color: var(--color-text-tertiary); transition: color var(--duration-fast) var(--ease-out); pointer-events: none; }
+.artifact-card__resize svg { width: 11px; height: 11px; color: var(--color-text-tertiary); transition: color .15s; pointer-events: none; }
 .artifact-card__resize:hover svg,
 .artifact-card__resize.active svg { color: var(--color-primary); }
 
 /* Size label */
 .artifact-card__size-label {
   font-size: 9px; font-family: monospace; color: var(--color-text-tertiary);
-  opacity: 0.65; margin-right: 4px;
+  opacity: 0; transition: opacity .2s; margin-right: 4px;
 }
+.artifact-card__size-label.visible { opacity: .65; }
 
 /* HighlightedCode 在卡片内的透明背景适配 — 消除嵌套卡片感 */
 .artifact-card-code .artifact-card__body > div {
@@ -220,6 +227,6 @@ html, body, #root {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--color-text-primary);
   background: var(--color-bg-app);
-  transition: color var(--duration-fast) var(--ease-out),
+  transition: color var(--duration-normal) var(--ease-out),
               background var(--duration-normal) var(--ease-out);
 }

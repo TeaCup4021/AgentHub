@@ -105,7 +105,7 @@ export function DiffCard({ artifact }: DiffCardProps) {
         <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 600, color: "var(--color-success)" }}>+{stats.added}</span>
         <span style={{ color: "var(--color-text-tertiary)", fontSize: 11, margin: "0 1px" }}>/</span>
         <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 600, color: "var(--color-danger)" }}>−{stats.removed}</span>
-        <span ref={sizeLabelRef} className="artifact-card__size-label" />
+        <span ref={sizeLabelRef} className="artifact-card__size-label">{"100% × " + DEFAULT_HEIGHT}</span>
         <button className="artifact-card__reset" onClick={resetSize} title="恢复默认大小">
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">

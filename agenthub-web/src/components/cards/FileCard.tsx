@@ -31,7 +31,7 @@ export function FileCard({ artifact }: FileCardProps) {
           下载文件
         </span>
         <div style={{ flex: 1 }} />
-        <span ref={sizeLabelRef} className="artifact-card__size-label" />
+        <span ref={sizeLabelRef} className="artifact-card__size-label">{"100% × " + DEFAULT_HEIGHT}</span>
         <button className="artifact-card__reset" onClick={resetSize} title="恢复默认大小">
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">

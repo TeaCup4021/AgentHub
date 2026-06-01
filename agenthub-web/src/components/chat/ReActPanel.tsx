@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button, Tooltip } from "@douyinfe/semi-ui";
 import { IconClose, IconChevronDown, IconChevronUp } from "@douyinfe/semi-icons";
@@ -7,9 +7,9 @@ import { DagGraph } from "./DagGraph";
 import type { ThinkingStep } from "@/types";
 
 const PHASE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  thought: { label: "思考", color: "var(--color-phase-thought)", bg: "var(--color-phase-thought-bg)" },
-  action: { label: "行动", color: "var(--color-phase-action)", bg: "var(--color-phase-action-bg)" },
-  observation: { label: "观察", color: "var(--color-phase-observation)", bg: "var(--color-phase-observation-bg)" },
+  thought: { label: "思考", color: "#8b5cf6", bg: "rgba(139,92,246,0.08)" },
+  action: { label: "行动", color: "#f5a623", bg: "rgba(245,166,35,0.08)" },
+  observation: { label: "观察", color: "#00b578", bg: "rgba(0,181,120,0.08)" },
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -70,7 +70,6 @@ function StepItem({ step, isLast }: { step: ThinkingStep; isLast: boolean }) {
 export function ReActPanel() {
   const [pinned, setPinned] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [closed, setClosed] = useState(false);
   const [tab, setTab] = useState<"react" | "dag">("react");
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragging = useRef(false);
@@ -78,37 +77,26 @@ export function ReActPanel() {
   const initialized = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const persistedSteps = useChatStore((s) => s.persistedThinkingSteps);
+  const isStreaming = useChatStore((s) => s.isStreaming);
+  const streamingContent = useChatStore((s) => s.streamingContent);
   const dagTaskId = useChatStore((s) => s.dagTaskId);
 
-  const prevStepCount = useRef(0);
-  useEffect(() => {
-    if (persistedSteps.length > prevStepCount.current) {
-      setClosed(false);
+  const allSteps = useMemo(() => {
+    const entries = Object.values(streamingContent);
+    const steps: ThinkingStep[] = [];
+    for (const entry of entries) {
+      steps.push(...entry.thinkingSteps);
     }
-    prevStepCount.current = persistedSteps.length;
-  }, [persistedSteps.length]);
+    return steps;
+  }, [streamingContent]);
 
-  const hasSteps = persistedSteps.length > 0;
   useEffect(() => {
     if (!initialized.current && panelRef.current) {
       const rect = panelRef.current.getBoundingClientRect();
       setPos({ x: window.innerWidth - rect.width - 32, y: window.innerHeight - rect.height - 200 });
       initialized.current = true;
     }
-  }, [hasSteps]);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { tab?: string } | undefined;
-      setClosed(false);
-      if (detail?.tab === "dag" && dagTaskId) {
-        setTab("dag");
-      }
-    };
-    window.addEventListener("open-react-panel", handler);
-    return () => window.removeEventListener("open-react-panel", handler);
-  }, [dagTaskId]);
+  }, [allSteps.length > 0]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     dragging.current = true;
@@ -131,8 +119,8 @@ export function ReActPanel() {
     };
   }, []);
 
-  const visible = (persistedSteps.length > 0 || dagTaskId) && !closed;
-  const runningCount = persistedSteps.filter((s) => s.status === "running").length;
+  const visible = (allSteps.length > 0 || dagTaskId) && (pinned || isStreaming);
+  const runningCount = allSteps.filter((s) => s.status === "running").length;
 
   if (!visible) return null;
 
@@ -180,13 +168,13 @@ export function ReActPanel() {
               style={{
                 fontSize: "var(--font-size-sm)",
                 fontWeight: tab === "react" ? 600 : 400,
-                color: tab === "react" ? "var(--color-gray-600)" : "var(--color-text-tertiary)",
+                color: tab === "react" ? "var(--color-primary)" : "var(--color-text-tertiary)",
                 padding: "2px 8px",
                 cursor: "pointer",
                 borderRadius: "4px 0 0 4px",
                 border: "1px solid var(--color-border-light)",
                 borderRight: "none",
-                background: tab === "react" ? "var(--color-gray-100)" : "transparent",
+                background: tab === "react" ? "var(--color-primary-light)" : "transparent",
               }}
             >
               ReAct
@@ -197,12 +185,12 @@ export function ReActPanel() {
                 style={{
                   fontSize: "var(--font-size-sm)",
                   fontWeight: tab === "dag" ? 600 : 400,
-                  color: tab === "dag" ? "var(--color-gray-600)" : "var(--color-text-tertiary)",
+                  color: tab === "dag" ? "var(--color-primary)" : "var(--color-text-tertiary)",
                   padding: "2px 8px",
                   cursor: "pointer",
                   borderRadius: "0 4px 4px 0",
                   border: "1px solid var(--color-border-light)",
-                  background: tab === "dag" ? "var(--color-gray-100)" : "transparent",
+                  background: tab === "dag" ? "var(--color-primary-light)" : "transparent",
                 }}
               >
                 任务图
@@ -240,7 +228,7 @@ export function ReActPanel() {
                 size="small"
                 theme="borderless"
                 icon={<IconClose />}
-                onClick={() => { setClosed(true); setPinned(false); setCollapsed(false); }}
+                onClick={() => { setPinned(false); setCollapsed(false); }}
               />
             </Tooltip>
           </div>
@@ -252,8 +240,8 @@ export function ReActPanel() {
             {tab === "dag" && dagTaskId ? (
               <DagGraph taskId={dagTaskId} />
             ) : (
-              persistedSteps.map((step, i) => (
-                <StepItem key={i} step={step} isLast={i === persistedSteps.length - 1} />
+              allSteps.map((step, i) => (
+                <StepItem key={i} step={step} isLast={i === allSteps.length - 1} />
               ))
             )}
           </div>

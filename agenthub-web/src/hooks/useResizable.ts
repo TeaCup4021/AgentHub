@@ -5,6 +5,7 @@ interface UseResizableOptions {
   minH?: number;
   maxW?: number;
   maxH?: number;
+  defaultWidth?: string;
   defaultHeight: number;
 }
 
@@ -18,6 +19,7 @@ export function useResizable(options: UseResizableOptions) {
     minH = 140,
     maxW = 1200,
     maxH = 700,
+    defaultWidth = "100%",
     defaultHeight,
   } = options;
 
@@ -25,24 +27,9 @@ export function useResizable(options: UseResizableOptions) {
   const resizeRef = useRef<HTMLDivElement>(null);
   const sizeLabelRef = useRef<HTMLSpanElement>(null);
 
-  const getCard = () => cardRef.current;
-  const getLabel = () => sizeLabelRef.current;
-
-  useEffect(() => {
-    const card = getCard();
-    const label = getLabel();
-    if (!card || !label) return;
-    const observer = new ResizeObserver(() => {
-      const rect = card.getBoundingClientRect();
-      label.textContent = Math.round(rect.width) + "×" + Math.round(rect.height);
-    });
-    observer.observe(card);
-    return () => observer.disconnect();
-  }, []);
-
   useEffect(() => {
     const handle = resizeRef.current;
-    const card = getCard();
+    const card = cardRef.current;
     if (!handle || !card) return;
 
     let dragging = false;
@@ -55,7 +42,6 @@ export function useResizable(options: UseResizableOptions) {
       e.preventDefault();
       e.stopPropagation();
       dragging = true;
-      card.classList.remove("artifact-card--restoring");
       handle.classList.add("active");
       card.classList.add("artifact-card--resizing");
       sx = e.clientX;
@@ -66,10 +52,14 @@ export function useResizable(options: UseResizableOptions) {
 
     const onMove = (e: MouseEvent) => {
       if (!dragging) return;
-      const w = clamp(sw + (e.clientX - sx), minW, Math.max(maxW, sw));
-      const h = clamp(sh + (e.clientY - sy), minH, Math.max(maxH, sh));
+      const w = clamp(sw + (e.clientX - sx), minW, maxW);
+      const h = clamp(sh + (e.clientY - sy), minH, maxH);
       card.style.width = w + "px";
       card.style.height = h + "px";
+      if (sizeLabelRef.current) {
+        sizeLabelRef.current.textContent = Math.round(w) + "×" + Math.round(h);
+        sizeLabelRef.current.classList.add("visible");
+      }
     };
 
     const onUp = () => {
@@ -87,21 +77,29 @@ export function useResizable(options: UseResizableOptions) {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [minW, minH, maxW, maxH, defaultHeight]);
+  }, [minW, minH, maxW, maxH]);
 
   const resetSize = useCallback(() => {
-    const card = getCard();
+    const card = cardRef.current;
     if (!card) return;
     card.classList.add("artifact-card--restoring");
-    card.style.width = "";
+    card.style.width = defaultWidth;
     card.style.height = defaultHeight + "px";
-    const onEnd = (e: TransitionEvent) => {
-      if (e.propertyName !== "width" && e.propertyName !== "height") return;
+    if (sizeLabelRef.current) {
+      sizeLabelRef.current.classList.remove("visible");
+    }
+    requestAnimationFrame(() => {
+      if (sizeLabelRef.current && cardRef.current) {
+        const w = cardRef.current.getBoundingClientRect().width;
+        sizeLabelRef.current.textContent = Math.round(w) + "×" + defaultHeight;
+      }
+    });
+    const onEnd = () => {
       card.classList.remove("artifact-card--restoring");
       card.removeEventListener("transitionend", onEnd);
     };
     card.addEventListener("transitionend", onEnd);
-  }, [defaultHeight]);
+  }, [defaultWidth, defaultHeight]);
 
   return { cardRef, resizeRef, sizeLabelRef, resetSize };
 }
