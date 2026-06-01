@@ -7,10 +7,12 @@ import { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
 import { MarkdownBubble } from "./MarkdownBubble";
 import { MessageActions } from "./MessageActions";
 import { formatTime, formatFullTime } from "@/lib/formatTime";
+import { getAgentColor } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CardRenderer } from "@/components/cards";
-import type { Agent, Message, ThinkingStep } from "@/types";
+import type { Agent, Message, ThinkingStep, PlanSubtask } from "@/types";
 import { ThinkingBlock } from "./ThinkingBlock";
+import { OrchestratorPlan } from "./OrchestratorPlan";
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
@@ -31,9 +33,21 @@ const TimeSeparator = memo(function TimeSeparator({ time }: { time: string }) {
   );
 });
 
-const MessageBubble = memo(function MessageBubble({ message, agents, searchText, onRegenerate }: { message: Message; agents: Agent[]; searchText?: string; onRegenerate?: (convId: string, msgId: string) => void }) {
+const MessageBubble = memo(function MessageBubble({ message, agents, searchText, onRegenerate, onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId }: {
+  message: Message;
+  agents: Agent[];
+  searchText?: string;
+  onRegenerate?: (convId: string, msgId: string) => void;
+  onConfirmPlan?: (planId: string, subtasks: PlanSubtask[]) => void;
+  onAdjustPlan?: (subtasks: PlanSubtask[]) => void;
+  onRefinePlan?: () => void;
+  dagTaskId?: string | null;
+}) {
   const isUser = message.senderType === "user";
   const isOrchestrator = message.senderType === "orchestrator";
+  const isPlan = message.contentType === "plan";
+  const planMeta = isPlan ? (message.meta as { planId: string; subtasks: PlanSubtask[]; plannerAgentName?: string | null; plannerAgentId?: string | null } | null) : null;
+  const hasSummary = message.meta?.summary != null;
   const agent = !isUser && !isOrchestrator && message.senderId
     ? agents.find((a) => a.id === message.senderId)
     : null;
@@ -115,7 +129,11 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
             fontWeight: 500,
             color: "#fff",
             flexShrink: 0,
-            background: isUser ? "var(--color-primary)" : "var(--color-success)",
+            background: isUser
+              ? "var(--color-gray-600)"
+              : isOrchestrator
+                ? "var(--color-gray-400)"
+                : getAgentColor(message.senderName || "A"),
             cursor: avatarCursor,
             userSelect: "none",
           }}
@@ -163,15 +181,43 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
             boxShadow: !isUser ? "var(--shadow-sm)" : "none",
           }}>
             <ErrorBoundary label="消息渲染">
-              {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
-              {message.content && (
-                <MarkdownBubble
-                  text={searchText ? highlightText(message.content, searchText) : message.content}
+              {isPlan && planMeta ? (
+                <OrchestratorPlan
+                  planId={planMeta.planId}
+                  subtasks={planMeta.subtasks}
+                  plannerAgentName={planMeta.plannerAgentName}
+                  agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+                  onConfirm={() => onConfirmPlan?.(planMeta.planId, planMeta.subtasks)}
+                  onAdjust={(subtasks) => onAdjustPlan?.(subtasks)}
+                  onRefine={onRefinePlan}
                 />
+              ) : (
+                <>
+                  {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
+                  {message.content && (
+                    <MarkdownBubble
+                      text={searchText ? highlightText(message.content, searchText) : message.content}
+                    />
+                  )}
+                  {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+                </>
               )}
-              {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
             </ErrorBoundary>
           </div>
+          {hasSummary && dagTaskId && (
+            <div
+              onClick={() => window.dispatchEvent(new CustomEvent("open-react-panel", { detail: { tab: "dag" } }))}
+              style={{
+                fontSize: 11,
+                color: "var(--color-primary)",
+                cursor: "pointer",
+                marginTop: 4,
+                userSelect: "none",
+              }}
+            >
+              查看任务图 →
+            </div>
+          )}
           <MessageActions
             message={message}
             isStreaming={message.status === "streaming"}
@@ -204,7 +250,7 @@ const StreamingMessageBubble = memo(function StreamingMessageBubble({ messageId,
         width: 32,
         height: 32,
         borderRadius: "50%",
-        background: "var(--color-success)",
+        background: getAgentColor(agentName),
         color: "#fff",
         fontSize: "var(--font-size-xs)",
         fontWeight: 500,
@@ -248,7 +294,7 @@ const PendingMessageBubble = memo(function PendingMessageBubble() {
         width: 32,
         height: 32,
         borderRadius: "50%",
-        background: "var(--color-success)",
+        background: "var(--color-gray-400)",
         color: "#fff",
         fontSize: "var(--font-size-xs)",
         fontWeight: 500,
@@ -313,11 +359,16 @@ interface MessageListProps {
   onLoadMore?: () => void;
   searchText?: string;
   onRegenerate?: (convId: string, msgId: string) => void;
+  onConfirmPlan?: (planId: string, subtasks: PlanSubtask[]) => void;
+  onAdjustPlan?: (subtasks: PlanSubtask[]) => void;
+  onRefinePlan?: () => void;
+  dagTaskId?: string | null;
 }
 
 export function MessageList({
   messages, agents, streamingMessageId, streamingAgentName,
   isWaiting, hasMore, isFetchingMore, onLoadMore, searchText, onRegenerate,
+  onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -416,7 +467,7 @@ export function MessageList({
             transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
           >
             {needSeparator && <TimeSeparator time={msg.createdAt} />}
-            <MessageBubble message={msg} agents={agents} searchText={searchText} onRegenerate={onRegenerate} />
+            <MessageBubble message={msg} agents={agents} searchText={searchText} onRegenerate={onRegenerate} onConfirmPlan={onConfirmPlan} onAdjustPlan={onAdjustPlan} onRefinePlan={onRefinePlan} dagTaskId={dagTaskId} />
           </motion.div>
         );
       })}
@@ -445,11 +496,11 @@ export function MessageList({
                 width: 40,
                 height: 40,
                 borderRadius: "50%",
-                background: "var(--color-primary)",
-                color: "#fff",
+                background: "var(--color-bg-chat)",
+                color: "var(--color-gray-600)",
                 fontSize: "var(--font-size-xs)",
                 fontWeight: 700,
-                border: "none",
+                border: "1px solid var(--color-gray-200)",
                 cursor: "pointer",
                 boxShadow: "var(--shadow-md)",
                 transition: "all var(--duration-fast) var(--ease-out)",

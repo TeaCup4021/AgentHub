@@ -11,7 +11,7 @@ interface AgentProgressBarProps {
 
 const statusColor: Record<AgentProgress["status"], string> = {
   queued: "var(--color-text-disabled)",
-  running: "var(--color-primary)",
+  running: "var(--color-status-running)",
   success: "var(--color-success)",
   failed: "var(--color-danger)",
   timeout: "var(--color-warning)",

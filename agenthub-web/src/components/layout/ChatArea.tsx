@@ -1,14 +1,14 @@
 import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Banner, Button, Spin } from "@douyinfe/semi-ui";
+import { Banner, Button, Spin, Select } from "@douyinfe/semi-ui";
 import { useChatStore } from "@/stores/chatStore";
 import { useMessages } from "@/hooks/useMessages";
 import { useAgents } from "@/hooks/useAgents";
 import { useCreateConversation, useUpdateAnyConversation } from "@/hooks";
 import { createSSEStream } from "@/lib/sse";
 import { messageApi } from "@/lib/api";
-import { ChatHeader, MessageList, ChatInput, WelcomePage, OrchestratorPlan } from "@/components/chat";
+import { ChatHeader, MessageList, ChatInput, WelcomePage } from "@/components/chat";
 import { AgentProgressBar } from "@/components/chat/AgentProgressBar";
 import { AgentDashboard } from "@/components/chat/AgentDashboard";
 import { MentionSwitchDialog } from "@/components/chat/MentionSwitchDialog";
@@ -56,6 +56,17 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const dashboardOpen = useDashboardStore((s) => s.dashboardOpen);
   const toggleDashboard = useDashboardStore((s) => s.toggleDashboard);
   const setDashboardOpen = useDashboardStore((s) => s.setDashboardOpen);
+  const dagTaskId = useChatStore((s) => s.dagTaskId);
+
+  const taskSummary = useMemo(() => {
+    const agents = agentStatuses;
+    if (agents.length === 0) return null;
+    const total = agents.length;
+    const completed = agents.filter((a) => a.status === "success").length;
+    const failed = agents.filter((a) => a.status === "failed" || a.status === "timeout").length;
+    const running = agents.filter((a) => a.status === "running" || a.status === "queued").length;
+    return { total, completed, failed, running, hasDag: !!dagTaskId };
+  }, [agentStatuses, dagTaskId]);
 
   const qc = useQueryClient();
   const {
@@ -78,6 +89,30 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     const q = messageSearch.toLowerCase();
     return rawMessages.filter((m) => m.content.toLowerCase().includes(q));
   }, [rawMessages, messageSearch]);
+  const pendingPlan = useChatStore((s) => s.pendingPlan);
+  const displayMessages = useMemo(() => {
+    if (!pendingPlan) return filteredMessages;
+    const planMsg: Message = {
+      id: `plan-${pendingPlan.planId}`,
+      conversationId: activeId ?? "",
+      senderType: "orchestrator",
+      senderId: "orchestrator",
+      senderName: pendingPlan.plannerAgentName ?? "Orchestrator",
+      contentType: "plan",
+      content: "",
+      artifacts: [],
+      status: "done",
+      meta: {
+        planId: pendingPlan.planId,
+        subtasks: pendingPlan.subtasks,
+        plannerAgentName: pendingPlan.plannerAgentName,
+        plannerAgentId: pendingPlan.plannerAgentId,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    return [...filteredMessages, planMsg];
+  }, [filteredMessages, pendingPlan, activeId]);
   const { data: agents = [] } = useAgents();
   const createConversation = useCreateConversation();
   const updateConversation = useUpdateAnyConversation();
@@ -101,6 +136,10 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   }
   const [switchData, setSwitchData] = useState<SwitchData | null>(null);
   const [viewMode, setViewMode] = useState<"chat" | "artifacts">("chat");
+  const [planFocusKey, setPlanFocusKey] = useState(0);
+  const handleRefinePlan = useCallback(() => {
+    setPlanFocusKey((k) => k + 1);
+  }, []);
   const sendRef = useRef<(convId: string, content: string, mentions: string[]) => void>(null!);
 
   useEffect(() => {
@@ -113,6 +152,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     setIsStreaming(false);
     clearAgentStatuses();
     setDagTaskId(null);
+    useChatStore.getState().setPersistedThinkingSteps([]);
 
     return () => {
       disconnectRef.current?.();
@@ -162,12 +202,14 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     },
     onThinking: (data: SSEThinking) => {
       if (streamMsgIdRef.current) {
-        appendThinkingStep(streamMsgIdRef.current, {
+        const step = {
           phase: data.phase,
           text: data.text,
           toolName: data.tool_name,
           status: data.status,
-        });
+        };
+        appendThinkingStep(streamMsgIdRef.current, step);
+        useChatStore.getState().appendPersistedThinkingStep(step);
       }
     },
     onMessageEnd: (data: SSEMessageEnd) => {
@@ -186,9 +228,6 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       }
       setIsStreaming(false);
       qc.invalidateQueries({ queryKey: ["messages", convId] });
-      if (useDashboardStore.getState().allDone()) {
-        clearAgentStatuses();
-      }
       if (retryRef.current.timeoutId) {
         clearTimeout(retryRef.current.timeoutId);
         retryRef.current.timeoutId = null;
@@ -255,19 +294,22 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       },
     );
 
-    const msgMode = conv?.type === "group" ? "auto_orchestrate" : "direct";
+    const _pendingPlan = useChatStore.getState().pendingPlan;
+    const msgMode = _pendingPlan
+      ? "refine_plan"
+      : conv?.type === "group"
+        ? "auto_orchestrate"
+        : "direct";
     const optimisticId = optimisticMsg.id;
     const streamMode = conv?.type === "group" ? "auto_orchestrate" : undefined;
 
-    // Start SSE after POST completes to avoid race condition:
-    // POST creates the orchestrator task on the backend; SSE must arrive
-    // AFTER the task exists, otherwise the planner won't be triggered.
     messageApi.send(convId, {
       content,
       mentions,
       mode: msgMode,
-      planner_agent_id: conv?.type === "group" ? plannerAgentIdRef.current : undefined,
-    } as any).then((response) => {
+      plannerAgentId: conv?.type === "group" ? plannerAgentIdRef.current : undefined,
+      plan_id: _pendingPlan?.planId,
+    }).then((response) => {
       const realMsg = response.data?.data as Message | undefined;
       if (realMsg) {
         qc.setQueryData(
@@ -556,7 +598,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <ChatHeader conversation={conversation} agents={agents} messageHitCount={messageSearch ? filteredMessages.length : undefined} />
+      <ChatHeader conversation={conversation} agents={agents} messageHitCount={messageSearch ? filteredMessages.length : undefined} taskSummary={taskSummary} />
       <div style={{ display: "flex", borderBottom: "1px solid var(--color-border-light)", background: "var(--color-bg-elevated)" }}>
         <TabButton active={viewMode === "chat"} count={rawMessages.length} onClick={() => setViewMode("chat")}>聊天</TabButton>
         <TabButton active={viewMode === "artifacts"} count={artifactCount} onClick={() => setViewMode("artifacts")}>产物</TabButton>
@@ -597,29 +639,23 @@ export function ChatArea({ conversations }: ChatAreaProps) {
             <span style={{ fontSize: 12, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
               任务分配:
             </span>
-            <select
+            <Select
               value={plannerAgentId ?? ""}
-              onChange={(e) => setPlannerAgentId(e.target.value || null)}
-              style={{
-                flex: 1,
-                fontSize: 12,
-                padding: "4px 8px",
-                borderRadius: 4,
-                border: "1px solid var(--color-border-medium)",
-                background: "var(--color-bg-white)",
-                color: "var(--color-text-primary)",
-              }}
+              onChange={(v) => setPlannerAgentId(v ? String(v) : null)}
+              placeholder="自动 (Orchestrator)"
+              size="small"
+              style={{ flex: 1, minWidth: 140 }}
             >
-              <option value="">自动 (Orchestrator)</option>
+              <Select.Option value="">自动 (Orchestrator)</Select.Option>
               {conversation.agentIds
                 .map((id) => agents.find((a) => a.id === id))
                 .filter(Boolean)
                 .map((a) => (
-                  <option key={a!.id} value={a!.id}>
+                  <Select.Option key={a!.id} value={a!.id}>
                     {a!.name}
-                  </option>
+                  </Select.Option>
                 ))}
-            </select>
+            </Select>
           </div>
           <div onClick={toggleDashboard} className="cursor-pointer">
             <AgentProgressBar agents={agentStatuses} />
@@ -630,14 +666,6 @@ export function ChatArea({ conversations }: ChatAreaProps) {
             onClose={() => setDashboardOpen(false)}
           />
         </>
-      )}
-      {/* Pending Plan Display */}
-      {useChatStore((s) => s.pendingPlan) && (
-        <OrchestratorPlan
-          planId={useChatStore((s) => s.pendingPlan)!.planId}
-          subtasks={useChatStore((s) => s.pendingPlan)!.subtasks}
-          plannerAgentName={useChatStore((s) => s.pendingPlan)!.plannerAgentName}
-        />
       )}
       {isMessagesError ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: 32 }}>
@@ -655,7 +683,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         </div>
       ) : (
         <MessageList
-          messages={filteredMessages}
+          messages={displayMessages}
           agents={agents}
           streamingMessageId={streamMsgIdRef.current}
           streamingAgentName={streamAgentRef.current}
@@ -664,6 +692,10 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           isFetchingMore={isFetchingNextPage}
           onLoadMore={() => fetchNextPage()}
           searchText={messageSearch}
+          onConfirmPlan={handleConfirmPlan}
+          onAdjustPlan={handleAdjustPlan}
+          onRefinePlan={handleRefinePlan}
+          dagTaskId={dagTaskId}
         />
       )}
       {filteredMessages.length === 0 && !isStreaming && messageSearch && rawMessages.length > 0 ? (
@@ -721,7 +753,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           ))}
         </div>
       ) : null}
-      <ChatInput key={activeId} onSend={handleSend} onStop={handleStop} disabled={isStreaming} agents={agents} />
+      <ChatInput key={activeId} onSend={handleSend} onStop={handleStop} disabled={isStreaming} agents={agents} focusKey={planFocusKey} />
       </div>
       )}
 

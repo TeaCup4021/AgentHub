@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, Switch, Input, Button } from "@douyinfe/semi-ui";
+import { Switch, Input, Button } from "@douyinfe/semi-ui";
 import { IconChevronUpDown } from "@douyinfe/semi-icons";
 
 interface LLMProvider {
@@ -76,14 +76,16 @@ export function LLMConfigSection() {
           const disabled = !provider.enabled;
           const connected = provider.apiKey.length > 0;
           return (
-            <Card
+            <div
               key={provider.id}
               style={{
+                border: "1px solid var(--color-border-light)",
+                borderRadius: 8,
                 padding: "10px 14px",
+                background: "var(--color-bg-subtle)",
                 opacity: disabled ? 0.55 : 1,
                 transition: "opacity 0.15s",
               }}
-              bodyStyle={{ padding: 0 }}
             >
               {/* Row 1: controls */}
               <div style={{ display: "flex", alignItems: "center", gap: 8, height: 32 }}>
@@ -160,7 +162,7 @@ export function LLMConfigSection() {
                   }
                 />
               </div>
-            </Card>
+            </div>
           );
         })}
       </div>

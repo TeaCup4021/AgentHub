@@ -302,7 +302,7 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
                 ? "var(--color-bg-active)"
                 : "transparent",
             border: conv.id === activeId && !batchMode
-              ? "1px solid rgba(51, 112, 255, 0.3)"
+              ? "1px solid var(--color-border-medium)"
               : "1px solid transparent",
             opacity: isArchived ? 0.6 : 1,
             transition: "background var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out)",
@@ -398,8 +398,8 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
           size="small"
           onClick={() => { setBatchMode(!batchMode); setSelectedIds(new Set()); }}
           style={{
-            color: batchMode ? "var(--color-primary)" : "var(--color-text-tertiary)",
-            fontWeight: batchMode ? 500 : 400,
+            color: batchMode ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+            fontWeight: batchMode ? 600 : 400,
           }}
         >
           {batchMode ? "完成" : "批量"}
@@ -458,14 +458,34 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
           gap: 8,
           padding: "12px 16px",
           background: "var(--color-bg-elevated)",
-          boxShadow: "0 -1px 4px rgba(0,0,0,0.06)",
+          boxShadow: "var(--shadow-md)",
         }}>
           <span style={{ flex: 1, fontSize: "var(--font-size-sm)", color: "var(--color-text-secondary)" }}>
             已选 {selectedIds.size} 项
           </span>
-          <Button size="small" onClick={handleBatchArchive}>归档</Button>
-          <Button size="small" type="danger" onClick={handleBatchDelete}>删除</Button>
-          <Button size="small" theme="borderless" onClick={exitBatchMode}>取消</Button>
+          <Button
+            size="small"
+            onClick={handleBatchArchive}
+            style={{ fontSize: "var(--font-size-sm)", fontWeight: 500 }}
+          >
+            归档
+          </Button>
+          <Button
+            size="small"
+            type="danger"
+            onClick={handleBatchDelete}
+            style={{ fontSize: "var(--font-size-sm)", fontWeight: 500 }}
+          >
+            删除
+          </Button>
+          <Button
+            size="small"
+            theme="borderless"
+            onClick={exitBatchMode}
+            style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: "var(--color-gray-400)" }}
+          >
+            取消
+          </Button>
         </div>
       )}
 
@@ -557,7 +577,7 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
                     width: 32,
                     height: 32,
                     borderRadius: "50%",
-                    background: selected ? "var(--color-primary)" : "#00b578",
+                    background: selected ? "var(--color-gray-950)" : "var(--color-gray-600)",
                     color: "#fff",
                     fontSize: "var(--font-size-xs)",
                     fontWeight: 600,

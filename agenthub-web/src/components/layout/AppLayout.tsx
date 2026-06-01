@@ -179,7 +179,7 @@ export function AppLayout() {
               zIndex: 5,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "rgba(51, 112, 255, 0.15)";
+              e.currentTarget.style.background = "var(--color-bg-active)";
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "transparent";

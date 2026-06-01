@@ -28,6 +28,7 @@ interface ChatUIState {
   messageSearch: string;
   pendingPlan: OrchestratorPendingPlan | null;
   dagTaskId: string | null;
+  persistedThinkingSteps: ThinkingStep[];
 
   setActiveConversation: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
@@ -46,6 +47,8 @@ interface ChatUIState {
   setPendingQuote: (quote: { messageId: string; content: string } | null) => void;
   setPendingPlan: (plan: OrchestratorPendingPlan | null) => void;
   setDagTaskId: (id: string | null) => void;
+  setPersistedThinkingSteps: (steps: ThinkingStep[]) => void;
+  appendPersistedThinkingStep: (step: ThinkingStep) => void;
 }
 
 export const useChatStore = create<ChatUIState>((set, get) => ({
@@ -60,6 +63,7 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   messageSearch: "",
   pendingPlan: null,
   dagTaskId: null,
+  persistedThinkingSteps: [],
 
   setActiveConversation: (id) => set({ activeConversationId: id }),
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -147,4 +151,17 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
 
   setPendingPlan: (plan) => set({ pendingPlan: plan }),
   setDagTaskId: (id) => set({ dagTaskId: id }),
+  setPersistedThinkingSteps: (steps) => set({ persistedThinkingSteps: steps }),
+  appendPersistedThinkingStep: (step) =>
+    set((s) => {
+      const idx = s.persistedThinkingSteps.findIndex(
+        (st) => st.phase === step.phase && st.text === step.text,
+      );
+      if (idx >= 0) {
+        const updated = [...s.persistedThinkingSteps];
+        updated[idx] = step;
+        return { persistedThinkingSteps: updated };
+      }
+      return { persistedThinkingSteps: [...s.persistedThinkingSteps, step] };
+    }),
 }));

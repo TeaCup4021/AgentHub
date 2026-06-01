@@ -40,3 +40,23 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
+
+/**
+ * Agent 头像柔和色盘 — 按名称 hash 分配固定颜色
+ */
+const AGENT_COLORS = [
+  "#5b7aad",
+  "#6b9b7a",
+  "#b08968",
+  "#8b7eac",
+  "#c47e6e",
+  "#788c9e",
+];
+
+export function getAgentColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AGENT_COLORS[Math.abs(hash) % AGENT_COLORS.length];
+}

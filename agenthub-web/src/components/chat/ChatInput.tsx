@@ -10,6 +10,7 @@ interface ChatInputProps {
   onStop?: () => void;
   disabled?: boolean;
   agents: Agent[];
+  focusKey?: number;
 }
 
 function getPlainText(root: HTMLElement): string {
@@ -108,7 +109,7 @@ function getMentionQuery(): { query: string } | null {
   return { query: afterAt };
 }
 
-export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatInputProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
 
@@ -138,6 +139,12 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
     setIsEmptyState(isEmpty());
     return () => observer.disconnect();
   }, [isEmpty]);
+
+  useEffect(() => {
+    if (focusKey !== undefined && focusKey > 0) {
+      editorRef.current?.focus();
+    }
+  }, [focusKey]);
 
   const handleSend = useCallback(() => {
     const el = editorRef.current;
@@ -299,7 +306,7 @@ export function ChatInput({ onSend, onStop, disabled, agents }: ChatInputProps) 
           background: "var(--color-bg-hover)",
           fontSize: "var(--font-size-sm)",
           color: "var(--color-text-secondary)",
-          borderLeft: "3px solid var(--color-primary)",
+          borderLeft: "3px solid var(--color-gray-600)",
         }}>
           <span style={{
             flex: 1,

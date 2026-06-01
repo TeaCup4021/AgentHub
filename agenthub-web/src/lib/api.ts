@@ -197,7 +197,7 @@ export interface SendMessageRequest {
   mentions?: string[];
   parentMessageId?: string;
   mode?: "auto_orchestrate" | "direct" | "refine_plan" | "confirm_plan";
-  planner_agent_id?: string | null;
+  plannerAgentId?: string | null;
   plan_id?: string;
   plan?: ConfirmPlanItem[];
 }

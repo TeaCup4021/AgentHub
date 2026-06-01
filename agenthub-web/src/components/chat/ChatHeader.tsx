@@ -6,13 +6,22 @@ import type { Conversation, Agent } from "@/types";
 
 type SearchMode = "off" | "conv" | "msg";
 
+interface TaskSummary {
+  total: number;
+  completed: number;
+  failed: number;
+  running: number;
+  hasDag: boolean;
+}
+
 interface ChatHeaderProps {
   conversation: Conversation;
   agents: Agent[];
   messageHitCount?: number;
+  taskSummary?: TaskSummary | null;
 }
 
-export function ChatHeader({ conversation, agents, messageHitCount }: ChatHeaderProps) {
+export function ChatHeader({ conversation, agents, messageHitCount, taskSummary }: ChatHeaderProps) {
   const [searchMode, setSearchMode] = useState<SearchMode>("off");
   const [searchText, setSearchText] = useState("");
   const searchQuery = useChatStore((s) => s.searchQuery);
@@ -72,6 +81,45 @@ export function ChatHeader({ conversation, agents, messageHitCount }: ChatHeader
           )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {taskSummary && taskSummary.total > 0 && (
+            <div
+              onClick={() => window.dispatchEvent(new CustomEvent("open-react-panel"))}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "2px 10px",
+                borderRadius: 12,
+                background: taskSummary.running > 0
+                  ? "color-mix(in srgb, var(--color-status-running) 10%, transparent)"
+                  : taskSummary.failed > 0
+                    ? "color-mix(in srgb, var(--color-status-failed) 10%, transparent)"
+                    : "color-mix(in srgb, var(--color-status-done) 10%, transparent)",
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 500,
+                userSelect: "none",
+                transition: "background 0.15s",
+              }}
+            >
+              <span style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: taskSummary.running > 0
+                  ? "var(--color-status-running)"
+                  : taskSummary.failed > 0
+                    ? "var(--color-status-failed)"
+                    : "var(--color-status-done)",
+                animation: taskSummary.running > 0 ? "pulse 1.5s infinite" : "none",
+              }} />
+              {taskSummary.running > 0
+                ? `执行中 (${taskSummary.completed}/${taskSummary.total})`
+                : taskSummary.failed > 0
+                  ? `${taskSummary.completed}/${taskSummary.total} 完成，${taskSummary.failed} 失败`
+                  : `${taskSummary.total} 个任务已完成`}
+            </div>
+          )}
           <Button
             data-search-toggle
             icon={<IconSearch />}

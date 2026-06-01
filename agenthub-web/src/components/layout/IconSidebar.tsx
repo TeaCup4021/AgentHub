@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useProjects } from "@/hooks/useProjects";
 import { useUIStore } from "@/stores/uiStore";
 import { ProjectCreateModal } from "@/components/project/ProjectCreateModal";
+import { getAgentColor } from "@/lib/utils";
 
 export function IconSidebar() {
   const navigate = useNavigate();
@@ -98,7 +99,7 @@ export function IconSidebar() {
             width: 32,
             height: 32,
             borderRadius: "var(--radius-md)",
-            background: selectedProject ? "var(--color-primary)" : "var(--color-fill-2)",
+            background: selectedProject ? getAgentColor(selectedProject.name) : "var(--color-fill-2)",
             color: selectedProject ? "#fff" : "var(--color-text-tertiary)",
             display: "flex",
             alignItems: "center",
@@ -184,8 +185,8 @@ export function IconSidebar() {
             width: 8,
             height: 8,
             borderRadius: "50%",
-            background: isMock ? "var(--color-warning)" : "var(--color-success)",
-            boxShadow: `0 0 6px ${isMock ? "var(--color-warning)" : "var(--color-success)"}`,
+            background: isMock ? "var(--color-status-running)" : "var(--color-success)",
+            boxShadow: `0 0 6px ${isMock ? "var(--color-status-running)" : "var(--color-success)"}`,
           }} />
         </div>
       </div>

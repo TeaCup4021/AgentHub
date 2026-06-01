@@ -1,6 +1,6 @@
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, SSEError, Artifact, Message } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, SSEError, Artifact, Message, PlanSubtask } from "@/types";
 import { mockAgents, mockConversations } from "./data";
-import { addMockMessage, getLastUserMessage, getMockAgents } from "./handlers";
+import { addMockMessage, getLastUserMessage, getMockAgents, getOrchestratorPhase, getOrchestratorPlan, setOrchestratorPhase } from "./handlers";
 import { generateId } from "@/lib/utils";
 
 interface MockSSEOptions {
@@ -53,6 +53,17 @@ const mockThinkingSteps: Array<{ phase: "thought" | "action" | "observation"; te
   { phase: "observation", text: "工具返回了可用的代码模板，现在基于模板为用户定制实现。" },
 ];
 
+const planningThinkingSteps: Array<{ phase: "thought" | "action" | "observation"; text: string; tool_name?: string }> = [
+  { phase: "thought", text: "正在分析用户需求，拆解为可执行的子任务..." },
+  { phase: "action", text: "评估各 Agent 的能力匹配度，分配子任务。", tool_name: "planner" },
+  { phase: "observation", text: "计划生成完毕，等待用户确认。" },
+];
+
+function buildOrchestratorPlanText(plan: PlanSubtask[]): string {
+  const lines = plan.map((t, i) => `${i + 1}. **${t.instruction}** → @${t.agent.name}`);
+  return `分析完成，为你制定了以下执行计划：\n\n${lines.join("\n")}\n\n你可以直接说话修改计划，或点击下方按钮操作。`;
+}
+
 export function createMockSSEStream(
   conversationId: string,
   callbacks: MockSSEOptions,
@@ -61,17 +72,21 @@ export function createMockSSEStream(
   const messageId = `msg-${generateId()}`;
   const taskId = `task-${generateId()}`;
 
-  const conversation = mockConversations.find((c) => c.id === conversationId);
-  const isGroup = conversation?.type === "group";
-  const agentIds = conversation?.agentIds || [];
   const liveAgents = getMockAgents();
+  const allKnownAgents = [...mockAgents, ...liveAgents];
+  const conv = mockConversations.find((c) => c.id === conversationId);
+  const isGroup = conv?.type === "group";
+  const agentIds: string[] = conv?.agentIds || [];
   const agents = agentIds
-    .map((id) => liveAgents.find((a) => a.id === id) || mockAgents.find((a) => a.id === id))
+    .map((id: string) => allKnownAgents.find((a) => a.id === id))
     .filter(Boolean) as typeof mockAgents;
 
   if (agents.length === 0) {
     agents.push(mockAgents[0]);
   }
+
+  const phase = getOrchestratorPhase();
+  const plan = getOrchestratorPlan();
 
   const sendEvent = (event: string, data: unknown) => {
     if (cancelled) return;
@@ -101,7 +116,334 @@ export function createMockSSEStream(
   };
 
   const primaryAgent = agents[0];
+  const planText = isGroup ? buildOrchestratorPlanText(plan) : "";
+  let accumulatedText = "";
+  const accumulatedArtifacts: Artifact[] = [];
+  let tokenIndex = 0;
+  const accumulatedThinkingSteps: Array<{ phase: "thought" | "action" | "observation"; text: string; tool_name?: string; status: "done" }> = [];
 
+  const baseDelay = 100;
+
+  // ── Phase: planning (auto_orchestrate 或 refine_plan) ──
+  if (isGroup && phase === "planning" && plan.length > 0) {
+    setTimeout(() => {
+      if (cancelled) return;
+      sendEvent("message_start", {
+        version: "v1",
+        event_id: `evt-${generateId()}`,
+        conversation_id: conversationId,
+        message_id: messageId,
+        sender: { type: "orchestrator", id: "orchestrator", name: "Orchestrator" },
+        meta: {
+          plan,
+          plan_id: taskId,
+          planner_agent_id: null,
+          planner_agent_name: null,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }, baseDelay);
+
+    // Planning thinking steps
+    let pDelay = baseDelay + 100;
+    for (const step of planningThinkingSteps) {
+      const stepIndex = planningThinkingSteps.indexOf(step);
+      const startOrder = stepIndex;
+
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("thinking", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          phase: step.phase,
+          text: step.text,
+          tool_name: step.tool_name,
+          status: "running",
+          step_index: startOrder,
+          timestamp: new Date().toISOString(),
+        });
+      }, pDelay);
+      pDelay += 300;
+
+      setTimeout(() => {
+        if (cancelled) return;
+        accumulatedThinkingSteps.push({ ...step, status: "done" });
+        sendEvent("thinking", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          phase: step.phase,
+          text: step.text,
+          tool_name: step.tool_name,
+          status: "done",
+          step_index: startOrder,
+          timestamp: new Date().toISOString(),
+        });
+      }, pDelay);
+      pDelay += 50;
+    }
+
+    // Token events for plan text
+    for (let i = 0; i < planText.length; i++) {
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("token", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          delta: planText[i],
+          index: tokenIndex++,
+          timestamp: new Date().toISOString(),
+        });
+      }, pDelay);
+      pDelay += 2 + Math.random() * 5;
+    }
+    accumulatedText = planText;
+
+    // message_end with plan_draft
+    setTimeout(() => {
+      if (cancelled) return;
+      addMockMessage(conversationId, {
+        id: messageId,
+        conversationId,
+        senderType: "orchestrator",
+        senderId: "orchestrator",
+        senderName: "Orchestrator",
+        contentType: "text",
+        content: accumulatedText,
+        artifacts: accumulatedArtifacts,
+        status: "done",
+        meta: { thinking_steps: accumulatedThinkingSteps, plan },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      sendEvent("message_end", {
+        version: "v1",
+        event_id: `evt-${generateId()}`,
+        conversation_id: conversationId,
+        message_id: messageId,
+        finish_reason: "plan_draft",
+        timestamp: new Date().toISOString(),
+      });
+    }, pDelay + 80);
+
+    return () => { cancelled = true; };
+  }
+
+  // ── Phase: executing (confirm_plan) ──
+  if (isGroup && phase === "executing" && plan.length > 0) {
+    setTimeout(() => {
+      if (cancelled) return;
+      sendEvent("message_start", {
+        version: "v1",
+        event_id: `evt-${generateId()}`,
+        conversation_id: conversationId,
+        message_id: messageId,
+        sender: { type: "orchestrator", id: "orchestrator", name: "Orchestrator" },
+        meta: { plan_id: taskId },
+        timestamp: new Date().toISOString(),
+      });
+    }, baseDelay);
+
+    let eDelay = baseDelay + 100;
+
+    // Exec summary text
+    const execText = "计划已确认，开始执行...\n\n";
+    for (let i = 0; i < execText.length; i++) {
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("token", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          delta: execText[i],
+          index: tokenIndex++,
+          timestamp: new Date().toISOString(),
+        });
+      }, eDelay);
+      eDelay += 2 + Math.random() * 5;
+    }
+    accumulatedText = execText;
+
+    // Multi-agent concurrent execution with agent_status events
+    plan.forEach((subtask, i) => {
+      const lifeStart = eDelay + i * 800;
+      const subtaskId = subtask.subtask_id;
+
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("agent_status", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          task_id: taskId,
+          subtask_id: subtaskId,
+          agent: { id: subtask.agent.id, name: subtask.agent.name },
+          status: "queued",
+          progress: 0,
+          timestamp: new Date().toISOString(),
+        });
+      }, lifeStart);
+
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("agent_status", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          task_id: taskId,
+          subtask_id: subtaskId,
+          agent: { id: subtask.agent.id, name: subtask.agent.name },
+          status: "running",
+          progress: 30,
+          timestamp: new Date().toISOString(),
+        });
+      }, lifeStart + 300);
+
+      // Sub-task progress text
+      const subText = `\n🔄 @${subtask.agent.name} 正在执行：${subtask.instruction}...\n`;
+      setTimeout(() => {
+        if (cancelled) return;
+        for (let j = 0; j < subText.length; j++) {
+          setTimeout(() => {
+            if (cancelled) return;
+            sendEvent("token", {
+              version: "v1",
+              event_id: `evt-${generateId()}`,
+              conversation_id: conversationId,
+              message_id: messageId,
+              delta: subText[j],
+              index: tokenIndex++,
+              timestamp: new Date().toISOString(),
+            });
+          }, j * 3);
+        }
+        accumulatedText += subText;
+      }, lifeStart + 400);
+
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("agent_status", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          task_id: taskId,
+          subtask_id: subtaskId,
+          agent: { id: subtask.agent.id, name: subtask.agent.name },
+          status: "running",
+          progress: 70,
+          timestamp: new Date().toISOString(),
+        });
+      }, lifeStart + 800);
+
+      setTimeout(() => {
+        if (cancelled) return;
+        sendEvent("agent_status", {
+          version: "v1",
+          event_id: `evt-${generateId()}`,
+          conversation_id: conversationId,
+          message_id: messageId,
+          task_id: taskId,
+          subtask_id: subtaskId,
+          agent: { id: subtask.agent.id, name: subtask.agent.name },
+          status: "success",
+          progress: 100,
+          timestamp: new Date().toISOString(),
+        });
+
+        const doneText = `✅ @${subtask.agent.name} 完成\n`;
+        accumulatedText += doneText;
+        for (let j = 0; j < doneText.length; j++) {
+          setTimeout(() => {
+            if (cancelled) return;
+            sendEvent("token", {
+              version: "v1",
+              event_id: `evt-${generateId()}`,
+              conversation_id: conversationId,
+              message_id: messageId,
+              delta: doneText[j],
+              index: tokenIndex++,
+              timestamp: new Date().toISOString(),
+            });
+          }, j * 3);
+        }
+      }, lifeStart + 1500);
+    });
+
+    const summaryText = "\n---\n所有子任务执行完毕，计划完成。";
+    const totalDelay = eDelay + plan.length * 800 + 2000;
+
+    setTimeout(() => {
+      if (cancelled) return;
+      for (let j = 0; j < summaryText.length; j++) {
+        setTimeout(() => {
+          if (cancelled) return;
+          sendEvent("token", {
+            version: "v1",
+            event_id: `evt-${generateId()}`,
+            conversation_id: conversationId,
+            message_id: messageId,
+            delta: summaryText[j],
+            index: tokenIndex++,
+            timestamp: new Date().toISOString(),
+          });
+        }, j * 3);
+      }
+    }, totalDelay);
+
+    setTimeout(() => {
+      if (cancelled) return;
+      setOrchestratorPhase("idle");
+      addMockMessage(conversationId, {
+        id: messageId,
+        conversationId,
+        senderType: "orchestrator",
+        senderId: "orchestrator",
+        senderName: "Orchestrator",
+        contentType: "text",
+        content: accumulatedText + summaryText,
+        artifacts: accumulatedArtifacts,
+        status: "done",
+        meta: {
+          thinking_steps: accumulatedThinkingSteps,
+          plan_id: taskId,
+          summary: {
+            total: plan.length,
+            success: plan.length,
+            failed: 0,
+            results: plan.map((t) => ({
+              subtask_id: t.subtask_id,
+              status: "success" as const,
+              message_id: `msg-${generateId()}`,
+            })),
+          },
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      sendEvent("message_end", {
+        version: "v1",
+        event_id: `evt-${generateId()}`,
+        conversation_id: conversationId,
+        message_id: messageId,
+        finish_reason: "completed",
+        usage: { input_tokens: 2500, output_tokens: 1200 },
+        timestamp: new Date().toISOString(),
+      });
+    }, totalDelay + 500);
+
+    return () => { cancelled = true; };
+  }
+
+  // ── Default: single-chat or idle group (existing behavior) ──
   let blocks = mockResponseTexts[primaryAgent.id];
   if (!blocks) {
     const lastMsg = getLastUserMessage(conversationId);
@@ -118,11 +460,6 @@ export function createMockSSEStream(
       { text: "\n\n以上是基于你输入内容的处理方案。实际业务逻辑可根据具体需求进一步扩展。" },
     ];
   }
-  let accumulatedText = "";
-  const accumulatedArtifacts: Artifact[] = [];
-  let tokenIndex = 0;
-
-  const baseDelay = 100;
 
   setTimeout(() => {
     if (cancelled) return;
@@ -142,10 +479,8 @@ export function createMockSSEStream(
 
   let delay = baseDelay + 100;
 
-  // Concurrent agent status: fire alongside thinking + text for visibility
   if (isGroup && agents.length > 1) {
     let agentDelay = delay + 100;
-    // Stagger each agent's lifecycle over ~1.5s, overlapping with text streaming
     agents.forEach((agent, i) => {
       const lifeStart = agentDelay + i * 600;
       const subtaskId = `sub-${generateId()}`;
@@ -211,8 +546,6 @@ export function createMockSSEStream(
       }, lifeStart + 1000);
     });
   }
-
-  const accumulatedThinkingSteps: Array<{ phase: "thought" | "action" | "observation"; text: string; tool_name?: string; status: "done" }> = [];
 
   for (const step of mockThinkingSteps) {
     const stepIndex = mockThinkingSteps.indexOf(step);

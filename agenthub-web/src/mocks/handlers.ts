@@ -10,7 +10,45 @@ import type {
   Conversation,
   Message,
   Agent,
+  PlanSubtask,
 } from "@/types";
+
+let _orchestratorPhase: "idle" | "planning" | "executing" = "idle";
+let _orchestratorPlan: PlanSubtask[] = [];
+
+export function getOrchestratorPhase() {
+  return _orchestratorPhase;
+}
+
+export function setOrchestratorPhase(phase: "idle" | "planning" | "executing") {
+  _orchestratorPhase = phase;
+}
+
+export function getOrchestratorPlan(): PlanSubtask[] {
+  return _orchestratorPlan;
+}
+
+function generatePlan(agentIds: string[]): PlanSubtask[] {
+  const allAgents = [...mockAgents, ...agents];
+  const available = agentIds
+    .map((id) => allAgents.find((a) => a.id === id))
+    .filter(Boolean) as Agent[];
+  if (available.length === 0) {
+    available.push(mockAgents[0]);
+  }
+  return available.map((agent, i) => ({
+    subtask_id: `sub-${generateId()}`,
+    agent: { id: agent.id, name: agent.name },
+    instruction: available.length === 1
+      ? "分析需求并生成方案"
+      : i === 0
+        ? "分析需求并制定执行方案"
+        : i === available.length - 1
+          ? "审查输出结果并汇总报告"
+          : `实现第 ${i} 部分功能模块`,
+    priority: i + 1,
+  }));
+}
 
 function delay(ms = 50): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -217,9 +255,94 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
           Promise.reject({ response: { status: 500, data: { code: 500, message: "模拟发送失败" } } });
         return config;
       }
-      const body = parseBody(config) as unknown as { content: string; contentType?: string; parentMessageId?: string };
+      const body = parseBody(config) as unknown as {
+        content: string;
+        contentType?: string;
+        parentMessageId?: string;
+        mode?: "auto_orchestrate" | "direct" | "refine_plan" | "confirm_plan";
+        plan_id?: string;
+        plan?: { subtask_id: string; agent_id: string; instruction: string }[];
+        plannerAgentId?: string;
+      };
       await delay();
       const now = new Date().toISOString();
+      const conv = conversations.find((c) => c.id === conversationId);
+      const isGroup = conv?.type === "group";
+
+      if (body.mode === "confirm_plan") {
+        _orchestratorPhase = "executing";
+        _orchestratorPlan = (body.plan || []).map((item) => ({
+          subtask_id: item.subtask_id,
+          agent: {
+            id: item.agent_id,
+            name: agents.find((a) => a.id === item.agent_id)?.name || mockAgents.find((a) => a.id === item.agent_id)?.name || "Agent",
+          },
+          instruction: item.instruction,
+          priority: 0,
+        }));
+        const userMsg: Message = {
+          id: `msg-${generateId()}`,
+          conversationId,
+          senderType: "user",
+          senderId: "user-1",
+          senderName: "我",
+          contentType: "text",
+          content: body.content || "确认执行计划",
+          artifacts: [],
+          status: "done",
+          meta: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        if (!messages[conversationId]) messages[conversationId] = [];
+        messages[conversationId].push(userMsg);
+        if (conv) conv.lastActiveAt = now;
+        const [, responseBody] = successResponse(userMsg);
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+        return config;
+      }
+
+      if (body.mode === "refine_plan") {
+        _orchestratorPhase = "planning";
+        const refinedPlan = _orchestratorPlan.length > 0
+          ? _orchestratorPlan.map((t, i) => ({
+              ...t,
+              agent: { ...t.agent },
+              instruction: i === _orchestratorPlan.length - 1
+                ? `${t.instruction}（根据反馈调整：${body.content}）`
+                : t.instruction,
+            }))
+          : generatePlan(conv?.agentIds || []);
+        _orchestratorPlan = refinedPlan;
+        const userMsg: Message = {
+          id: `msg-${generateId()}`,
+          conversationId,
+          senderType: "user",
+          senderId: "user-1",
+          senderName: "我",
+          contentType: "text",
+          content: body.content,
+          artifacts: [],
+          status: "done",
+          meta: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        if (!messages[conversationId]) messages[conversationId] = [];
+        messages[conversationId].push(userMsg);
+        if (conv) conv.lastActiveAt = now;
+        const [, responseBody] = successResponse(userMsg);
+        config.adapter = () =>
+          Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+        return config;
+      }
+
+      if (isGroup && body.mode === "auto_orchestrate") {
+        _orchestratorPhase = "planning";
+        _orchestratorPlan = generatePlan(conv?.agentIds || []);
+      }
+
       const userMsg: Message = {
         id: `msg-${generateId()}`,
         conversationId,
@@ -237,7 +360,6 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
       };
       if (!messages[conversationId]) messages[conversationId] = [];
       messages[conversationId].push(userMsg);
-      const conv = conversations.find((c) => c.id === conversationId);
       if (conv) {
         conv.lastActiveAt = now;
       }

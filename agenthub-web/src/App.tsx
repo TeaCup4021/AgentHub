@@ -1,11 +1,10 @@
-import { useEffect, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { ConfigProvider, Spin } from "@douyinfe/semi-ui";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { SettingsPage } from "@/components/settings/SettingsPage";
 import { LoginPage } from "@/components/auth";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -191,7 +190,6 @@ function AuthInit({ children }: { children: React.ReactNode }) {
 
 function AnimatedRoutes() {
   const location = useLocation();
-  const navigate = useNavigate();
 
   return (
     <AnimatePresence mode="wait">
@@ -205,13 +203,6 @@ function AnimatedRoutes() {
       >
         <Routes location={location}>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <Suspense fallback={<div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100%" }}><Spin size="large" /></div>}>
-                <SettingsPage onClose={() => navigate("/")} />
-              </Suspense>
-            </ProtectedRoute>
-          } />
           <Route path="/*" element={
             <ProtectedRoute>
               <AppLayout />
