@@ -6,7 +6,7 @@ import re
 
 from app.models.agent import Agent as AgentModel
 from app.services.adk.execution_tracer import ExecutionTracer
-from app.services.adk.models import get_anthropic_llm, get_litellm, get_deepseek_llm
+from app.services.adk.models import resolve_agent_model, get_deepseek_llm
 from app.services.adk.tool_loader import ToolLoader
 
 CLI_PROVIDERS = {"claude-code-cli", "codex-cli"}
@@ -210,7 +210,9 @@ class CoordinatorBuilder:
 
     @staticmethod
     def _resolve_model(agent: AgentModel):
-        provider = (agent.provider or "").lower()
-        if provider in ("anthropic", "anthropicllm", "claude"):
-            return get_anthropic_llm(model=agent.model or "claude-sonnet-4-6")
-        return get_litellm(model=agent.model or "openai/codex")
+        return resolve_agent_model(
+            provider=agent.provider or "",
+            model=agent.model or "",
+            api_key=agent.api_key or None,
+            base_url=agent.base_url or None,
+        )

@@ -10,7 +10,7 @@ from google.adk.sessions import InMemorySessionService, BaseSessionService
 from google.genai import types
 
 from app.models.agent import Agent as AgentModel
-from app.services.adk.models import get_anthropic_llm, get_litellm
+from app.services.adk.models import resolve_agent_model
 from app.services.adk.tool_loader import ToolLoader
 from app.services.pin_spec_injector import before_model_callback
 
@@ -39,13 +39,12 @@ def build_agent_from_model(agent_model: AgentModel) -> LlmAgent:
     provider = (agent_model.provider or "").lower()
     model_name = agent_model.model or ""
 
-    if provider in ("anthropic", "anthropicllm", "claude"):
-        model = get_anthropic_llm(model=model_name or "claude-sonnet-4-6")
-    else:
-        # Auto-prepend provider prefix for LiteLLM routing (e.g. "gpt-5.2" → "openai/gpt-5.2")
-        if model_name and "/" not in model_name:
-            model_name = f"{provider}/{model_name}" if provider else f"openai/{model_name}"
-        model = get_litellm(model=model_name or "openai/codex")
+    model = resolve_agent_model(
+        provider=provider,
+        model=model_name,
+        api_key=agent_model.api_key or None,
+        base_url=agent_model.base_url or None,
+    )
 
     tool_loader = ToolLoader(agent_models={str(agent_model.id): agent_model})
     tools = tool_loader.load(agent_model.tool_config)

@@ -10,67 +10,78 @@ from app.api.deps import get_current_user_id
 
 router = APIRouter()
 
+
 @router.get("/capabilities", response_model=List[str])
 async def list_capabilities(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     return await CapabilityRegistry.get_all_capabilities(db)
+
 
 @router.get("", response_model=List[AgentResponse])
 async def list_agents(
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
-    agents = await AgentService.get_agents(db, skip=skip, limit=limit)
-    return agents
+    agents = await AgentService.get_agents(db, user_id=user_id, skip=skip, limit=limit)
+    return [AgentResponse.model_validate(a) for a in agents]
+
 
 @router.get("/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
-    agent = await AgentService.get_agent(db, agent_id)
+    agent = await AgentService.get_agent(db, agent_id, user_id=user_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    return agent
+    return AgentResponse.model_validate(agent)
+
 
 @router.post("", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
 async def create_agent(
     agent_in: AgentCreate,
     db: AsyncSession = Depends(get_db),
-    user_id: uuid.UUID = Depends(get_current_user_id)
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
     agent = await AgentService.create_agent(db, agent_in, user_id=user_id)
-    return agent
+    return AgentResponse.model_validate(agent)
+
 
 @router.patch("/{agent_id}", response_model=AgentResponse)
 async def update_agent(
     agent_id: uuid.UUID,
     agent_in: AgentUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
     db_agent = await AgentService.get_agent(db, agent_id)
     if not db_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    agent = await AgentService.update_agent(db, db_agent, agent_in)
-    return agent
+    agent = await AgentService.update_agent(db, db_agent, agent_in, user_id=user_id)
+    return AgentResponse.model_validate(agent)
+
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(
     agent_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: uuid.UUID = Depends(get_current_user_id),
 ):
     db_agent = await AgentService.get_agent(db, agent_id)
     if not db_agent:
         raise HTTPException(status_code=404, detail="Agent not found")
-    await AgentService.delete_agent(db, db_agent)
+    await AgentService.delete_agent(db, db_agent, user_id=user_id)
+
 
 @router.post("/verify")
 async def verify_agent_model(request: AgentVerifyRequest):
     success = await AgentService.verify_model(
         provider=request.provider,
         model=request.model,
-        system_prompt=request.system_prompt
+        system_prompt=request.system_prompt,
     )
     return {"status": "ok", "message": "Verification successful"}

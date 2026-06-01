@@ -109,6 +109,14 @@ export function AgentManageModal({ open, onClose }: AgentManageModalProps) {
                       <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>
                         {agent.provider} / {agent.model}
                       </div>
+                      {agent.baseUrl && (
+                        <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)", marginTop: 2 }}>
+                          {agent.baseUrl}
+                        </div>
+                      )}
+                      <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)", marginTop: 2 }}>
+                        Key: {agent.apiKey ? <span style={{color: "var(--color-success)"}}>已配置</span> : <span style={{color: "var(--color-text-disabled)"}}>未配置</span>}
+                      </div>
                     </div>
                     {!agent.isActive && (
                       <Tag size="small" color="grey" type="ghost">已禁用</Tag>

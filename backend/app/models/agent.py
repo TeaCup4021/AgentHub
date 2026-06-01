@@ -12,6 +12,8 @@ class Agent(Base, UUIDMixin, TimestampMixin):
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     system_prompt: Mapped[str] = mapped_column(Text, nullable=True)
     capabilities: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default='[]')
+    api_key: Mapped[str] = mapped_column(String(500), nullable=True)
+    base_url: Mapped[str] = mapped_column(String(500), nullable=True)
     tool_config: Mapped[dict] = mapped_column(JSONB, nullable=True)
     is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default='false')
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default='true')

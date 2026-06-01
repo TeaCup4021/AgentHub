@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网页预览卡片</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            padding: 20px;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 24px;
+            max-width: 1100px;
+            width: 100%;
+        }
+
+        /* ========== 卡片 1：经典文章预览 ========== */
+        .card {
+            background: #1e1e2e;
+            border-radius: 16px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+        }
+        .card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        }
+        .card .card-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 56px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+        .card .card-body {
+            padding: 20px;
+        }
+        .card .card-domain {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #a29bfe;
+            margin-bottom: 6px;
+        }
+        .card .card-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #eaeaea;
+            margin-bottom: 8px;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .card .card-desc {
+            font-size: 14px;
+            color: #9898b0;
+            line-height: 1.6;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .card .card-footer {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 20px 20px;
+            font-size: 12px;
+            color: #6c6c8a;
+        }
+        .card .card-footer .avatar {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #a29bfe;
+        }
+
+        /* ========== 卡片 2：视频/GitHub 风格 ========== */
+        .card-dark {
+            background: #111118;
+            border: 1px solid #2a2a3a;
+        }
+        .card-dark .card-image {
+            background: linear-gradient(135deg, #e17055, #fdcb6e);
+        }
+        .card-dark .card-domain {
+            color: #fdcb6e;
+        }
+        .card-dark .card-tag {
+            display: inline-block;
+            background: #2a2a3a;
+            color: #ccc;
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-bottom: 10px;
+        }
+
+        /* ========== 卡片 3：极简风格 ========== */
+        .card-minimal {
+            background: #ffffff;
+            box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+        }
+        .card-minimal .card-image {
+            background: #f0f0f5;
+            color: #c0c0d0;
+        }
+        .card-minimal .card-domain {
+            color: #6c5ce7;
+        }
+        .card-minimal .card-title {
+            color: #1a1a2e;
+        }
+        .card-minimal .card-desc {
+            color: #6b6b80;
+        }
+        .card-minimal .card-footer {
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card-grid">
+
+        <!-- 卡片 1：博客文章 -->
+        <div class="card">
+            <div class="card-image">📝</div>
+            <div class="card-body">
+                <div class="card-domain">blog.example.com</div>
+                <div class="card-title">深入理解 JavaScript 异步编程：从回调地狱到 async/await</div>
+                <div class="card-desc">
+                    异步编程是 JavaScript 的核心特性之一。本文将带你从最基础的回调函数出发，
+                    一步步理解 Promise、Generator，最终掌握现代异步终极方案 async/await……
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="avatar"></div>
+                <span>张三 · 2025-01-15 · 阅读 12.3k</span>
+            </div>
+        </div>
+
+        <!-- 卡片 2：GitHub 仓库 -->
+        <div class="card card-dark">
+            <div class="card-image">🚀</div>
+            <div class="card-body">
+                <div class="card-domain">github.com</div>
+                <div class="card-tag">🔥 Trending</div>
+                <div class="card-title">awesome-ai-agents — 开源 AI Agent 合集</div>
+                <div class="card-desc">
+                    收集了 500+ 个优秀的 AI Agent 项目框架、工具和学习资源，
+                    涵盖 LangChain、AutoGPT、CrewAI 等热门技术栈。
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="avatar" style="background:#fdcb6e;"></div>
+                <span>⭐ 24.8k · 🍴 3.2k · TypeScript</span>
+            </div>
+        </div>
+
+        <!-- 卡片 3：极简设计文章 -->
+        <div class="card card-minimal">
+            <div class="card-image">🎨</div>
+            <div class="card-body">
+                <div class="card-domain">designweekly.cc</div>
+                <div class="card-title">2025 年 UI 设计趋势：从 Glassmorphism 到 AI 原生界面</div>
+                <div class="card-desc">
+                    每年设计圈都会涌现出新的视觉语言。今年，AI 驱动的自适应界面和
+                    超个性化设计正在重新定义用户体验的边界……
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="avatar" style="background:#6c5ce7;"></div>
+                <span>设计周刊 · 2 天前 · 精选</span>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

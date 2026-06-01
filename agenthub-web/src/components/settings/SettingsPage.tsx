@@ -4,7 +4,6 @@ import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
 import { authApi } from "@/lib/api";
 import { toast } from "sonner";
-import { LLMConfigSection } from "./LLMConfigSection";
 import { TokenUsagePanel } from "./TokenUsagePanel";
 import { ThemeRadioCards } from "./ThemeRadioCards";
 import { BgColorCards } from "./BgColorCards";
@@ -27,18 +26,6 @@ const NAV_ITEMS = [
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <circle cx="8" cy="5" r="3" stroke="currentColor" strokeWidth="1.5" />
         <path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    id: "llm",
-    label: "LLM 配置",
-    icon: (
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-        <rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <circle cx="6" cy="7" r="1.5" stroke="currentColor" strokeWidth="1.2" />
-        <path d="M9 6h3M9 8h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-        <path d="M4 11c0-1.1.9-2 2-2s2 .9 2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -293,14 +280,6 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
                 请先登录
               </p>
             )}
-          </section>
-
-          {/* LLM 配置 */}
-          <section
-            ref={(el) => registerSection("llm", el)}
-            style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid var(--color-border-light)" }}
-          >
-            <LLMConfigSection />
           </section>
 
           {/* 安全 */}

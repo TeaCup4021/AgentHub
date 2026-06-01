@@ -24,7 +24,7 @@ from google.adk.agents import Agent
 from google.adk.tools import FunctionTool, AgentTool
 
 from app.models.agent import Agent as AgentModel
-from app.services.adk.models import get_anthropic_llm, get_litellm
+from app.services.adk.models import resolve_agent_model
 
 logger = logging.getLogger("agenthub.tool_loader")
 
@@ -97,7 +97,13 @@ class ToolLoader:
     # Internal
     # ------------------------------------------------------------------
 
-    def _load_one(self, item: dict):
+    def _load_one(self, item):
+        # Backward compatibility: old frontend sent plain strings like "read_file"
+        if isinstance(item, str):
+            return self._load_builtin({"type": "builtin", "name": item})
+        if not isinstance(item, dict):
+            logger.warning("Unexpected tool config item type %r", type(item))
+            return None
         kind = (item.get("type") or "").strip().lower()
         if kind == "builtin":
             return self._load_builtin(item)
@@ -134,7 +140,9 @@ class ToolLoader:
 
     @staticmethod
     def _resolve_model(agent: AgentModel):
-        provider = (agent.provider or "").lower()
-        if provider in ("anthropic", "anthropicllm", "claude"):
-            return get_anthropic_llm(model=agent.model or "claude-sonnet-4-6")
-        return get_litellm(model=agent.model or "openai/codex")
+        return resolve_agent_model(
+            provider=agent.provider or "",
+            model=agent.model or "",
+            api_key=agent.api_key or None,
+            base_url=agent.base_url or None,
+        )

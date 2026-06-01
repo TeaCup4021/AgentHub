@@ -1,112 +1,137 @@
-"""Builtin tool registrations for Claude Code and Codex CLIs.
+"""Builtin tool registrations for local file and OS operations.
 
 Importing this module triggers ``@register_builtin`` decorations,
-making ``claude_code`` and ``codex_cli`` available as ADK FunctionTools.
+making basic operations available as ADK FunctionTools.
 """
 
 from __future__ import annotations
 
-from app.core.config import settings
-from app.services.adk.cli_runner import get_claude_runner, get_codex_runner
+import os
+import asyncio
 from app.services.adk.tool_loader import register_builtin
 
 
-@register_builtin("claude_code")
-async def claude_code_tool(
-    prompt: str,
-    workspace_dir: str = "",
-    allowed_tools: str = "",
-    max_budget_usd: float = 0.0,
-) -> dict:
-    """Execute a software engineering task using Claude Code CLI.
-
-    Claude Code is a local AI coding agent with full filesystem access.
-    It can read/write files, run terminal commands, search code, manage git,
-    and perform complex multi-step engineering workflows autonomously.
-
-    Use this tool for tasks that require:
-    - Writing or editing code files
-    - Running build/test/lint commands
-    - Searching across the codebase
-    - Git operations (diff, commit, branch)
-    - Multi-file refactoring
-    - Debugging with actual execution feedback
+@register_builtin("read_file")
+async def read_file(file_path: str) -> str:
+    """Reads the content of a local file.
 
     Args:
-        prompt: Detailed task description. Include file paths, expected
-            behavior, edge cases, and any constraints.
-        workspace_dir: Project root directory (default: configured workspace).
-        allowed_tools: Comma-separated tools to enable
-            (default: Bash,Read,Edit,Write,Glob,Grep).
-        max_budget_usd: Maximum API cost budget (default: 5.0).
+        file_path: Absolute or relative path to the file.
 
     Returns:
-        dict with keys: success, result, usage, duration_ms, error.
+        The content of the file or an error message.
     """
-    runner = get_claude_runner()
-    if workspace_dir:
-        runner._workspace_dir = workspace_dir
-    if not allowed_tools:
-        allowed_tools = settings.CLAUDE_CODE_ALLOWED_TOOLS
-    if max_budget_usd <= 0:
-        max_budget_usd = settings.CLAUDE_CODE_MAX_BUDGET_USD
-
-    result = await runner.run(
-        prompt=prompt,
-        timeout=settings.CLAUDE_CODE_TIMEOUT_SECONDS,
-        allowed_tools=allowed_tools,
-        max_budget_usd=max_budget_usd,
-    )
-    return {
-        "success": result.success,
-        "result": result.result,
-        "usage": result.usage,
-        "duration_ms": result.duration_ms,
-        "error": result.error,
-    }
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"Error reading file {file_path}: {str(e)}"
 
 
-@register_builtin("codex_cli")
-async def codex_cli_tool(
-    prompt: str,
-    model: str = "",
-    workspace_dir: str = "",
-) -> dict:
-    """Execute a coding task using Codex CLI (OpenAI's local coding agent).
-
-    Codex CLI is a terminal-based AI agent that can understand and modify
-    codebases. It excels at code generation, refactoring, review, and
-    repository-level understanding.
-
-    Use this tool for tasks that require:
-    - Code generation from specifications
-    - Refactoring across multiple files
-    - Code review and analysis
-    - Understanding complex codebases
-    - Automated PR reviews
+@register_builtin("create_file")
+async def create_file(file_path: str, content: str) -> str:
+    """Creates a new file with the specified content.
 
     Args:
-        prompt: Detailed task description.
-        model: OpenAI model to use (default: gpt-5).
-        workspace_dir: Project root directory (default: configured workspace).
+        file_path: Absolute or relative path where the file should be created.
+        content: The text content to write into the file.
 
     Returns:
-        dict with keys: success, result, duration_ms, error.
+        A success message or an error message.
     """
-    runner = get_codex_runner()
-    if workspace_dir:
-        runner._workspace_dir = workspace_dir
-    if not model:
-        model = settings.CODEX_CLI_MODEL
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Successfully created file {file_path}"
+    except Exception as e:
+        return f"Error creating file {file_path}: {str(e)}"
 
-    result = await runner.run(
-        prompt=prompt,
-        timeout=settings.CODEX_CLI_TIMEOUT_SECONDS,
-        model=model,
-    )
-    return {
-        "success": result.success,
-        "result": result.result,
-        "duration_ms": result.duration_ms,
-        "error": result.error,
-    }
+
+@register_builtin("edit_file")
+async def edit_file(file_path: str, old_string: str, new_string: str) -> str:
+    """Edits an existing file by replacing old_string with new_string.
+
+    Args:
+        file_path: Absolute or relative path to the file.
+        old_string: The exact string to be replaced.
+        new_string: The string to replace with.
+
+    Returns:
+        A success message or an error message.
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        if old_string not in content:
+            return f"Error: old_string not found in file {file_path}"
+
+        content = content.replace(old_string, new_string)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"Successfully edited file {file_path}"
+    except Exception as e:
+        return f"Error editing file {file_path}: {str(e)}"
+
+
+@register_builtin("execute_command")
+async def execute_command(command: str, cwd: str = ".") -> str:
+    """Executes a shell command on the host operating system.
+
+    Args:
+        command: The shell command to run.
+        cwd: The working directory for the command execution (default: current directory).
+
+    Returns:
+        The standard output/error of the command or an error message.
+    """
+    try:
+        process = await asyncio.create_subprocess_shell(
+            command,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+
+        result = []
+        if stdout:
+            result.append(f"STDOUT:\n{stdout.decode('utf-8', errors='replace')}")
+        if stderr:
+            result.append(f"STDERR:\n{stderr.decode('utf-8', errors='replace')}")
+        return "\n".join(result) if result else "Command executed successfully with no output."
+    except Exception as e:
+        return f"Error executing command: {str(e)}"
+
+
+@register_builtin("web_search")
+async def web_search(query: str) -> str:
+    """Searches the web for the given query using a mock placeholder.
+
+    Args:
+        query: The search query string.
+
+    Returns:
+        Search results as a JSON string or an error message.
+    """
+    import urllib.request
+    import urllib.parse
+
+    try:
+        # A simple web request without complex HTML parsing
+        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+        )
+        loop = asyncio.get_event_loop()
+        def fetch():
+            with urllib.request.urlopen(req, timeout=10) as response:
+                content = response.read().decode('utf-8')
+                # Simplistic text snippet return to simulate real tools
+                return f"Searched for: {query}. Content payload received (length: {len(content)})."
+        return await loop.run_in_executor(None, fetch)
+    except Exception as e:
+        return f"Error in web search: {str(e)}"

@@ -109,7 +109,7 @@ class ADKToSSETranslator:
                 return
             for part in parts:
                 text = getattr(part, "text", None)
-                if not text:
+                if not text or getattr(part, "thought", False):
                     continue
                 state.token_index_by_invocation.setdefault(message_id, 0)
                 state.token_index_by_invocation[message_id] += 1
@@ -126,7 +126,7 @@ class ADKToSSETranslator:
 
         for part in parts:
             text = getattr(part, "text", None)
-            if not text:
+            if not text or getattr(part, "thought", False):
                 continue
             state.token_index_by_invocation.setdefault(message_id, 0)
             state.token_index_by_invocation[message_id] += 1

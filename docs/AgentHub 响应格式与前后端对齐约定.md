@@ -736,3 +736,138 @@ node codex.js exec - -m deepseek-v4-pro -s workspace-write
 - **sandbox 默认值**：若不指定 `-s`，Codex 默认 `read-only`，用户可能困惑为什么不能创建文件
 - **idle timeout**：3 秒已足够覆盖 Codex 正常输出间隔；若用户使用慢速 API 可适当调大 `_idle_timeout`
 - **不要使用 `shell=True`**：会导致中文和其他非 ASCII 字符编码损毁
+
+## 42 — 48 项（2026-06-01 Agent 创建流程全面改造）
+
+以下约定基于本次对 Agent 创建流程的全面改造，涉及字段命名、数据格式、用户隔离和安全模型变更。
+
+---
+
+### 42) Agent 模型字段：自由文本输入
+
+**变更**：Agent 的 `model` 字段从硬编码下拉框改为自由文本输入。
+
+- **前端**：`CreateAgentModal.tsx` 的模型字段使用 `Input` 组件，用户可输入任意模型名
+- **后端**：无校验限制——任何 provider + model 组合均接受。用户通过 `baseUrl` 指定自定义端点，需自行确保模型名与端点兼容
+- **Provider 切换不再自动修改模型值**
+
+---
+
+### 43) Agent 能力标签：自由输入
+
+**变更**：能力标签从固定选项改为自定义输入。
+
+- **前端**：Input + 添加按钮组合，支持回车快捷添加，Tag 带 closable 可删除，自动去重
+- **后端**：`agents.capabilities` JSONB 列存储为字符串数组 `["coding", "docs"]`
+- **API**：`GET /api/v1/agents/capabilities` 返回所有已存在的标签去重列表，供前端下拉参考（当前前端未使用此接口做下拉，留给后续优化）
+
+---
+
+### 44) Agent 工具配置格式（toolConfig）
+
+**前端提交格式（新，推荐）**：
+```json
+{
+  "tools": [
+    { "type": "builtin", "name": "read_file" },
+    { "type": "builtin", "name": "execute_command" }
+  ]
+}
+```
+
+**前端提交格式（旧，兼容）**：字符串数组 `["read_file", "write_file"]` — 后端 `ToolLoader._load_one()` 自动将字符串转为 `{type: "builtin", name: <str>}`。
+
+**可用 5 个 builtin 工具**（与 `cli_tools.py` 一一对应）：
+
+| key | 中文名 | 参数 |
+|-----|--------|------|
+| `read_file` | 读取文件 | `file_path: str` |
+| `create_file` | 新增文件 | `file_path: str`, `content: str` |
+| `edit_file` | 修改文件 | `file_path: str`, `old_string: str`, `new_string: str` |
+| `execute_command` | 执行命令 | `command: str`, `cwd: str = "."` |
+| `web_search` | 网络搜索 | `query: str` |
+
+---
+
+### 45) Agent 级 LLM 配置：baseUrl 与 apiKey
+
+**2026-06-01 新增**。每个 Agent 独立配置端点与密钥，替代全局 `.env` 配置。
+
+**数据库**：`agents` 表新增 `api_key VARCHAR(500)` 和 `base_url VARCHAR(500)`。
+
+**API 约定**：
+- `AgentCreate`：`baseUrl` **必填**，`apiKey` **必填** — 为空返回 422
+- `AgentUpdate`：两者均可选
+- `AgentResponse`：两者均以**明文**返回（无脱敏），字段名为 camelCase（`baseUrl`, `apiKey`）
+
+**运行时优先级**：
+```
+Agent 自定义 apiKey/baseUrl（数据库）→ 最高
+服务端 .env 环境变量                → 仅作种子数据默认值
+```
+
+**模型解析**：
+- `anthropic` provider：使用 `ConfigurableAnthropicLlm`（`AnthropicLlm` 子类，覆盖 `_anthropic_client` 传入自定义凭证）
+- 其他 provider：使用 `LiteLlm(model=..., api_key=..., api_base=...)`
+
+---
+
+### 46) 用户隔离
+
+**2026-06-01 新增**。所有 Agent 接口按 `created_by` 做用户隔离：
+
+```sql
+WHERE created_by IS NULL          -- 内置 Agent，全员可见
+   OR created_by = <current_user> -- 自己创建的
+```
+
+| 操作 | 内置 Agent | 自己创建的 | 他人的 |
+|------|-----------|-----------|--------|
+| 查看列表 | ✅ 可见 | ✅ 可见 | ❌ 不可见 |
+| 查看详情 | ✅ | ✅ | 403 |
+| 修改 | 403 | ✅ | 403 |
+| 删除 | 403 | ✅ | 403 |
+
+**实现**：
+- `AgentService.get_agents(db, user_id)` — 列表过滤
+- `AgentService.get_agent(db, agent_id, user_id)` — 单条访问校验
+- `_check_agent_owner()` — 修改/删除权限校验
+
+---
+
+### 47) SSE Thinking Block 过滤
+
+**2026-06-01 新增**。部分模型（如 DeepSeek）通过 Anthropic 兼容端点返回时，响应中包含 `thought=True` 的 Part。后端在 SSE 输出时必须过滤这些 Part。
+
+**实现**：`adk_to_sse.py` 的 `_to_token` 方法中，两个文本输出循环均检查 `getattr(part, "thought", False)`，为 True 的 Part 直接跳过。
+
+**前端无需改动**：前端已有 `ThinkingBlock` 组件，若后续需要展示思考过程，后端可通过新增 `thinking` SSE 事件类型传递。
+
+---
+
+### 48) 废弃变更
+
+**移除 Settings 页 LLM 配置**：
+- 删除 `LLMConfigSection.tsx` 组件
+- 该组件的 localStorage 数据（`llm_config` key）从未被后端消费
+- 替代方案：Agent 创建时直接填入 `baseUrl` 和 `apiKey`
+
+**移除 Claude 模型名校验**：
+- `baseUrl` 改为必填后，每个 Agent 都有自定义端点
+- 不再强制 `anthropic` provider 的模型名以 `claude-` 开头
+- 用户自行负责模型名与端点的兼容性
+
+---
+
+## 来源补充
+
+- `vibeCodingSummary/AgentHub-2026-06-01-Agent创建流程全面改造.md`
+- `backend/app/models/agent.py`（api_key, base_url）
+- `backend/app/schemas/agent.py`（AgentBase/AgentCreate/AgentUpdate/AgentResponse）
+- `backend/app/services/agent.py`（用户隔离 + 权限校验）
+- `backend/app/api/v1/agents.py`（user_id 注入）
+- `backend/app/services/adk/models.py`（ConfigurableAnthropicLlm + resolve_agent_model）
+- `backend/app/services/adk/tool_loader.py`（_load_one 字符串兼容）
+- `backend/app/services/adapters/adk_to_sse.py`（thought=True 过滤）
+- `agenthub-web/src/components/agent/CreateAgentModal.tsx`
+- `agenthub-web/src/types/agent.ts`

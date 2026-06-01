@@ -1,7 +1,10 @@
+import logging
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+logger = logging.getLogger("agenthub.exceptions")
 
 class AppException(Exception):
     def __init__(self, code: int, message: str):
@@ -31,6 +34,15 @@ async def app_exception_handler(request: Request, exc: AppException):
     )
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    body = "<unavailable>"
+    try:
+        body = await request.json()
+    except Exception:
+        try:
+            body = (await request.body()).decode("utf-8", errors="replace")
+        except Exception:
+            pass
+    logger.warning("HTTPException %s: %s | body=%s", exc.status_code, exc.detail, body)
     return JSONResponse(
         status_code=exc.status_code,
         content={"code": exc.status_code, "data": None, "message": str(exc.detail)}
@@ -41,6 +53,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     for error in exc.errors():
         loc = " -> ".join(str(p) for p in error["loc"])
         messages.append(f"{loc}: {error['msg']}")
+    body = "<unavailable>"
+    try:
+        body = await request.json()
+    except Exception:
+        try:
+            body = (await request.body()).decode("utf-8", errors="replace")
+        except Exception:
+            pass
+    logger.warning("ValidationError 422: %s | body=%s", "; ".join(messages), body)
     return JSONResponse(
         status_code=422,
         content={"code": 422, "data": None, "message": "; ".join(messages)},
