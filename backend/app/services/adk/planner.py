@@ -57,10 +57,15 @@ class OrchestratorPlanner:
         agents = await self._lookup_agents(db, agent_ids)
 
         if planner_agent is not None:
+            logger.info(
+                "Planner mode: agent-based | agent=%s model=%s provider=%s",
+                planner_agent.name, planner_agent.model, planner_agent.provider,
+            )
             return await self._plan_with_agent(
                 planner_agent, agents, user_message, conversation_id
             )
 
+        logger.info("Planner mode: built-in orchestrator | model=%s", get_deepseek_llm().model)
         return await self._plan_with_orchestrator(agents, user_message, conversation_id)
 
     async def refine(
@@ -80,10 +85,15 @@ class OrchestratorPlanner:
         agents = await self._lookup_agents(db, agent_ids)
 
         if planner_agent is not None:
+            logger.info(
+                "Planner refine mode: agent-based | agent=%s model=%s provider=%s",
+                planner_agent.name, planner_agent.model, planner_agent.provider,
+            )
             return await self._refine_with_agent(
                 planner_agent, agents, current_plan, user_feedback, conversation_id
             )
 
+        logger.info("Planner refine mode: built-in orchestrator | model=%s", get_deepseek_llm().model)
         return await self._refine_with_orchestrator(
             agents, current_plan, user_feedback, conversation_id
         )
@@ -100,6 +110,7 @@ class OrchestratorPlanner:
         agent = build_agent_from_model(planner_agent)
         # Override the instruction with the planning prompt
         agent.instruction = self._build_agent_planner_instruction(user_message, executors)
+        agent.tools = []  # Planner does not need the agent's tools
         agent.planner = BuiltInPlanner(
             thinking_config=types.ThinkingConfig(thinking_budget=1024)
         )
@@ -117,6 +128,7 @@ class OrchestratorPlanner:
         agent.instruction = self._build_agent_refine_instruction(
             current_plan, user_feedback, executors
         )
+        agent.tools = []  # Planner does not need the agent's tools
         agent.planner = BuiltInPlanner(
             thinking_config=types.ThinkingConfig(thinking_budget=1024)
         )

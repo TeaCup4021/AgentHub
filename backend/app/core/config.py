@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     ANTHROPIC_BASE_URL: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_BASE_URL: Optional[str] = None
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_BASE_URL: Optional[str] = None
 
     # Auth
     AUTH_SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
