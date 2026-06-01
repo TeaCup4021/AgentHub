@@ -42,7 +42,6 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const planMetaRef = useRef<{ plan: PlanSubtask[]; plannerAgentId?: string | null; plannerAgentName?: string | null } | null>(null);
   const [plannerAgentId, setPlannerAgentId] = useState<string | null>(null);
   const plannerAgentIdRef = useRef<string | null>(null);
-  useEffect(() => { plannerAgentIdRef.current = plannerAgentId; }, [plannerAgentId]);
   const retryRef = useRef({ timeoutId: null as ReturnType<typeof setTimeout> | null });
 
   const connectionStatus = useChatStore((s) => s.connectionStatus);
@@ -357,14 +356,14 @@ export function ChatArea({ conversations }: ChatAreaProps) {
               setIsStreaming(false);
               qc.invalidateQueries({ queryKey: ["messages", convId] });
             },
-          }, lastPromptRef.current, streamMode);
+          }, lastPromptRef.current, streamMode, plannerAgentIdRef.current);
         }, delay);
       };
 
       disconnectRef.current = createSSEStream(convId, {
         ...buildCallbacks(convId, conv),
         onConnectionError,
-      }, content, streamMode);
+      }, content, streamMode, plannerAgentIdRef.current);
     }).catch(() => {
       qc.setQueryData(
         ["messages", activeId ?? convId],
@@ -451,7 +450,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           setConnectionStatus("failed");
           setIsStreaming(false);
         },
-      }, undefined, "auto_orchestrate");
+      }, undefined, "auto_orchestrate", plannerAgentIdRef.current);
     }).catch(() => {
       toast.error("确认计划失败，请重试");
     });
@@ -641,7 +640,11 @@ export function ChatArea({ conversations }: ChatAreaProps) {
             </span>
             <Select
               value={plannerAgentId ?? ""}
-              onChange={(v) => setPlannerAgentId(v ? String(v) : null)}
+              onChange={(v) => {
+                const value = v ? String(v) : null;
+                setPlannerAgentId(value);
+                plannerAgentIdRef.current = value;
+              }}
               placeholder="自动 (Orchestrator)"
               size="small"
               style={{ flex: 1, minWidth: 140 }}

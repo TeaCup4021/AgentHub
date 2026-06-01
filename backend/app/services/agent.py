@@ -36,7 +36,7 @@ class AgentService:
             select(Agent)
             .where(
                 or_(
-                    Agent.created_by.is_(None),   # built-in agents, visible to all
+                    Agent.is_builtin == True,      # built-in agents, visible to all
                     Agent.created_by == user_id,   # user's own agents
                 )
             )

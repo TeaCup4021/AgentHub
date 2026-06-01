@@ -44,9 +44,23 @@ def get_deepseek_llm(model: str | None = None) -> LiteLlm:
     1. Explicit *model* argument
     2. ``AGENTHUB_ORCHESTRATOR_MODEL`` environment variable
     3. Default ``"deepseek/deepseek-v4-pro"``
+
+    Credentials are read from ``DEEPSEEK_API_KEY`` / ``DEEPSEEK_BASE_URL``
+    env vars and passed to LiteLlm explicitly.
     """
+    import logging
+    from app.core.config import settings
+
     resolved = model or os.getenv("AGENTHUB_ORCHESTRATOR_MODEL", "deepseek/deepseek-v4-pro")
-    return LiteLlm(model=resolved)
+    logging.getLogger("agenthub.planner").info("Orchestrator LLM resolved: %s", resolved)
+
+    litellm_kwargs: dict = {}
+    if settings.DEEPSEEK_API_KEY:
+        litellm_kwargs["api_key"] = settings.DEEPSEEK_API_KEY
+    if settings.DEEPSEEK_BASE_URL:
+        litellm_kwargs["api_base"] = settings.DEEPSEEK_BASE_URL
+
+    return LiteLlm(model=resolved, **litellm_kwargs)
 
 
 def get_litellm(model: str = "openai/codex", **kwargs):

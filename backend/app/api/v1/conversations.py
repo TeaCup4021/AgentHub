@@ -455,6 +455,7 @@ async def _orchestrator_plan_stream(
     conv_id: UUID,
     orch_task: OrchestratorTask,
     db: AsyncSession,
+    planner_agent_id_fallback: Optional[UUID] = None,
 ) -> AsyncGenerator[str, None]:
     from app.services.adk.planner import OrchestratorPlanner
     from app.models.message import Message as MsgModel
@@ -478,8 +479,9 @@ async def _orchestrator_plan_stream(
         # Resolve planner agent if one was designated
         planner_agent = None
         planner_name = "Orchestrator"
-        if orch_task.planner_agent_id:
-            planner_agent = await db.get(AgentModel, orch_task.planner_agent_id)
+        effective_planner_id = orch_task.planner_agent_id or planner_agent_id_fallback
+        if effective_planner_id:
+            planner_agent = await db.get(AgentModel, effective_planner_id)
             if planner_agent:
                 planner_name = planner_agent.name
                 logger.info(
@@ -619,6 +621,7 @@ async def _orchestrator_refine_stream(
     conv_id: UUID,
     orch_task: OrchestratorTask,
     db: AsyncSession,
+    planner_agent_id_fallback: Optional[UUID] = None,
 ) -> AsyncGenerator[str, None]:
     """Re-run the planner with user feedback to produce an updated plan."""
     from app.services.adk.planner import OrchestratorPlanner
@@ -664,8 +667,9 @@ async def _orchestrator_refine_stream(
         # Resolve planner agent
         planner_agent = None
         planner_name = "Orchestrator"
-        if orch_task.planner_agent_id:
-            planner_agent = await db.get(AgentModel, orch_task.planner_agent_id)
+        effective_planner_id = orch_task.planner_agent_id or planner_agent_id_fallback
+        if effective_planner_id:
+            planner_agent = await db.get(AgentModel, effective_planner_id)
             if planner_agent:
                 planner_name = planner_agent.name
 
@@ -1135,6 +1139,7 @@ async def stream_conversation(
     prompt: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     orchestrate_mode: Optional[str] = Query(None, alias="orchestrateMode"),
+    planner_agent_id: Optional[UUID] = Query(None, alias="plannerAgentId"),
 ):
     # Phase 1: Plan generation (status=planning)
     result = await db.execute(
@@ -1150,7 +1155,7 @@ async def stream_conversation(
 
     if orch_task:
         return StreamingResponse(
-            _orchestrator_plan_stream(conv_id, orch_task, db),
+            _orchestrator_plan_stream(conv_id, orch_task, db, planner_agent_id),
             media_type="text/event-stream",
         )
 
@@ -1167,7 +1172,7 @@ async def stream_conversation(
     refine_task = result.scalar_one_or_none()
     if refine_task:
         return StreamingResponse(
-            _orchestrator_refine_stream(conv_id, refine_task, db),
+            _orchestrator_refine_stream(conv_id, refine_task, db, planner_agent_id),
             media_type="text/event-stream",
         )
 

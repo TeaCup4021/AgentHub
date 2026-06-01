@@ -32,6 +32,7 @@ export function createSSEStream(
   callbacks: SSECallbacks,
   prompt?: string,
   orchestrateMode?: string,
+  plannerAgentId?: string | null,
 ): () => void {
   if (mockSSE) return mockSSE(conversationId, callbacks);
 
@@ -52,6 +53,7 @@ export function createSSEStream(
   const streamUrl = new URL(`/api/v1/conversations/${conversationId}/stream`, window.location.origin);
   if (prompt) streamUrl.searchParams.set("prompt", prompt);
   if (orchestrateMode) streamUrl.searchParams.set("orchestrate_mode", orchestrateMode);
+  if (plannerAgentId) streamUrl.searchParams.set("planner_agent_id", plannerAgentId);
   fetch(streamUrl.toString(), {
     method: "GET",
     headers: {

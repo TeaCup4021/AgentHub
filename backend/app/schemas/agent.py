@@ -12,8 +12,8 @@ class AgentBase(BaseSchema):
     system_prompt: Optional[str] = None
     capabilities: List[str] = Field(default_factory=list)
     tool_config: Optional[Dict[str, Any]] = None
-    base_url: str = Field(..., max_length=500)
-    api_key: str = Field(..., max_length=500)
+    base_url: Optional[str] = Field(None, max_length=500)
+    api_key: Optional[str] = Field(None, max_length=500)
 
 class AgentCreate(AgentBase):
     pass

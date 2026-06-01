@@ -20,7 +20,7 @@ pydantic-settings>=2.7
 python-dotenv>=1.0
 
 # Google ADK 2.0 (Agent Engine)
-google-adk==2.0.0
+google-adk[extensions]==2.0.0
 anthropic
 openai
 

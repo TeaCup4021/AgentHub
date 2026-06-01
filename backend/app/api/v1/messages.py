@@ -63,6 +63,15 @@ async def create_message(
         if not task:
             raise HTTPException(status_code=404, detail="No plan_draft task found to refine")
 
+        # Apply planner_agent_id if user changed selection during plan review
+        if data.planner_agent_id is not None:
+            planner_result = await db.execute(
+                select(Agent).where(Agent.id == data.planner_agent_id)
+            )
+            if not planner_result.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="planner_agent_id not found")
+            task.planner_agent_id = data.planner_agent_id
+
         task.status = "refining"
         user_msg = await MessageService.create_message(
             db=db, conv_id=conv_id, user_id=user_id, data=data,
