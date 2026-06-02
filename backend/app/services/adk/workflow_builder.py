@@ -8,7 +8,7 @@ from google.adk.workflow._graph import START
 from app.models.agent import Agent
 from app.schemas.orchestrator import OrchestratorPlan
 from app.services.adk.execution_tracer import ExecutionTracer
-from app.services.adk.models import get_anthropic_llm, get_litellm
+from app.services.adk.models import get_anthropic_llm
 from app.services.adk.tool_loader import ToolLoader
 
 
@@ -111,7 +111,10 @@ class WorkflowBuilder:
     @staticmethod
     def _resolve_model(db_agent: Agent):
         """Resolve the LLM model from the agent's provider/model config."""
-        provider = (db_agent.provider or "").lower()
-        if provider in ("anthropic", "anthropicllm", "claude"):
-            return get_anthropic_llm(model=db_agent.model or "claude-sonnet-4-6")
-        return get_litellm(model=db_agent.model or "openai/codex")
+        from app.services.adk.models import resolve_agent_model
+        return resolve_agent_model(
+            provider=db_agent.provider or "",
+            model=db_agent.model or "",
+            api_key=db_agent.api_key or None,
+            base_url=db_agent.base_url or None,
+        )

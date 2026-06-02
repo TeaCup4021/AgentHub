@@ -96,8 +96,13 @@ def resolve_agent_model(
         return ConfigurableAnthropicLlm(model=resolved, api_key=api_key, base_url=base_url)
 
     # LiteLLM / any other provider → route through LiteLlm
+    # "litellm" is a routing mechanism, not a real LLM provider. Don't use it
+    # as a model prefix; default to "openai/" for OpenAI-compatible APIs.
     if model_name and "/" not in model_name:
-        model_name = f"{provider_lower}/{model_name}" if provider_lower else f"openai/{model_name}"
+        if provider_lower and provider_lower != "litellm":
+            model_name = f"{provider_lower}/{model_name}"
+        else:
+            model_name = f"openai/{model_name}"
 
     # Build LiteLlm kwargs for custom credentials
     litellm_kwargs: dict = {}
@@ -105,5 +110,11 @@ def resolve_agent_model(
         litellm_kwargs["api_key"] = api_key
     if base_url:
         litellm_kwargs["api_base"] = base_url
+
+    import logging
+    logging.getLogger("agenthub.runner").info(
+        "resolve_agent_model: provider=%s model=%s resolved=%s base_url=%s",
+        provider, model, model_name, base_url,
+    )
 
     return LiteLlm(model=model_name or "openai/codex", **litellm_kwargs)

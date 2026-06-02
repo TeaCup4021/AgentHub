@@ -33,9 +33,23 @@ def _sanitize_agent_name(name: str) -> str:
 def build_agent_from_model(agent_model: AgentModel) -> LlmAgent:
     """Build an ADK LlmAgent from a database AgentModel.
 
-    Uses the agent's configured provider, model, system_prompt, and tool_config
-    so that every single-chat conversation uses the agent the user selected.
+    Delegates to the registered adapter for the agent's provider, which
+    handles all provider-specific logic (model resolution, tool loading,
+    CLI interception, etc.).
     """
+    from app.services.adapters.base import AdapterRegistry
+
+    try:
+        adapter = AdapterRegistry.get_for_agent(agent_model)
+    except ValueError:
+        # Fallback: build directly for unregistered providers
+        return _build_agent_fallback(agent_model)
+
+    return adapter.build_agent(agent_model)
+
+
+def _build_agent_fallback(agent_model: AgentModel) -> LlmAgent:
+    """Fallback agent builder for providers without a registered adapter."""
     provider = (agent_model.provider or "").lower()
     model_name = agent_model.model or ""
 
@@ -50,7 +64,7 @@ def build_agent_from_model(agent_model: AgentModel) -> LlmAgent:
     tools = tool_loader.load(agent_model.tool_config)
 
     logger.info(
-        "build_agent_from_model: name=%s provider=%s model=%s tools=%d",
+        "build_agent_from_model (fallback): name=%s provider=%s model=%s tools=%d",
         agent_model.name, provider, model_name, len(tools),
     )
 

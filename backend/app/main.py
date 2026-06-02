@@ -23,6 +23,9 @@ from app.core.exceptions import (
 )
 from app.api.router import api_router
 
+# Import adapter layer to trigger AdapterRegistry registration at startup
+import app.services.adapters  # noqa: F401
+
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):

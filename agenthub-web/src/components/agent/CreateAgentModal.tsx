@@ -40,6 +40,9 @@ function extractToolNames(toolConfig: Record<string, unknown> | undefined): stri
     .filter((n): n is string => typeof n === "string" && n.length > 0);
 }
 
+const CLI_PROVIDERS = ["claude-code-cli", "codex-cli"];
+const isCliProvider = (p: string) => CLI_PROVIDERS.includes(p);
+
 export function CreateAgentModal({ open, onClose, initialData }: CreateAgentModalProps) {
   const isEdit = !!initialData;
 
@@ -117,22 +120,28 @@ export function CreateAgentModal({ open, onClose, initialData }: CreateAgentModa
 
   const handleSubmit = () => {
     if (!name.trim()) return;
-    if (!baseUrl.trim()) {
-      toast.error("请输入模型基址（base_url）");
-      return;
-    }
-    if (!apiKey.trim()) {
-      toast.error("请输入 API Key");
-      return;
+    if (!isCliProvider(provider)) {
+      if (!model.trim()) {
+        toast.error("请输入模型名称");
+        return;
+      }
+      if (!baseUrl.trim()) {
+        toast.error("请输入模型基址（base_url）");
+        return;
+      }
+      if (!apiKey.trim()) {
+        toast.error("请输入 API Key");
+        return;
+      }
     }
 
     const params = {
       name: name.trim(),
       avatarUrl: "",
       provider,
-      model: model.trim(),
-      baseUrl: baseUrl.trim(),
-      apiKey: apiKey.trim(),
+      model: isCliProvider(provider) ? "cli-default" : model.trim(),
+      baseUrl: isCliProvider(provider) ? "" : baseUrl.trim(),
+      apiKey: isCliProvider(provider) ? "" : apiKey.trim(),
       systemPrompt: systemPrompt.trim(),
       capabilities,
       toolConfig: tools.length > 0
@@ -203,39 +212,43 @@ export function CreateAgentModal({ open, onClose, initialData }: CreateAgentModa
           />
         </div>
 
-        <div>
-          <label style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>
-            模型
-          </label>
-          <Input
-            value={model}
-            onChange={setModel}
-            placeholder="例如：claude-sonnet-4-6"
-          />
-        </div>
+        {!isCliProvider(provider) && (
+          <>
+            <div>
+              <label style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>
+                模型
+              </label>
+              <Input
+                value={model}
+                onChange={setModel}
+                placeholder="例如：claude-sonnet-4-6"
+              />
+            </div>
 
-        <div>
-          <label style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>
-            模型基址
-          </label>
-          <Input
-            value={baseUrl}
-            onChange={setBaseUrl}
-            placeholder="例如：https://api.openai.com/v1"
-          />
-        </div>
+            <div>
+              <label style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>
+                模型基址
+              </label>
+              <Input
+                value={baseUrl}
+                onChange={setBaseUrl}
+                placeholder="例如：https://api.openai.com/v1"
+              />
+            </div>
 
-        <div>
-          <label style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>
-            API Key
-          </label>
-          <Input
-            value={apiKey}
-            onChange={setApiKey}
-            placeholder="sk-..."
-            mode="password"
-          />
-        </div>
+            <div>
+              <label style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>
+                API Key
+              </label>
+              <Input
+                value={apiKey}
+                onChange={setApiKey}
+                placeholder="sk-..."
+                mode="password"
+              />
+            </div>
+          </>
+        )}
 
         <div>
           <label style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>

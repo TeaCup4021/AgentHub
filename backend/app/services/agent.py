@@ -6,20 +6,34 @@ from fastapi import HTTPException
 from app.models.agent import Agent
 from app.schemas.agent import AgentCreate, AgentUpdate
 
+# Providers that run local CLI tools — no remote API endpoint needed.
+# model, base_url, api_key are meaningless for these agents.
+_CLI_PROVIDERS = {"claude-code-cli", "codex-cli"}
+
+
+def _is_cli_provider(provider: str) -> bool:
+    return (provider or "").lower().strip() in _CLI_PROVIDERS
+
 
 def _validate_provider_model(provider: str, model: str) -> None:
     """Validate that provider and model name are present.
 
-    Raises HTTPException(422) if either is missing.
+    CLI agents are exempt from model validation — the CLI manages its own model.
     """
     if not provider or not provider.strip():
         raise HTTPException(status_code=422, detail="Provider is required.")
-    if not model or not model.strip():
-        raise HTTPException(status_code=422, detail="Model name is required.")
+    if not _is_cli_provider(provider):
+        if not model or not model.strip():
+            raise HTTPException(status_code=422, detail="Model name is required.")
 
 
 def _validate_required_fields(provider: str, model: str, base_url: str, api_key: str) -> None:
-    """Validate that required fields are present and non-empty."""
+    """Validate that required fields are present and non-empty.
+
+    CLI agents are exempt — they run local subprocesses, not remote APIs.
+    """
+    if _is_cli_provider(provider):
+        return
     if not base_url or not base_url.strip():
         raise HTTPException(status_code=422, detail="模型基址（base_url）为必填项。")
     if not api_key or not api_key.strip():
@@ -63,16 +77,26 @@ class AgentService:
     ) -> Agent:
         _validate_provider_model(agent_in.provider, agent_in.model)
         _validate_required_fields(agent_in.provider, agent_in.model, agent_in.base_url, agent_in.api_key)
+
+        # CLI agents don't need a model — the CLI manages its own. Fill a
+        # placeholder since the DB column is NOT NULL.
+        model = agent_in.model.strip() if agent_in.model else ""
+        if _is_cli_provider(agent_in.provider) and not model:
+            model = "cli-default"
+
+        api_key = (agent_in.api_key or "").strip()
+        base_url = (agent_in.base_url or "").strip()
+
         db_agent = Agent(
             name=agent_in.name,
             avatar_url=agent_in.avatar_url,
             provider=agent_in.provider,
-            model=agent_in.model,
+            model=model,
             system_prompt=agent_in.system_prompt,
             capabilities=agent_in.capabilities,
             tool_config=agent_in.tool_config,
-            api_key=agent_in.api_key.strip(),
-            base_url=agent_in.base_url.strip(),
+            api_key=api_key,
+            base_url=base_url,
             created_by=user_id,
             is_builtin=False,
             is_active=True,
@@ -98,14 +122,39 @@ class AgentService:
         update_data = agent_in.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_agent, field, value)
-        # Validate the final provider+model combination after applying updates
-        _validate_provider_model(db_agent.provider, db_agent.model)
+        # Validate the final provider+model combination after applying updates.
+        # CLI agents are exempt from model validation.
+        _validate_provider_model(db_agent.provider, db_agent.model or "")
         await db.commit()
         await db.refresh(db_agent)
         return db_agent
 
     @staticmethod
     async def verify_model(provider: str, model: str, system_prompt: Optional[str]) -> bool:
+        """Verify model connectivity via the registered adapter.
+
+        Constructs a temporary Agent object and delegates to the adapter's
+        verify() method, which handles provider-specific model resolution.
+        """
+        from app.models.agent import Agent
+        from app.services.adapters.base import AdapterRegistry
+
+        try:
+            adapter = AdapterRegistry.get(provider)
+        except ValueError:
+            # Fallback: use basic ADK verification for unregistered providers
+            return await AgentService._verify_model_fallback(provider, model, system_prompt)
+
+        temp_agent = Agent(
+            provider=provider,
+            model=model,
+            system_prompt=system_prompt,
+        )
+        return await adapter.verify(temp_agent)
+
+    @staticmethod
+    async def _verify_model_fallback(provider: str, model: str, system_prompt: Optional[str]) -> bool:
+        """Fallback model verification for providers without a registered adapter."""
         try:
             from google.adk.agents import LlmAgent
             from google.adk.models.anthropic_llm import AnthropicLlm
@@ -113,7 +162,6 @@ class AgentService:
             from google.adk.sessions import InMemorySessionService
             from google.genai import types
 
-            # 根据 provider 选择模型后端
             if provider.lower() in ("anthropicllm", "anthropic", "claude"):
                 llm = AnthropicLlm(model=model)
             else:
@@ -132,14 +180,12 @@ class AgentService:
                 session_service=session_service,
             )
 
-            # 先创建 session
             await session_service.create_session(
                 app_name="agenthub_verify",
                 user_id="verify_user",
                 session_id="verify_session",
             )
 
-            # 发一条简单消息验证连通性
             async for event in runner.run_async(
                 user_id="verify_user",
                 session_id="verify_session",

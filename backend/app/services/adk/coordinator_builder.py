@@ -5,11 +5,10 @@ from google.genai import types
 import re
 
 from app.models.agent import Agent as AgentModel
+from app.services.adapters.base import AdapterRegistry
 from app.services.adk.execution_tracer import ExecutionTracer
-from app.services.adk.models import resolve_agent_model, get_deepseek_llm
+from app.services.adk.models import get_deepseek_llm
 from app.services.adk.tool_loader import ToolLoader
-
-CLI_PROVIDERS = {"claude-code-cli", "codex-cli"}
 
 # Regex matching ADK template variables like {identifier} or {identifier?}
 _ADK_TEMPLATE_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\??\}")
@@ -57,16 +56,32 @@ class CoordinatorBuilder:
         agent_models: list[AgentModel],
         execution_tracer: ExecutionTracer | None = None,
     ) -> list:
+        """Build sub-agents via the registered adapter for each agent's provider.
+
+        Adapters handle all provider-specific logic:
+        - LLM agents (Anthropic, LiteLLM) → standard LlmAgent with model + tools
+        - CLI agents (Claude Code, Codex) → LlmAgent with before_model_callback
+        """
         agent_model_map = {str(a.id): a for a in agent_models}
         tool_loader = ToolLoader(agent_models=agent_model_map)
         sub_agents: list = []
 
         for am in agent_models:
-            provider = (am.provider or "").lower()
-            if provider in CLI_PROVIDERS:
-                sub = self._build_cli_sub_agent(am, execution_tracer)
-            else:
-                sub = self._build_llm_sub_agent(am, tool_loader, execution_tracer)
+            try:
+                adapter = AdapterRegistry.get_for_agent(am)
+            except ValueError:
+                # Fallback: treat unknown providers as standard LLM agent
+                sub = self._build_fallback_sub_agent(am, tool_loader, execution_tracer)
+                sub_agents.append(sub)
+                continue
+
+            sub = adapter.build_agent(am, tool_loader=tool_loader)
+
+            # Attach execution tracer callbacks
+            if execution_tracer is not None:
+                sub.before_agent_callback = execution_tracer.before_agent
+                sub.after_agent_callback = execution_tracer.after_agent
+
             sub_agents.append(sub)
 
         return sub_agents
@@ -75,12 +90,15 @@ class CoordinatorBuilder:
     def _sanitize_name(name: str) -> str:
         return name.replace(" ", "_").replace("-", "_")
 
-    def _build_llm_sub_agent(
+    def _build_fallback_sub_agent(
         self,
         am: AgentModel,
         tool_loader: ToolLoader,
         execution_tracer: ExecutionTracer | None = None,
     ) -> LlmAgent:
+        """Build a standard LLM sub-agent for providers without a registered adapter."""
+        from app.services.adk.models import resolve_agent_model
+
         capabilities = am.capabilities or []
         cap_tags = (
             ", ".join(capabilities) if isinstance(capabilities, list)
@@ -96,88 +114,14 @@ class CoordinatorBuilder:
         kwargs: dict = {
             "name": self._sanitize_name(am.name),
             "description": description,
-            "model": self._resolve_model(am),
+            "model": resolve_agent_model(
+                provider=am.provider or "",
+                model=am.model or "",
+                api_key=am.api_key or None,
+                base_url=am.base_url or None,
+            ),
             "instruction": am.system_prompt or "You are a helpful assistant.",
             "tools": tool_loader.load(am.tool_config),
-            "mode": "task",
-        }
-        if execution_tracer is not None:
-            kwargs["before_agent_callback"] = execution_tracer.before_agent
-            kwargs["after_agent_callback"] = execution_tracer.after_agent
-
-        return LlmAgent(**kwargs)
-
-    def _build_cli_sub_agent(
-        self,
-        am: AgentModel,
-        execution_tracer: ExecutionTracer | None = None,
-    ) -> LlmAgent:
-        """Build a sub-agent backed by local CLI instead of LLM API.
-
-        Uses before_model_callback to intercept the model call and run the
-        CLI process. The coordinator dispatches to this agent via
-        request_task_<name> just like any other sub-agent.
-        """
-        provider = (am.provider or "").lower()
-
-        async def cli_before_model_callback(
-            callback_context, llm_request
-        ) -> LlmResponse | None:
-            from app.services.adk.cli_tools import claude_code_tool, codex_cli_tool
-
-            # Extract user prompt from the LLM request contents
-            prompt_parts: list[str] = []
-            for content in getattr(llm_request, "contents", []) or []:
-                role = getattr(content, "role", "")
-                if role == "user":
-                    for part in getattr(content, "parts", []) or []:
-                        text = getattr(part, "text", "")
-                        if text:
-                            prompt_parts.append(text)
-            user_prompt = "\n".join(prompt_parts) if prompt_parts else ""
-
-            # Merge system prompt with user request
-            full_prompt = (
-                am.system_prompt + "\n\nTask:\n" + user_prompt
-                if am.system_prompt
-                else user_prompt
-            )
-
-            # Run the appropriate CLI
-            base_tool = claude_code_tool if provider == "claude-code-cli" else codex_cli_tool
-            result = await base_tool(prompt=full_prompt)
-
-            if result.get("success"):
-                return LlmResponse(
-                    content=types.Content(
-                        role="model",
-                        parts=[types.Part.from_text(text=result.get("result", ""))],
-                    ),
-                )
-            else:
-                return LlmResponse(
-                    content=types.Content(
-                        role="model",
-                        parts=[types.Part.from_text(
-                            text=f"Error: {result.get('error', 'CLI execution failed')}"
-                        )],
-                    ),
-                )
-
-        description = am.system_prompt.strip()[:200] if am.system_prompt else f"{am.name} - local CLI coding agent"
-        capabilities = am.capabilities or []
-        cap_tags = (
-            ", ".join(capabilities) if isinstance(capabilities, list)
-            else str(capabilities)
-        )
-        if cap_tags:
-            description = f"[{cap_tags}] {description}"
-
-        kwargs: dict = {
-            "name": self._sanitize_name(am.name),
-            "description": description,
-            "instruction": am.system_prompt or "You are a helpful coding agent.",
-            "before_model_callback": cli_before_model_callback,
             "mode": "task",
         }
         if execution_tracer is not None:
@@ -206,13 +150,4 @@ class CoordinatorBuilder:
             f"Available specialists:\n{agent_descriptions}\n\n"
             "Remember: you are the conductor. Delegate to specialists, "
             "don't try to do their work yourself."
-        )
-
-    @staticmethod
-    def _resolve_model(agent: AgentModel):
-        return resolve_agent_model(
-            provider=agent.provider or "",
-            model=agent.model or "",
-            api_key=agent.api_key or None,
-            base_url=agent.base_url or None,
         )
