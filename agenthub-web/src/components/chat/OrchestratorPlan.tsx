@@ -115,7 +115,7 @@ export function OrchestratorPlan({
       {/* 来源 + 模式 */}
       <div style={{
         fontSize: 11, color: GRAY_400,
-        marginBottom: 10,
+        marginBottom: 6,
         display: "flex", alignItems: "center", gap: 6,
       }}>
         <span>{planBy}</span>
@@ -127,6 +127,27 @@ export function OrchestratorPlan({
         }}>
           {modeLabel}
         </span>
+      </div>
+
+      {/* 审核提示横幅 */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "6px 10px",
+        marginBottom: 10,
+        borderRadius: 6,
+        background: "var(--color-warning-bg, #FFF8E1)",
+        border: "1px solid var(--color-warning-border, #FFB300)",
+        fontSize: 11,
+        fontWeight: 500,
+        color: "var(--color-warning-text, #E65100)",
+      }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 8v4M12 16h.01"/>
+        </svg>
+        <span>请审核执行计划，确认后开始执行</span>
       </div>
 
       {/* 任务列表 */}

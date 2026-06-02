@@ -44,6 +44,24 @@ def _format_sse(event_name: str, data: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(data)}\n\n"
 
 
+def _build_agent_order(subtasks: list) -> list[str]:
+    """Convert plan subtasks (in plan order) to ADK agent name list.
+
+    Each subtask's agent_id is mapped to the ADK-internal agent name
+    that WorkflowBuilder creates: ``"agent_<uuid-with-dashes-replaced>"``.
+    """
+    order: list[str] = []
+    for st in subtasks:
+        agent_id = None
+        if hasattr(st, "agent_id"):
+            agent_id = str(st.agent_id)
+        elif isinstance(st, dict):
+            agent_id = st.get("agent_id", "")
+        if agent_id:
+            order.append("agent_" + agent_id.replace("-", "_"))
+    return order
+
+
 async def _error_sse_stream(code: str, message: str):
     """Yield a single error SSE event and return."""
     yield _format_sse("error", {
@@ -399,6 +417,21 @@ async def _orchestrator_plan_stream(
             select(MessageMention).where(MessageMention.message_id == user_msg.id)
         )
         mentions = [m.agent_id for m in mention_result.scalars().all()]
+
+        # If no @mentions, fallback to conversation participants
+        if not mentions:
+            parts_result = await db.execute(
+                select(ConversationParticipant.participant_id).where(
+                    ConversationParticipant.conversation_id == conv_id,
+                    ConversationParticipant.participant_type == "agent",
+                )
+            )
+            mentions = list(parts_result.scalars().all())
+            if mentions:
+                logger.info(
+                    "No @mentions found, fallback to conversation agents: %s",
+                    [str(m) for m in mentions],
+                )
 
         # Resolve planner agent if one was designated
         planner_agent = None
@@ -812,7 +845,10 @@ async def _coordinator_stream(
     tracer = ExecutionTracer()
     coordinator = CoordinatorBuilder().build(agent_models, execution_tracer=tracer)
     runner = AgentHubRunner(agent=coordinator, app_name="agenthub_orchestrator")
-    translator = ADKToSSETranslator()
+
+    # Build agent emission order from plan subtasks
+    agent_order = _build_agent_order(subtasks)
+    translator = ADKToSSETranslator(sequential=True, agent_order=agent_order)
 
     try:
         async for sse_event in _accumulate_stream_events(
@@ -910,7 +946,10 @@ async def _dag_workflow_stream(
     tracer = ExecutionTracer()
     workflow = WorkflowBuilder().build(plan_obj, agent_models=agent_models, execution_tracer=tracer)
     runner = AgentHubRunner(node=workflow, app_name="agenthub_orchestrator")
-    translator = ADKToSSETranslator()
+
+    # Build agent emission order from plan subtasks
+    agent_order = _build_agent_order(plan_obj.subtasks)
+    translator = ADKToSSETranslator(sequential=True, agent_order=agent_order)
 
     try:
         async for sse_event in _accumulate_stream_events(
@@ -1129,7 +1168,7 @@ async def stream_conversation(
 
     # If a previous orchestration attempt failed, surface the error instead of
     # silently falling through to single-agent CLI/ADK routing.
-    if orchestrate_mode:
+    if orchestrate_mode == "auto_orchestrate":
         failed_result = await db.execute(
             select(OrchestratorTask)
             .where(
@@ -1142,6 +1181,21 @@ async def stream_conversation(
         if failed_result.scalar_one_or_none():
             return StreamingResponse(
                 _error_sse_stream("PLANNER_ERROR", "任务拆解失败，请重试"),
+                media_type="text/event-stream",
+            )
+        # If orchestrate_mode is set but no OrchestratorTask exists at all,
+        # return a clear error instead of silently falling through to single-chat.
+        any_task = await db.execute(
+            select(OrchestratorTask).where(
+                OrchestratorTask.conversation_id == conv_id,
+            ).limit(1)
+        )
+        if not any_task.scalar_one_or_none():
+            return StreamingResponse(
+                _error_sse_stream(
+                    "NO_ORCHESTRATOR_TASK",
+                    "群聊模式需要先创建编排任务，请检查对话是否已绑定 Agent 后重试",
+                ),
                 media_type="text/event-stream",
             )
 

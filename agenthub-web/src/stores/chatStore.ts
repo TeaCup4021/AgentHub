@@ -41,6 +41,7 @@ interface ChatUIState {
   finalizeStreamingMessage: (messageId: string) => void;
   getStreamingContent: (messageId: string) => StreamingMessage | undefined;
   clearStreamingContent: (messageId: string) => void;
+  stopAllStreaming: () => void;
   setPendingMention: (name: string | null) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setRetryCount: (n: number) => void;
@@ -131,8 +132,11 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   finalizeStreamingMessage: (messageId) =>
     set((s) => {
       const { [messageId]: _, ...rest } = s.streamingContent;
-      return { isStreaming: false, streamingContent: rest };
+      return { isStreaming: Object.keys(rest).length > 0, streamingContent: rest };
     }),
+
+  stopAllStreaming: () =>
+    set({ isStreaming: false, streamingContent: {} }),
 
   getStreamingContent: (messageId) => get().streamingContent[messageId],
 

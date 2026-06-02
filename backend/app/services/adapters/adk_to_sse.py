@@ -15,14 +15,29 @@ class _TranslationState:
 
 
 class ADKToSSETranslator:
-    def __init__(self, version: str = "v1") -> None:
+    def __init__(
+        self,
+        version: str = "v1",
+        sequential: bool = False,
+        agent_order: list[str] | None = None,
+    ) -> None:
         self.version = version
+        self.sequential = sequential
+        self.agent_order = agent_order
 
     async def translate(
         self,
         event_stream: AsyncGenerator[Event, None],
         conversation_id: str,
     ) -> AsyncGenerator[str, None]:
+        # Group-chat mode: inject sequentializer so agent outputs are
+        # emitted one at a time in plan order, even when ADK runs them
+        # in parallel.
+        if self.sequential:
+            from app.services.adk.stream_sequentializer import StreamSequentializer
+            sequentializer = StreamSequentializer(agent_order=self.agent_order)
+            event_stream = sequentializer.sequentialize(event_stream)
+
         state = _TranslationState()
         async for event in event_stream:
             if not event:

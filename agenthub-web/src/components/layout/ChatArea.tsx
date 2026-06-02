@@ -33,6 +33,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const appendArtifact = useChatStore((s) => s.appendStreamArtifact);
   const appendThinkingStep = useChatStore((s) => s.appendThinkingStep);
   const finalizeStreaming = useChatStore((s) => s.finalizeStreamingMessage);
+  const stopAllStreaming = useChatStore((s) => s.stopAllStreaming);
 
   const disconnectRef = useRef<(() => void) | null>(null);
   const streamMsgIdRef = useRef<string | null>(null);
@@ -91,6 +92,31 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const pendingPlan = useChatStore((s) => s.pendingPlan);
   const displayMessages = useMemo(() => {
     if (!pendingPlan) return filteredMessages;
+
+    // Avoid duplicating the plan message: if the persisted plan message
+    // (by planId) already exists in the fetched messages, convert it to
+    // a "plan" card instead of appending a second synthetic entry.
+    const existingIdx = filteredMessages.findIndex(
+      (m) => m.id === pendingPlan.planId,
+    );
+    if (existingIdx >= 0) {
+      return filteredMessages.map((m, i) =>
+        i === existingIdx
+          ? {
+              ...m,
+              contentType: "plan",
+              meta: {
+                ...m.meta,
+                planId: pendingPlan.planId,
+                subtasks: pendingPlan.subtasks,
+                plannerAgentName: pendingPlan.plannerAgentName,
+                plannerAgentId: pendingPlan.plannerAgentId,
+              },
+            }
+          : m,
+      );
+    }
+
     const planMsg: Message = {
       id: `plan-${pendingPlan.planId}`,
       conversationId: activeId ?? "",
@@ -143,9 +169,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   useEffect(() => {
     disconnectRef.current?.();
-    if (streamMsgIdRef.current) {
-      finalizeStreaming(streamMsgIdRef.current);
-    }
+    stopAllStreaming();
     streamMsgIdRef.current = null;
     streamAgentRef.current = "";
     setIsStreaming(false);
@@ -155,11 +179,9 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
     return () => {
       disconnectRef.current?.();
-      if (streamMsgIdRef.current) {
-        finalizeStreaming(streamMsgIdRef.current);
-        streamMsgIdRef.current = null;
-        streamAgentRef.current = "";
-      }
+      stopAllStreaming();
+      streamMsgIdRef.current = null;
+      streamAgentRef.current = "";
       setIsStreaming(false);
     };
   }, [activeId]);
@@ -488,6 +510,12 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       mentions = conversation.agentIds;
     }
 
+    // Guard: group chat requires at least one agent for orchestration
+    if (conversation.type === "group" && mentions.length === 0) {
+      toast.warning("群聊模式下请先在对话中添加至少一个 Agent，否则无法生成执行计划");
+      return;
+    }
+
     const currentIds = conversation.agentIds;
     const externalIds = mentions.filter((id) => !currentIds.includes(id));
 
@@ -570,10 +598,8 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   const handleStop = useCallback(() => {
     disconnectRef.current?.();
-    if (streamMsgIdRef.current) {
-      finalizeStreaming(streamMsgIdRef.current);
-      streamMsgIdRef.current = null;
-    }
+    stopAllStreaming();
+    streamMsgIdRef.current = null;
     setIsStreaming(false);
     clearAgentStatuses();
     setDagTaskId(null);
@@ -581,7 +607,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       clearTimeout(retryRef.current.timeoutId);
       retryRef.current.timeoutId = null;
     }
-  }, [finalizeStreaming, setIsStreaming, clearAgentStatuses]);
+  }, [stopAllStreaming, setIsStreaming, clearAgentStatuses]);
 
   if (!conversation) {
     return (
