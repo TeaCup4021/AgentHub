@@ -157,7 +157,7 @@ async def create_message(
     # ── normal message ──────────────────────────────────────────────────
     user_msg = await MessageService.create_message(db=db, conv_id=conv_id, user_id=user_id, data=data)
 
-    if data.mode == "auto_orchestrate" and data.mentions:
+    if data.mode == "auto_orchestrate":
         # Resolve planner_agent if specified
         planner_agent_id = data.planner_agent_id
         if planner_agent_id is not None:
