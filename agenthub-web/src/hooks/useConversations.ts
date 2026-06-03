@@ -3,23 +3,29 @@ import { conversationApi } from "@/lib/api";
 import type { CreateConversationParams, UpdateConversationParams, ConversationListParams } from "@/types";
 
 export function useConversations(params?: ConversationListParams) {
+  const safeParams = params?.projectId && !uuidRe.test(params.projectId)
+    ? { ...params, projectId: undefined }
+    : params;
   return useQuery({
-    queryKey: ["conversations", params],
+    queryKey: ["conversations", safeParams],
     queryFn: async () => {
-      const res = await conversationApi.list(params);
+      const res = await conversationApi.list(safeParams);
       return res.data.data;
     },
   });
 }
 
+const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function useConversationsByProject(projectId?: string) {
+  const validId = projectId && uuidRe.test(projectId) ? projectId : undefined;
   return useQuery({
-    queryKey: ["conversations", { projectId }],
+    queryKey: ["conversations", { projectId: validId }],
     queryFn: async () => {
-      const res = await conversationApi.list({ projectId });
+      const res = await conversationApi.list({ projectId: validId });
       return res.data.data;
     },
-    enabled: !!projectId,
+    enabled: !!validId,
   });
 }
 

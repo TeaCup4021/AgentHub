@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import darkPlus from "shiki/themes/dark-plus.mjs";
+import githubLightDefault from "shiki/themes/github-light-default.mjs";
 import ts from "shiki/langs/typescript.mjs";
 import tsx from "shiki/langs/tsx.mjs";
 import js from "shiki/langs/javascript.mjs";
@@ -26,6 +27,15 @@ const LANGS = [
   json, yaml, bash, markdown, sql, diff,
 ];
 
+const THEMES = {
+  dark: "dark-plus",
+  light: "github-light-default",
+} as const;
+
+function isDarkMode(): boolean {
+  return document.body.getAttribute("theme-mode") === "dark";
+}
+
 let highlighter: HighlighterCore | null = null;
 let initPromise: Promise<HighlighterCore> | null = null;
 
@@ -35,7 +45,7 @@ function getHighlighter(): Promise<HighlighterCore> {
 
   const engine = createJavaScriptRegexEngine();
   initPromise = createHighlighterCore({
-    themes: [darkPlus],
+    themes: [darkPlus, githubLightDefault],
     langs: LANGS,
     engine,
   }).then((h) => {
@@ -62,10 +72,20 @@ export function HighlightedCode({
   showHeader = true,
 }: HighlightedCodeProps) {
   const [html, setHtml] = useState("");
+  const [dark, setDark] = useState(isDarkMode);
   const [folded, setFolded] = useState(true);
   const [copied, setCopied] = useState(false);
   const lineCount = useMemo(() => code.split("\n").length, [code]);
   const shouldFold = maxLines > 0 && lineCount > maxLines;
+  const theme = dark ? THEMES.dark : THEMES.light;
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setDark(isDarkMode());
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ["theme-mode"] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,13 +96,13 @@ export function HighlightedCode({
         setHtml("");
         return;
       }
-      const result = h.codeToHtml(code, { lang: language, theme: "dark-plus" });
+      const result = h.codeToHtml(code, { lang: language, theme });
       setHtml(result);
     });
     return () => {
       cancelled = true;
     };
-  }, [code, language]);
+  }, [code, language, theme]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -90,19 +110,31 @@ export function HighlightedCode({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const bg = dark ? "#1e1e1e" : "#f6f8fa";
+  const headerBg = dark ? "#2d2d2d" : "#e8eaed";
+  const headerBorder = dark ? "border-gray-700" : "border-gray-300";
+  const headerText = dark ? "text-gray-400" : "text-gray-600";
+  const badgeBg = dark ? "bg-gray-800" : "bg-gray-200";
+  const badgeText = dark ? "text-gray-500" : "text-gray-500";
+  const textColor = dark ? "text-gray-200" : "text-gray-800";
+  const copyHover = dark ? "hover:text-gray-200" : "hover:text-gray-800";
+  const foldBg = dark ? "bg-gray-800/50 hover:bg-gray-800" : "bg-gray-100 hover:bg-gray-200";
+  const foldText = dark ? "text-gray-400" : "text-gray-500";
+  const foldBorder = dark ? "border-gray-700" : "border-gray-300";
+
   return (
-    <div className="my-2 overflow-hidden rounded-md bg-[#1e1e1e] text-left">
+    <div className="my-2 overflow-hidden rounded-md text-left" style={{ background: bg }}>
       {showHeader && (
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700">
-          <span className="text-xs text-gray-400">{fileName || language || "code"}</span>
+        <div className={`flex items-center justify-between px-3 py-1.5 border-b ${headerBorder}`} style={{ background: headerBg }}>
+          <span className={`text-xs ${headerText}`}>{fileName || language || "code"}</span>
           <div className="flex items-center gap-2">
             {language && (
-              <span className="text-[10px] uppercase text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">
+              <span className={`text-[10px] uppercase ${badgeText} ${badgeBg} px-1.5 py-0.5 rounded`}>
                 {language}
               </span>
             )}
             <button
-              className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+              className={`text-xs ${headerText} ${copyHover} transition-colors`}
               onClick={handleCopy}
             >
               {copied ? "已复制" : "复制"}
@@ -122,13 +154,13 @@ export function HighlightedCode({
           />
         ) : (
           <pre>
-            <code className="text-gray-200 block py-2">{code}</code>
+            <code className={`block py-2 ${textColor}`}>{code}</code>
           </pre>
         )}
       </div>
       {shouldFold && (
         <button
-          className="w-full py-1.5 text-xs text-gray-400 bg-gray-800/50 hover:bg-gray-800 transition-colors border-t border-gray-700"
+          className={`w-full py-1.5 text-xs ${foldText} ${foldBg} transition-colors border-t ${foldBorder}`}
           onClick={() => setFolded(!folded)}
         >
           {folded ? `展开全部 (${lineCount} 行)` : "收起"}

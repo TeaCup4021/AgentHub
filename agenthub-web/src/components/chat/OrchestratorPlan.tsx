@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, TextArea, Select } from "@douyinfe/semi-ui";
 import { IconEdit, IconSend } from "@douyinfe/semi-icons";
+import { AgentConfigPreviewCard } from "@/components/cards/AgentConfigPreviewCard";
 import type { PlanSubtask } from "@/types";
 
 interface OrchestratorPlanProps {
@@ -192,7 +193,11 @@ export function OrchestratorPlan({
               {i + 1}
             </span>
 
-            {editing ? (
+            {task.type === "create_agent" && task.agent_config ? (
+              <div style={{ flex: 1 }}>
+                <AgentConfigPreviewCard artifact={{ id: task.subtask_id, artifactType: "code" as const, content: task.agent_config as unknown as Record<string, unknown>, version: 1, createdAt: new Date().toISOString() }} />
+              </div>
+            ) : editing ? (
               <>
                 <TextArea
                   value={task.instruction}

@@ -28,6 +28,7 @@ from app.services.adk.workflow_builder import WorkflowBuilder
 from app.services.adk.execution_tracer import ExecutionTracer
 from app.services.adk.merge_aggregator import MergeAggregator
 from app.services.artifact import ArtifactService
+from app.services.artifact_detector import detect_artifacts
 from app.services.message import MessageService
 
 from app.api.deps import get_current_user, get_current_user_id
@@ -246,6 +247,34 @@ async def _adk_sse_stream(
                             await db.commit()
                     except Exception:
                         logger.exception("persist stream message failed")
+                    artifacts = detect_artifacts(acc["content"])
+                    logger.info(
+                        "_adk_sse_stream: message_end mid=%s content_len=%d artifacts_found=%d",
+                        mid, len(acc["content"]), len(artifacts),
+                    )
+                    for art in artifacts:
+                        art_event_id = str(uuid4())
+                        art_payload = {
+                            "version": "v1",
+                            "event_id": art_event_id,
+                            "conversation_id": str(conv_id),
+                            "message_id": mid,
+                            "artifact": art,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                        yield _format_sse("artifact", art_payload)
+                        try:
+                            async with async_session_maker() as db:
+                                await ArtifactService.append_version(
+                                    db=db,
+                                    conversation_id=conv_id,
+                                    message_id=UUID(mid),
+                                    artifact_payload=art,
+                                    event_id=art_event_id,
+                                )
+                                await db.commit()
+                        except Exception:
+                            logger.exception("persist detected artifact failed")
                 yield payload
             else:
                 yield payload
@@ -304,7 +333,7 @@ async def get_conversations(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100, alias="pageSize"),
     keyword: Optional[str] = None,
-    project_id: Optional[UUID] = Query(None, alias="projectId"),
+    project_id: Optional[str] = Query(None, alias="projectId"),
     db: AsyncSession = Depends(get_db),
     user_id: UUID = Depends(get_current_user_id)
 ):
@@ -776,6 +805,34 @@ async def _accumulate_stream_events(
                         await persist_db.commit()
                 except Exception:
                     logger.exception("persist stream message failed")
+                artifacts = detect_artifacts(acc["content"])
+                logger.info(
+                    "_accumulate_stream_events: message_end mid=%s content_len=%d artifacts_found=%d",
+                    mid, len(acc["content"]), len(artifacts),
+                )
+                for art in artifacts:
+                    art_event_id = str(uuid4())
+                    art_payload = {
+                        "version": "v1",
+                        "event_id": art_event_id,
+                        "conversation_id": str(conv_id),
+                        "message_id": mid,
+                        "artifact": art,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    yield _format_sse("artifact", art_payload)
+                    try:
+                        async with async_session_maker() as db:
+                            await ArtifactService.append_version(
+                                db=db,
+                                conversation_id=conv_id,
+                                message_id=UUID(mid),
+                                artifact_payload=art,
+                                event_id=art_event_id,
+                            )
+                            await db.commit()
+                    except Exception:
+                        logger.exception("persist detected artifact failed")
 
         elif event_type == "error" and event_data:
             mid = event_data.get("message_id")

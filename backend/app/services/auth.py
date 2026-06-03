@@ -59,7 +59,7 @@ def make_token_response(user: User) -> TokenResponse:
     )
 
 
-async def send_code(db: AsyncSession, email: str, purpose: str) -> None:
+async def send_code(db: AsyncSession, email: str, purpose: str) -> str:
     # Rate limit: same email + purpose within 60 seconds
     min_ago = datetime.now(timezone.utc) - timedelta(seconds=settings.VERIFY_CODE_RATE_LIMIT_SECONDS)
     result = await db.execute(
@@ -90,6 +90,7 @@ async def send_code(db: AsyncSession, email: str, purpose: str) -> None:
 
     from app.services.email import send_verification_email
     await send_verification_email(email, code)
+    return code
 
 
 async def verify_code(db: AsyncSession, email: str, code: str, purpose: str) -> bool:

@@ -148,13 +148,13 @@ class MessageService:
         for a in artifacts:
             art_map[a.message_id].append({
                 "id": a.id,
-                "artifact_type": a.artifact_type,
+                "artifactType": a.artifact_type,
                 "title": a.title,
                 "content": a.content,
-                "storage_key": a.storage_key,
-                "mime_type": a.mime_type,
+                "storageKey": a.storage_key,
+                "mimeType": a.mime_type,
                 "version": a.version,
-                "created_at": a.created_at,
+                "createdAt": a.created_at,
             })
 
         # build meta_data fallback map for agent messages without a DB agent
@@ -182,18 +182,18 @@ class MessageService:
     def _format_message(msg: Message, sender_name: str, artifacts: list) -> dict:
         return {
             "id": msg.id,
-            "conversation_id": msg.conversation_id,
-            "sender_type": msg.sender_type,
-            "sender_id": msg.sender_id,
-            "sender_name": sender_name,
-            "parent_message_id": msg.parent_message_id,
-            "content_type": msg.content_type,
+            "conversationId": msg.conversation_id,
+            "senderType": msg.sender_type,
+            "senderId": msg.sender_id,
+            "senderName": sender_name,
+            "parentMessageId": msg.parent_message_id,
+            "contentType": msg.content_type,
             "content": msg.content,
             "status": msg.status,
             "meta": msg.meta_data,
             "artifacts": artifacts,
-            "created_at": msg.created_at,
-            "updated_at": msg.updated_at,
+            "createdAt": msg.created_at,
+            "updatedAt": msg.updated_at,
         }
 
     @staticmethod

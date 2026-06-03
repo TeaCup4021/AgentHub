@@ -210,13 +210,13 @@ async def get_message_artifacts(
     return [
         {
             "id": a.id,
-            "artifact_type": a.artifact_type,
+            "artifactType": a.artifact_type,
             "title": a.title,
             "content": a.content,
-            "storage_key": a.storage_key,
-            "mime_type": a.mime_type,
+            "storageKey": a.storage_key,
+            "mimeType": a.mime_type,
             "version": a.version,
-            "created_at": a.created_at,
+            "createdAt": a.created_at,
         }
         for a in artifacts
     ]

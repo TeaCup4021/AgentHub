@@ -54,10 +54,9 @@ describe("CardRenderer", () => {
       content: { language: "ts", oldCode: "a", newCode: "b" },
     });
     render(<CardRenderer artifact={artifact} />);
-    expect(screen.getByText("a")).toBeInTheDocument();
-    expect(screen.getByText("b")).toBeInTheDocument();
-    expect(screen.getByText("+1")).toBeInTheDocument();
-    expect(screen.getByText("−1")).toBeInTheDocument();
+    expect(screen.getByText("保存文件")).toBeInTheDocument();
+    expect(screen.getByText("ts")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /保存文件/ })).toBeInTheDocument();
   });
 
   it("deploy_status building 应显示构建中", () => {

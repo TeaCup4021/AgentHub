@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
-import { Tag, Typography, Input, Button } from "@douyinfe/semi-ui";
+import { Tag, Typography, Input, Button, Tooltip } from "@douyinfe/semi-ui";
 import { IconSearch, IconClose } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
+import { PinnedMessages } from "@/components/chat/PinnedMessages";
 import type { Conversation, Agent } from "@/types";
 
 type SearchMode = "off" | "conv" | "msg";
@@ -120,13 +121,19 @@ export function ChatHeader({ conversation, agents, messageHitCount, taskSummary 
                   : `${taskSummary.total} 个任务已完成`}
             </div>
           )}
-          <Button
-            data-search-toggle
-            icon={<IconSearch />}
-            theme="borderless"
-            size="small"
-            onClick={cycleSearch}
-            type={isSearchActive ? "primary" : "tertiary"}
+          <Tooltip content={isSearchActive ? (searchMode === "msg" ? "消息搜索中，点击切换" : "对话搜索中，点击关闭") : "点击搜索消息或对话"}>
+            <Button
+              data-search-toggle
+              icon={<IconSearch />}
+              theme="borderless"
+              size="small"
+              onClick={cycleSearch}
+              type={isSearchActive ? "primary" : "tertiary"}
+            />
+          </Tooltip>
+          <PinnedMessages
+            conversationId={conversation.id}
+            onJumpTo={(messageId) => window.dispatchEvent(new CustomEvent("scroll-to-message", { detail: { messageId } }))}
           />
           {conversation.agentIds.map((aid) => {
             const agent = agents.find((a) => a.id === aid);

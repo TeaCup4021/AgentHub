@@ -45,6 +45,11 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+function extractError(error: AxiosError): Error {
+  const serverMsg = (error.response?.data as { message?: string })?.message;
+  return new Error(serverMsg || error.message);
+}
+
 let isRefreshing = false;
 let refreshSubscribers: Array<(token: string) => void> = [];
 
@@ -74,7 +79,7 @@ api.interceptors.response.use(
       if (!refreshToken) {
         localStorage.removeItem("token");
         localStorage.removeItem("refresh_token");
-        return Promise.reject(error);
+        return Promise.reject(extractError(error));
       }
 
       if (!isRefreshing) {
@@ -83,8 +88,10 @@ api.interceptors.response.use(
           const res = await axios.post("/api/v1/auth/refresh", null, {
             params: { refresh_token: refreshToken },
           });
-          const newToken = res.data.data.access_token;
+          const newToken = res.data.data.accessToken;
+          const newRefreshToken = res.data.data.refreshToken;
           localStorage.setItem("token", newToken);
+          if (newRefreshToken) localStorage.setItem("refresh_token", newRefreshToken);
           isRefreshing = false;
           onRefreshed(newToken);
         } catch {
@@ -92,7 +99,7 @@ api.interceptors.response.use(
           refreshSubscribers = [];
           localStorage.removeItem("token");
           localStorage.removeItem("refresh_token");
-          return Promise.reject(error);
+          return Promise.reject(extractError(error));
         }
       }
 
@@ -105,7 +112,7 @@ api.interceptors.response.use(
       });
     }
 
-    return Promise.reject(error);
+    return Promise.reject(extractError(error));
   },
 );
 
@@ -145,6 +152,10 @@ export const conversationApi = {
 
   unpinMessage(conversationId: string, messageId: string) {
     return api.delete<ApiResponse<void>>(`/conversations/${conversationId}/pins/${messageId}`);
+  },
+
+  getPins(conversationId: string) {
+    return api.get<import("@/types").GetPinsResponse>(`/conversations/${conversationId}/pins`);
   },
 };
 
@@ -200,6 +211,7 @@ export interface SendMessageRequest {
   plannerAgentId?: string | null;
   plan_id?: string;
   plan?: ConfirmPlanItem[];
+  attachments?: import("@/types").Attachment[];
 }
 
 export interface SendMessageResponse extends ApiResponse<Message> {}
@@ -249,6 +261,29 @@ export const projectApi = {
 export const orchestratorApi = {
   dag(taskId: string) {
     return api.get<GetDagResponse>(`/orchestrator/tasks/${taskId}/dag`);
+  },
+};
+
+export const fileApi = {
+  upload(file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post<import("@/types").UploadFileResponse>("/files/upload", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 60000,
+    });
+  },
+
+  getFile(id: string) {
+    return api.get<import("@/types").ApiResponse<{ url: string; fileName: string; mimeType: string }>>(`/files/${id}`);
+  },
+
+  updateContent(id: string, content: string) {
+    return api.put<import("@/types").ApiResponse<{ status: string }>>(`/files/${id}/content`, { content });
+  },
+
+  applyDiff(data: { fileName: string; code: string; language?: string }) {
+    return api.post<import("@/types").ApiResponse<import("@/types").ApplyDiffResponse>>("/files/apply-diff", data);
   },
 };
 

@@ -42,7 +42,7 @@ describe("ChatInput — 基础行为", () => {
     editor.focus();
     await userEvent.type(editor, "hello");
     await userEvent.keyboard("{Enter}");
-    expect(onSend).toHaveBeenCalledWith("hello", []);
+    expect(onSend).toHaveBeenCalledWith("hello", [], []);
   });
 
   it("组合输入中 Enter 不应触发发送", async () => {

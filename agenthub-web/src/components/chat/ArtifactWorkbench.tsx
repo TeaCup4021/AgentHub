@@ -10,6 +10,7 @@ const TYPE_OPTIONS = [
   { value: "diff", label: "差异" },
   { value: "preview", label: "预览" },
   { value: "file", label: "文件" },
+  { value: "document", label: "文档" },
   { value: "deploy_status", label: "部署" },
 ];
 

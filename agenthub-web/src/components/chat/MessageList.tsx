@@ -10,9 +10,66 @@ import { formatTime, formatFullTime } from "@/lib/formatTime";
 import { getAgentColor } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CardRenderer } from "@/components/cards";
-import type { Agent, Message, ThinkingStep, PlanSubtask } from "@/types";
+import type { Agent, Message, ThinkingStep, PlanSubtask, Artifact } from "@/types";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { OrchestratorPlan } from "./OrchestratorPlan";
+
+function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
+  const hasArtifactType = (type: string) => existingArtifacts.some((a) => a.artifactType === type);
+  const cards: React.ReactNode[] = [];
+
+  if (!hasArtifactType("diff")) {
+    const diffRe = /```diff\n([\s\S]*?)```/g;
+    let match;
+    let idx = 0;
+    while ((match = diffRe.exec(content)) !== null) {
+      const oldLines: string[] = [];
+      const newLines: string[] = [];
+      for (const line of match[1].split("\n")) {
+        if (line.startsWith("-")) oldLines.push(line.slice(1));
+        else if (line.startsWith("+")) newLines.push(line.slice(1));
+        else { oldLines.push(line); newLines.push(line); }
+      }
+      const fallback: Artifact = {
+        id: `fallback-diff-${idx++}`,
+        artifactType: "diff",
+        title: "变更对比",
+        content: {
+          oldCode: oldLines.join("\n"),
+          newCode: newLines.join("\n"),
+          language: "diff",
+          fileName: "",
+        },
+        version: 1,
+        createdAt: new Date().toISOString(),
+      };
+      cards.push(<CardRenderer key={fallback.id} artifact={fallback} />);
+    }
+  }
+
+  if (!hasArtifactType("link_preview")) {
+    const urlRe = /https?:\/\/[^\s\)\]>]+/g;
+    let match;
+    const seen = new Set<string>();
+    let idx = 0;
+    while ((match = urlRe.exec(content)) !== null) {
+      const url = match[0].replace(/[.,;:!?\"')\]]*$/, "");
+      if (seen.has(url)) continue;
+      seen.add(url);
+      const fallback: Artifact = {
+        id: `fallback-link-${idx++}`,
+        artifactType: "link_preview",
+        title: url,
+        content: { url },
+        version: 1,
+        createdAt: new Date().toISOString(),
+      };
+      cards.push(<CardRenderer key={fallback.id} artifact={fallback} />);
+    }
+  }
+
+  return cards;
+}
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
@@ -82,15 +139,19 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
   }, [agent]);
 
   const isFailed = message.status === "failed";
+  const pinnedIds = useChatStore((s) => s.pinnedMessageIds);
+  const isPinned = !isUser && !isOrchestrator && pinnedIds.includes(message.id);
   const avatarCursor = agent ? "pointer" : "";
 
   return (
     <div
+      id={`msg-${message.id}`}
       style={{
         display: "flex",
         gap: 12,
-        padding: "12px 16px",
+        padding: isPinned ? "12px 16px 12px 13px" : "12px 16px",
         flexDirection: isUser ? "row-reverse" : "row",
+        borderLeft: isPinned ? "3px solid var(--color-primary)" : "3px solid transparent",
       }}
       title={formatFullTime(message.createdAt)}
     >
@@ -199,7 +260,23 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
                       text={searchText ? highlightText(message.content, searchText) : message.content}
                     />
                   )}
+                  {message.attachments && message.attachments.map((att) => (
+                    <div key={att.id} style={{ marginTop: 8 }}>
+                      {att.fileType.startsWith("image/") ? (
+                        <img src={att.fileUrl} alt={att.fileName} style={{ maxWidth: 320, maxHeight: 240, borderRadius: "var(--radius-sm)", cursor: "pointer" }} />
+                      ) : (
+                        <a href={att.fileUrl} download={att.fileName} style={{
+                          display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+                          border: "1px solid var(--color-border-light)", borderRadius: "var(--radius-sm)",
+                          color: "var(--color-text-secondary)", textDecoration: "none", fontSize: "var(--font-size-sm)",
+                        }}>
+                          {att.fileName} ({att.fileSize > 0 ? `${(att.fileSize / 1024).toFixed(1)} KB` : "未知大小"})
+                        </a>
+                      )}
+                    </div>
+                  ))}
                   {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+                  {message.status === "done" && renderFallbackCards(message.content, message.artifacts)}
                 </>
               )}
             </ErrorBoundary>
@@ -438,6 +515,21 @@ export function MessageList({
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleScrollTo = (e: Event) => {
+      const { messageId } = (e as CustomEvent<{ messageId: string }>).detail;
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.transition = "background 0.3s";
+        el.style.background = "var(--color-bg-active)";
+        setTimeout(() => { el.style.background = ""; }, 1500);
+      }
+    };
+    window.addEventListener("scroll-to-message", handleScrollTo);
+    return () => window.removeEventListener("scroll-to-message", handleScrollTo);
   }, []);
 
   return (

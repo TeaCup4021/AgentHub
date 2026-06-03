@@ -49,9 +49,16 @@ interface UIState {
   setSelectedProjectId: (id: string | null) => void;
 }
 
+function isValidUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}
+
 function loadSelectedProjectId(): string | null {
   try {
-    return localStorage.getItem("agenthub-project-id");
+    const id = localStorage.getItem("agenthub-project-id");
+    if (id && isValidUuid(id)) return id;
+    localStorage.removeItem("agenthub-project-id");
+    return null;
   } catch { return null; }
 }
 

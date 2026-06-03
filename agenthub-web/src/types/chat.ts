@@ -68,6 +68,17 @@ export type MessageContent =
 export type SenderType = "user" | "agent" | "system" | "orchestrator";
 export type MessageStatus = "pending" | "streaming" | "done" | "failed";
 
+export interface Attachment {
+  id: string;
+  fileId: string;
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize: number;
+  width?: number;
+  height?: number;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -78,6 +89,7 @@ export interface Message {
   contentType: string;
   content: string;
   artifacts: Artifact[];
+  attachments?: Attachment[];
   status: MessageStatus;
   meta?: Record<string, unknown> | null;
   createdAt: string;
@@ -127,7 +139,7 @@ export interface MessageListData {
 
 // ========== Artifact（产物）==========
 
-export type ArtifactType = "code" | "diff" | "preview" | "file" | "deploy_status";
+export type ArtifactType = "code" | "diff" | "preview" | "file" | "deploy_status" | "document" | "link_preview";
 
 // artifactType via SSE is now normalized by ADKToSSETranslator._normalize_artifact_fields
 
@@ -173,6 +185,27 @@ export interface DeployStatusArtifactContent {
   url?: string;
 }
 
+export interface DocumentArtifactContent {
+  fileName: string;
+  fileUrl: string;
+  fileType: "pdf" | "docx" | "xlsx" | "pptx";
+  fileSize: number;
+}
+
+export interface LinkPreviewArtifactContent {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  favicon?: string;
+  siteName?: string;
+}
+
+export interface ApplyDiffResponse {
+  fileId: string;
+  downloadUrl: string;
+}
+
 // ========== SSE 事件 ==========
 
 export type SSEEventType =
@@ -182,13 +215,28 @@ export type SSEEventType =
   | "agent_status"
   | "thinking"
   | "message_end"
-  | "error";
+  | "error"
+  | "conflict_detected"
+  | "attachment";
+
+export interface AgentCreationConfig {
+  name: string;
+  provider: string;
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+  systemPrompt: string;
+  capabilities: string[];
+  toolConfig: Record<string, unknown>;
+}
 
 export interface PlanSubtask {
   subtask_id: string;
   agent: { id: string; name: string };
   instruction: string;
   priority: number;
+  type?: "code" | "review" | "create_agent" | "deploy";
+  agent_config?: AgentCreationConfig;
 }
 
 export interface SummaryResult {
@@ -285,6 +333,24 @@ export interface SSEError {
   code: string;
   message: string;
   retryable: boolean;
+  timestamp: string;
+}
+
+export interface ConflictEntry {
+  agent_id: string;
+  agent_name: string;
+  diff: { oldCode: string; newCode: string; fileName?: string; language?: string };
+  status: "pending" | "accepted" | "rejected";
+}
+
+export interface SSEConflict {
+  version: string;
+  event_id: string;
+  conversation_id: string;
+  message_id: string;
+  file_id: string;
+  file_name: string;
+  conflicts: ConflictEntry[];
   timestamp: string;
 }
 

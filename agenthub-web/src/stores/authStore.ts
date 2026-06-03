@@ -15,7 +15,7 @@ interface AuthState {
   isAuthenticated: boolean;
 
   // Actions
-  sendCode: (email: string) => Promise<void>;
+  sendCode: (email: string) => Promise<string | undefined>;
   register: (email: string, code: string, name: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -50,7 +50,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   sendCode: async (email) => {
-    await api.post("/auth/send-code", { email });
+    const res = await api.post("/auth/send-code", { email });
+    const code: string | undefined = res.data?.data?.code;
+    if (code) console.log("[dev] 验证码:", code, "→", email);
+    return code;
   },
 
   register: async (email, code, name, password) => {

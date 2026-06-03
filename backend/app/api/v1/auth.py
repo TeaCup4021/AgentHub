@@ -10,6 +10,7 @@ from app.schemas.auth import (
     UserResponse,
     ChangePasswordRequest,
 )
+from app.core.config import settings
 from app.services import auth as auth_service
 from app.api.deps import get_current_user
 
@@ -18,7 +19,9 @@ router = APIRouter()
 
 @router.post("/send-code")
 async def send_code(data: SendCodeRequest, db: AsyncSession = Depends(get_db)):
-    await auth_service.send_code(db, data.email, "register")
+    code = await auth_service.send_code(db, data.email, "register")
+    if not settings.EMAIL_API_KEY:
+        return {"status": "ok", "message": "验证码已发送", "code": code}
     return {"status": "ok", "message": "验证码已发送"}
 
 

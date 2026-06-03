@@ -18,7 +18,7 @@ import { useDashboardStore } from "@/stores/dashboardStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useTokenUsageStore, estimateCost } from "@/stores/tokenUsageStore";
 import type { InfiniteData } from "@tanstack/react-query";
-import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, SSEError, Conversation, Message, MessageListData, PlanSubtask } from "@/types";
+import type { SSEMessageStart, SSEToken, SSEArtifact, SSEAgentStatus, SSEThinking, SSEMessageEnd, SSEError, Conversation, Message, MessageListData, PlanSubtask, Attachment } from "@/types";
 
 interface ChatAreaProps {
   conversations: Conversation[];
@@ -165,16 +165,45 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const handleRefinePlan = useCallback(() => {
     setPlanFocusKey((k) => k + 1);
   }, []);
-  const sendRef = useRef<(convId: string, content: string, mentions: string[]) => void>(null!);
+  const sendRef = useRef<(convId: string, content: string, mentions: string[], attachments?: Attachment[]) => void>(null!);
 
   useEffect(() => {
+    const msgId = streamMsgIdRef.current;
+    if (msgId) {
+      const sc = useChatStore.getState().getStreamingContent(msgId);
+      if (sc && sc.content) {
+        qc.setQueryData<InfiniteData<MessageListData>>(["messages", activeId], (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page, idx) => {
+              if (idx !== 0) return page;
+              const existing = page.items.find((m) => m.id === msgId);
+              if (existing) {
+                return { ...page, items: page.items.map((m) => m.id === msgId ? { ...m, content: sc.content, artifacts: sc.artifacts } : m) };
+              }
+              const partial: Message = {
+                id: msgId, conversationId: activeId ?? "",
+                senderType: "agent", senderId: streamSenderIdRef.current,
+                senderName: streamAgentRef.current, contentType: "text",
+                content: sc.content, artifacts: sc.artifacts,
+                status: "failed", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+              };
+              return { ...page, items: [partial, ...page.items] };
+            }),
+          };
+        });
+      }
+    }
     disconnectRef.current?.();
     stopAllStreaming();
     streamMsgIdRef.current = null;
     streamAgentRef.current = "";
+    streamSenderIdRef.current = "";
     setIsStreaming(false);
     clearAgentStatuses();
     setDagTaskId(null);
+    setPlannerAgentId(null);
     useChatStore.getState().setPersistedThinkingSteps([]);
 
     return () => {
@@ -277,7 +306,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     },
   }), [qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
 
-  const executeSend = useCallback((convId: string, content: string, mentions: string[], conv: Conversation | undefined) => {
+  const executeSend = useCallback((convId: string, content: string, mentions: string[], conv: Conversation | undefined, attachments?: Attachment[]) => {
     setConnectionStatus('connected');
     setRetryCount(0);
     if (retryRef.current.timeoutId) {
@@ -295,6 +324,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       contentType: "text",
       content,
       artifacts: [],
+      attachments: attachments ?? [],
       status: "done",
       meta: null,
       createdAt: now,
@@ -330,6 +360,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       mode: msgMode,
       plannerAgentId: conv?.type === "group" ? plannerAgentIdRef.current : undefined,
       plan_id: _pendingPlan?.planId,
+      attachments: attachments ?? [],
     }).then((response) => {
       const realMsg = response.data?.data as Message | undefined;
       if (realMsg) {
@@ -407,9 +438,9 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     });
   }, [activeId, qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
 
-  sendRef.current = (convId: string, content: string, mentions: string[]) => {
+  sendRef.current = (convId: string, content: string, mentions: string[], attachments?: Attachment[]) => {
     const conv = conversations.find((c) => c.id === convId);
-    executeSend(convId, content, mentions, conv);
+    executeSend(convId, content, mentions, conv, attachments);
   };
 
   const handleRegenerate = useCallback((convId: string, msgId: string) => {
@@ -502,7 +533,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     };
   }, [handleConfirmPlan, handleAdjustPlan]);
 
-  const handleSend = useCallback(async (content: string, mentions: string[]) => {
+  const handleSend = useCallback(async (content: string, mentions: string[], attachments: Attachment[] = []) => {
     if (!activeId || !conversation) return;
 
     // In group chat, auto-include all conversation agents when no @mentions
@@ -534,7 +565,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       return;
     }
 
-    executeSend(activeId, content, mentions, conversation);
+    executeSend(activeId, content, mentions, conversation, attachments);
   }, [activeId, conversation, agents, executeSend]);
 
   const handleSwitchToSingle = useCallback(() => {
@@ -737,49 +768,10 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           </p>
         </div>
       ) : filteredMessages.length === 0 && !isStreaming && !messageSearch ? (
-        <div style={{
-          padding: "0 16px 16px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-        }}>
-          <p style={{
-            fontSize: "var(--font-size-sm)",
-            color: "var(--color-text-tertiary)",
-            textAlign: "center",
-            marginBottom: 4,
-          }}>
-            试试这些话题：
+        <div style={{ padding: "32px 16px", textAlign: "center" }}>
+          <p style={{ fontSize: "var(--font-size-md)", color: "var(--color-text-tertiary)" }}>
+            发送第一条消息开始对话
           </p>
-          {["帮我写一个 React 组件", "解释一下这段代码", "帮我设计一个 API 接口"].map((starter) => (
-            <button
-              key={starter}
-              onClick={() => handleSend(starter, [])}
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                padding: "10px 16px",
-                border: "1px solid var(--color-border-light)",
-                borderRadius: "var(--radius-md)",
-                background: "var(--color-bg-elevated)",
-                fontSize: "var(--font-size-md)",
-                color: "var(--color-text-secondary)",
-                cursor: "pointer",
-                transition: "all var(--duration-fast) var(--ease-out)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "var(--color-primary)";
-                e.currentTarget.style.color = "var(--color-primary)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "var(--color-border-light)";
-                e.currentTarget.style.color = "var(--color-text-secondary)";
-              }}
-            >
-              {starter}
-            </button>
-          ))}
         </div>
       ) : null}
       <ChatInput key={activeId} onSend={handleSend} onStop={handleStop} disabled={isStreaming} agents={agents} focusKey={planFocusKey} />

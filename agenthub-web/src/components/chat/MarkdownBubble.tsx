@@ -12,7 +12,12 @@ const components: Components = {
     if (inline) {
       return (
         <code
-          className="bg-gray-200 text-amber-700 rounded px-1.5 py-0.5 text-[0.8em] font-mono break-all"
+          style={{
+            background: (typeof document !== "undefined" && document.body.getAttribute("theme-mode") === "dark") ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.06)",
+            color: (typeof document !== "undefined" && document.body.getAttribute("theme-mode") === "dark") ? "#f0a060" : "#b65a10",
+            borderRadius: 3, padding: "1px 5px", fontSize: "0.8em",
+            fontFamily: "monospace", wordBreak: "break-all",
+          }}
           {...props}
         >
           {code}

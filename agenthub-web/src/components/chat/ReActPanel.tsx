@@ -92,9 +92,13 @@ export function ReActPanel() {
 
   useEffect(() => {
     if (!initialized.current && panelRef.current) {
-      const rect = panelRef.current.getBoundingClientRect();
-      setPos({ x: window.innerWidth - rect.width - 32, y: window.innerHeight - rect.height - 200 });
-      initialized.current = true;
+      requestAnimationFrame(() => {
+        if (panelRef.current) {
+          const rect = panelRef.current.getBoundingClientRect();
+          setPos({ x: window.innerWidth - rect.width - 32, y: window.innerHeight - rect.height - 200 });
+          initialized.current = true;
+        }
+      });
     }
   }, [allSteps.length > 0]);
 

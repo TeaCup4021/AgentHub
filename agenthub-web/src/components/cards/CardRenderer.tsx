@@ -3,6 +3,8 @@ import { DiffCard } from "./DiffCard";
 import { PreviewCard } from "./PreviewCard";
 import { FileCard } from "./FileCard";
 import { DeployStatusCard } from "./DeployStatusCard";
+import { DocumentCard } from "./DocumentCard";
+import { LinkPreviewCard } from "./LinkPreviewCard";
 import type { Artifact } from "@/types";
 import { memo } from "react";
 import type { FC } from "react";
@@ -17,6 +19,8 @@ const cardRenderers: Record<string, FC<CardRendererProps>> = {
   preview: PreviewCard,
   file: FileCard,
   deploy_status: DeployStatusCard,
+  document: DocumentCard,
+  link_preview: LinkPreviewCard,
 };
 
 export const CardRenderer = memo(function CardRenderer({ artifact }: CardRendererProps) {

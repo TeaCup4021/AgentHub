@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import hashlib
 from typing import Dict
 
 from sqlalchemy import func, select
@@ -16,7 +18,10 @@ def build_artifact_merge_key(message_id: str, artifact_payload: Dict) -> str:
 
     artifact_type = artifact_payload.get("artifactType") or artifact_payload.get("artifact_type") or "unknown"
     title = artifact_payload.get("title") or ""
-    return f"fallback:{message_id}:{artifact_type}:{title}"
+    content = artifact_payload.get("content") or {}
+    content_str = json.dumps(content, sort_keys=True, ensure_ascii=False)
+    content_hash = hashlib.md5(content_str.encode()).hexdigest()[:12]
+    return f"fallback:{message_id}:{artifact_type}:{content_hash}"
 
 
 class ArtifactService:

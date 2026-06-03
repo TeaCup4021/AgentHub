@@ -6,8 +6,11 @@ making basic operations available as ADK FunctionTools.
 
 from __future__ import annotations
 
+import json
 import os
+import uuid
 import asyncio
+import mimetypes
 from app.services.adk.tool_loader import register_builtin
 
 
@@ -37,15 +40,35 @@ async def create_file(file_path: str, content: str) -> str:
         content: The text content to write into the file.
 
     Returns:
-        A success message or an error message.
+        JSON string with file metadata including download_url.
     """
     try:
         os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
-        return f"Successfully created file {file_path}"
     except Exception as e:
         return f"Error creating file {file_path}: {str(e)}"
+
+    try:
+        from app.services import storage
+        file_id = str(uuid.uuid4())
+        mime_type, _ = mimetypes.guess_type(file_path)
+        mime_type = mime_type or "text/plain"
+        file_name = os.path.basename(file_path)
+        content_bytes = content.encode("utf-8")
+        storage.upload_file(content_bytes, f"files/{file_id}", mime_type)
+        result = {
+            "status": "created",
+            "file_path": file_path,
+            "file_id": file_id,
+            "download_url": f"/api/v1/files/{file_id}/download",
+            "file_name": file_name,
+            "file_size": len(content_bytes),
+            "mime_type": mime_type,
+        }
+        return f"Successfully created file {file_path}\n{json.dumps(result, ensure_ascii=False)}"
+    except Exception:
+        return f"Successfully created file {file_path} (storage unavailable)"
 
 
 @register_builtin("edit_file")
@@ -120,7 +143,6 @@ async def web_search(query: str) -> str:
     import urllib.parse
 
     try:
-        # A simple web request without complex HTML parsing
         url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
         req = urllib.request.Request(
             url,
@@ -130,8 +152,35 @@ async def web_search(query: str) -> str:
         def fetch():
             with urllib.request.urlopen(req, timeout=10) as response:
                 content = response.read().decode('utf-8')
-                # Simplistic text snippet return to simulate real tools
                 return f"Searched for: {query}. Content payload received (length: {len(content)})."
         return await loop.run_in_executor(None, fetch)
     except Exception as e:
         return f"Error in web search: {str(e)}"
+
+
+@register_builtin("preview_publish")
+async def preview_publish(html: str, title: str = "") -> str:
+    """Publishes HTML content as a preview page accessible via sandboxed iframe.
+
+    Args:
+        html: The full HTML content to publish.
+        title: Optional page title.
+
+    Returns:
+        JSON string with preview_url and preview_id.
+    """
+    try:
+        from app.services import storage
+        from app.core.config import settings
+        preview_id = str(uuid.uuid4())
+        storage.upload_file(html.encode("utf-8"), f"previews/{preview_id}.html", "text/html")
+        preview_url = f"{settings.PREVIEW_SERVER_URL}/preview/{preview_id}"
+        result = {
+            "status": "published",
+            "preview_id": preview_id,
+            "preview_url": preview_url,
+            "title": title or "Preview",
+        }
+        return f"Preview published successfully\n{json.dumps(result, ensure_ascii=False)}"
+    except Exception as e:
+        return f"Error publishing preview: {str(e)}"

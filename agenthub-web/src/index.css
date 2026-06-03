@@ -198,9 +198,8 @@ button:active:not(:disabled) {
 /* Size label */
 .artifact-card__size-label {
   font-size: 9px; font-family: monospace; color: var(--color-text-tertiary);
-  opacity: 0; transition: opacity .2s; margin-right: 4px;
+  opacity: 0.65; transition: opacity .2s; margin-right: 4px;
 }
-.artifact-card__size-label.visible { opacity: .65; }
 
 /* HighlightedCode 在卡片内的透明背景适配 — 消除嵌套卡片感 */
 .artifact-card-code .artifact-card__body > div {
