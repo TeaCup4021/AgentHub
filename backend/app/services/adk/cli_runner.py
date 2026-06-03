@@ -50,10 +50,20 @@ def _resolve_cli_exe(cli_path: str) -> list[str]:
     if sys.platform != "win32":
         return [cli_path]
 
-    # Read the .cmd shim
+    # Resolve the .cmd file via PATH if not an absolute/relative path
     cmd_path = cli_path if cli_path.endswith(".cmd") else cli_path + ".cmd"
     if not os.path.isfile(cmd_path):
-        return [cli_path]
+        import shutil
+        resolved_cmd = shutil.which(cmd_path)
+        if resolved_cmd:
+            cmd_path = resolved_cmd
+        else:
+            # Also try the bare name (e.g. "claude" on bash might be a shell script)
+            resolved_cmd = shutil.which(cli_path)
+            if resolved_cmd:
+                cmd_path = resolved_cmd
+            else:
+                return [cli_path]
 
     try:
         with open(cmd_path, encoding="utf-8", errors="replace") as f:
@@ -435,3 +445,15 @@ def get_codex_runner() -> CodexCliRunner:
             workspace_dir=settings.CLI_DEFAULT_WORKSPACE,
         )
     return _codex_runner
+
+
+async def claude_code_tool(prompt: str, timeout: int = 300) -> dict:
+    """Run Claude Code CLI non-streaming. Returns {success, result, error} dict."""
+    result = await get_claude_runner().run(prompt=prompt, timeout=timeout)
+    return {"success": result.success, "result": result.result, "error": result.error}
+
+
+async def codex_cli_tool(prompt: str, timeout: int = 300) -> dict:
+    """Run Codex CLI non-streaming. Returns {success, result, error} dict."""
+    result = await get_codex_runner().run(prompt=prompt, timeout=timeout)
+    return {"success": result.success, "result": result.result, "error": result.error}

@@ -85,8 +85,16 @@ class MergeAggregator:
             else:
                 summary = ""
 
+            # Resolve agent_name from plan subtasks (agent_name field),
+            # falling back to row.agent_id if not found.
+            resolved_agent_name = str(row.agent_id)[:12]
+            for st in plan_subtasks:
+                if str(st.get("agent_id", st.get("agentId", ""))) == str(row.agent_id):
+                    resolved_agent_name = st.get("agent_name", st.get("agentName", resolved_agent_name))
+                    break
+
             sub_summaries.append(SubAgentSummary(
-                agent_name=row.mode if row.mode else "Agent",
+                agent_name=resolved_agent_name,
                 subtask_id=st_id or str(row.agent_id)[:12],
                 status=row.status or "unknown",
                 latency_ms=row.latency_ms,

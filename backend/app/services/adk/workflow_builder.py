@@ -10,6 +10,9 @@ from app.schemas.orchestrator import OrchestratorPlan
 from app.services.adk.execution_tracer import ExecutionTracer
 from app.services.adk.models import get_anthropic_llm
 from app.services.adk.tool_loader import ToolLoader
+import logging
+
+logger = logging.getLogger("agenthub.workflow_builder")
 
 
 class WorkflowBuilder:
@@ -34,32 +37,77 @@ class WorkflowBuilder:
         })
 
         agent_map: dict[str, LlmAgent] = {}
+        used_names: set[str] = set()
         for st in plan.subtasks:
             db_agent = agent_models.get(st.agent_id)
-            agent_name = "agent_" + str(st.agent_id).replace("-", "_")
+            # Build unique agent name: "agent_<agent_id>" with a dedup counter
+            # when the same agent appears multiple times in the plan.
+            base_name = "agent_" + str(st.agent_id).replace("-", "_")
+            agent_name = base_name
+            dedup = 1
+            while agent_name in used_names:
+                dedup += 1
+                agent_name = f"{base_name}_{dedup}"
+            used_names.add(agent_name)
+
+            agent_mode = st.mode or "single_turn"
 
             if db_agent is not None:
-                instruction = self._merge_instruction(db_agent, st.instruction)
-                model = self._resolve_model(db_agent)
-                tools = tool_loader.load(db_agent.tool_config)
+                # Route through AdapterRegistry so CLI agents get proper
+                # before_model_callback interception instead of being sent
+                # to LiteLLM as an invalid model.
+                try:
+                    from app.services.adapters.base import AdapterRegistry as _AR
+                    adapter = _AR.get_for_agent(db_agent)
+                    agent = adapter.build_agent(db_agent, tool_loader=tool_loader)
+                    # Override name & mode for DAG graph node usage
+                    agent.name = agent_name
+                    agent.mode = agent_mode
+                    # Attach execution tracer callbacks
+                    if execution_tracer is not None:
+                        agent.before_agent_callback = execution_tracer.before_agent
+                        agent.after_agent_callback = execution_tracer.after_agent
+                except ValueError:
+                    # No adapter registered: build directly (non-CLI agents)
+                    instruction = self._merge_instruction(db_agent, st.instruction)
+                    model = self._resolve_model(db_agent)
+                    tools = tool_loader.load(db_agent.tool_config)
+                    agent_kwargs: dict = {
+                        "name": agent_name,
+                        "model": model,
+                        "instruction": instruction,
+                        "tools": tools,
+                        "output_key": st.output_key,
+                        "mode": agent_mode,
+                    }
+                    if execution_tracer is not None:
+                        agent_kwargs["before_agent_callback"] = execution_tracer.before_agent
+                        agent_kwargs["after_agent_callback"] = execution_tracer.after_agent
+                    agent = LlmAgent(**agent_kwargs)
             else:
                 instruction = st.instruction
                 model = get_anthropic_llm()
                 tools = []
+                agent_kwargs: dict = {
+                    "name": agent_name,
+                    "model": model,
+                    "instruction": instruction,
+                    "tools": tools,
+                    "output_key": st.output_key,
+                    "mode": agent_mode,
+                }
+                if execution_tracer is not None:
+                    agent_kwargs["before_agent_callback"] = execution_tracer.before_agent
+                    agent_kwargs["after_agent_callback"] = execution_tracer.after_agent
+                agent = LlmAgent(**agent_kwargs)
 
-            agent_kwargs: dict = {
-                "name": agent_name,
-                "model": model,
-                "instruction": instruction,
-                "tools": tools,
-                "output_key": st.output_key,
-            }
-            if execution_tracer is not None:
-                agent_kwargs["before_agent_callback"] = execution_tracer.before_agent
-                agent_kwargs["after_agent_callback"] = execution_tracer.after_agent
-
-            agent = LlmAgent(**agent_kwargs)
             agent_map[st.subtask_id] = agent
+            logger.info(
+                "DAG node[%d/%d]: name=%s mode=%s provider=%s instruction=%.80s...",
+                len(agent_map), len(plan.subtasks), agent_name, agent_mode,
+                getattr(db_agent, "provider", "unknown") if db_agent else "unknown",
+                (db_agent.system_prompt or st.instruction)[:80] if db_agent else st.instruction[:80],
+            )
 
         edges: list[Edge] = []
         dependent_ids: set[str] = set()
@@ -93,6 +141,17 @@ class WorkflowBuilder:
                 edges.append(Edge(from_node=agent_map[tid], to_node=final_join))
 
         concurrency = int(os.getenv("AGENTHUB_WORKFLOW_MAX_CONCURRENCY", "3"))
+        max_c = min(len(agent_map), concurrency) if agent_map else 1
+        logger.info(
+            "Workflow.build: agents=%d edges=%d max_concurrency=%d",
+            len(agent_map), len(edges), max_c,
+        )
+        for e in edges:
+            logger.info(
+                "  edge: %s -> %s",
+                getattr(e.from_node, "name", str(e.from_node)),
+                getattr(e.to_node, "name", str(e.to_node)),
+            )
         return Workflow(
             name="orchestrator_plan",
             edges=edges,

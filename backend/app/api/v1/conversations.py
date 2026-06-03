@@ -48,9 +48,11 @@ def _build_agent_order(subtasks: list) -> list[str]:
     """Convert plan subtasks (in plan order) to ADK agent name list.
 
     Each subtask's agent_id is mapped to the ADK-internal agent name
-    that WorkflowBuilder creates: ``"agent_<uuid-with-dashes-replaced>"``.
+    that WorkflowBuilder creates: ``"agent_<uuid-with-dashes-replaced>"``
+    with a dedup counter when the same agent appears multiple times.
     """
     order: list[str] = []
+    counter: dict[str, int] = {}
     for st in subtasks:
         agent_id = None
         if hasattr(st, "agent_id"):
@@ -58,7 +60,12 @@ def _build_agent_order(subtasks: list) -> list[str]:
         elif isinstance(st, dict):
             agent_id = st.get("agent_id", "")
         if agent_id:
-            order.append("agent_" + agent_id.replace("-", "_"))
+            base = "agent_" + agent_id.replace("-", "_")
+            counter[base] = counter.get(base, 0) + 1
+            if counter[base] == 1:
+                order.append(base)
+            else:
+                order.append(f"{base}_{counter[base]}")
     return order
 
 
@@ -549,19 +556,20 @@ async def _orchestrator_plan_stream(
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
-
-    chars = list(result.raw_text)
-    for i, ch in enumerate(chars):
+    chars = result.raw_text
+    batch_size = 3
+    for i in range(0, len(chars), batch_size):
+        batch = chars[i:i + batch_size]
         yield _format_sse("token", {
             "version": "v1",
             "event_id": str(uuid4()),
             "conversation_id": str(conv_id),
             "message_id": str(plan_msg.id),
-            "delta": ch,
+            "delta": batch,
             "index": i,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
-        await asyncio.sleep(0.02)
+        await asyncio.sleep(0.003)
 
     yield _format_sse("message_end", {
         "version": "v1",
@@ -714,16 +722,19 @@ async def _orchestrator_refine_stream(
             "planner_agent_id": str(orch_task.planner_agent_id) if orch_task.planner_agent_id else None,
             "planner_agent_name": planner_name,
         },
-        "timestamp": datetime.now(timezone.utc).isoformat(),
     })
-    for i, ch in enumerate(list(result.raw_text)):
+
+    chars = result.raw_text
+    batch_size = 3
+    for i in range(0, len(chars), batch_size):
+        batch = chars[i:i + batch_size]
         yield _format_sse("token", {
             "version": "v1", "event_id": str(uuid4()),
             "conversation_id": str(conv_id), "message_id": str(plan_msg.id),
-            "delta": ch, "index": i,
+            "delta": batch, "index": i,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
-        await asyncio.sleep(0.02)
+        await asyncio.sleep(0.003)
     yield _format_sse("message_end", {
         "version": "v1", "event_id": str(uuid4()),
         "conversation_id": str(conv_id), "message_id": str(plan_msg.id),
@@ -814,7 +825,6 @@ async def _accumulate_stream_events(
             except Exception:
                 logger.exception("persist fallback stream message failed")
 
-
 async def _coordinator_stream(
     conv_id: UUID,
     user_id: UUID,
@@ -822,8 +832,13 @@ async def _coordinator_stream(
     orch_task: OrchestratorTask,
     db: AsyncSession,
 ) -> AsyncGenerator[str, None]:
-    """Coordinator mode: LLM dynamically schedules sub-agents via ADK Collaborative Workflow."""
+    """Coordinator mode: LLM dynamically schedules sub-agents via ADK Collaborative Workflow.
+
+    When orch_task.planner_agent_id is set, that agent acts as the coordinator;
+    otherwise the default DeepSeek orchestrator is used.
+    """
     from app.models.agent import Agent as AgentModel
+    from app.services.adk.runner import _sanitize_agent_name
 
     plan = orch_task.plan or {}
     subtasks = plan.get("subtasks", [])
@@ -842,12 +857,32 @@ async def _coordinator_stream(
         })
         return
 
+    # Resolve coordinator agent if user specified one via planner_agent_id
+    coordinator_agent_model = None
+    if orch_task.planner_agent_id:
+        coord_result = await db.execute(
+            select(AgentModel).where(AgentModel.id == orch_task.planner_agent_id)
+        )
+        coordinator_agent_model = coord_result.scalar_one_or_none()
+        if coordinator_agent_model:
+            logger.info(
+                "Coordinator: using agent-planned coordinator | agent=%s model=%s",
+                coordinator_agent_model.name, coordinator_agent_model.model,
+            )
+
     tracer = ExecutionTracer()
-    coordinator = CoordinatorBuilder().build(agent_models, execution_tracer=tracer)
+    coordinator = CoordinatorBuilder().build(
+        agent_models,
+        execution_tracer=tracer,
+        coordinator_agent=coordinator_agent_model,
+    )
     runner = AgentHubRunner(agent=coordinator, app_name="agenthub_orchestrator")
 
-    # Build agent emission order from plan subtasks
-    agent_order = _build_agent_order(subtasks)
+    # Build agent emission order using sanitized agent names (matching ADK naming)
+    agent_order = [
+        _sanitize_agent_name(am.name)
+        for am in agent_models
+    ]
     translator = ADKToSSETranslator(sequential=True, agent_order=agent_order)
 
     try:
@@ -875,16 +910,115 @@ async def _coordinator_stream(
         })
 
     # Update orchestrator_subtasks with execution metrics
+    # Use sanitized names to match tracer records (ADK uses sanitized agent names)
     await _update_subtask_metrics(
         orch_task_id=orch_task.id,
         tracer=tracer,
         agent_name_to_agent_id={
-            am.name: am.id for am in agent_models
+            _sanitize_agent_name(am.name): am.id
+            for am in agent_models
         },
     )
 
-    # MergeAggregator: generate orchestrator summary
-    await _run_merge_aggregator(db, orch_task.id, conv_id)
+    # MergeAggregator: generate orchestrator summary and stream via SSE
+    # (streaming ensures the frontend receives it before the connection closes;
+    #  DB-only creation would race with the frontend's onMessageEnd refetch.)
+    try:
+        aggregator = MergeAggregator()
+        merge_result = await aggregator.aggregate(db, orch_task.id)
+
+        if merge_result.summary_text:
+            # --- Step 1: Persist to DB FIRST (so frontend refetch finds it) ---
+            from app.models.message import Message as MsgModel
+            from app.models.artifact import Artifact
+
+            summary_meta = {
+                "summary": {
+                    "total": len(merge_result.sub_summaries),
+                    "success": sum(1 for s in merge_result.sub_summaries if s.status == "success"),
+                    "failed": sum(1 for s in merge_result.sub_summaries if s.status == "failed"),
+                    "results": [
+                        {
+                            "subtask_id": s.subtask_id,
+                            "agent_name": s.agent_name,
+                            "status": s.status,
+                            "latency_ms": s.latency_ms,
+                            "summary": s.summary[:200],
+                        }
+                        for s in merge_result.sub_summaries
+                    ],
+                }
+            }
+
+            summary_msg = MsgModel(
+                conversation_id=conv_id,
+                sender_type="orchestrator",
+                content=merge_result.summary_text,
+                status="done",
+                meta_data=summary_meta,
+            )
+            db.add(summary_msg)
+            await db.flush()
+
+            artifact = Artifact(
+                conversation_id=conv_id,
+                message_id=summary_msg.id,
+                artifact_type="orchestrator_summary",
+                title="Orchestrator Summary",
+                content={
+                    "sub_summaries": [
+                        {
+                            "agent_name": s.agent_name,
+                            "subtask_id": s.subtask_id,
+                            "status": s.status,
+                            "latency_ms": s.latency_ms,
+                            "summary": s.summary,
+                            "output_message_id": s.output_message_id,
+                            "depends_on": s.depends_on,
+                        }
+                        for s in merge_result.sub_summaries
+                    ],
+                    "has_conflict": merge_result.has_conflict,
+                    "conflict_detail": merge_result.conflict_detail,
+                },
+            )
+            db.add(artifact)
+
+            # --- Step 2: Stream via SSE (DB already flushed, refetch will see it) ---
+            summary_msg_id = str(summary_msg.id)
+
+            yield _format_sse("message_start", {
+                "version": "v1",
+                "event_id": str(uuid4()),
+                "conversation_id": str(conv_id),
+                "message_id": summary_msg_id,
+                "sender": {"type": "orchestrator", "id": "orchestrator", "name": "Orchestrator"},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            # token events for summary text
+            summary_chars = list(merge_result.summary_text)
+            for i, ch in enumerate(summary_chars):
+                yield _format_sse("token", {
+                    "version": "v1",
+                    "event_id": str(uuid4()),
+                    "conversation_id": str(conv_id),
+                    "message_id": summary_msg_id,
+                    "delta": ch,
+                    "index": i,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+            # message_end
+            yield _format_sse("message_end", {
+                "version": "v1",
+                "event_id": str(uuid4()),
+                "conversation_id": str(conv_id),
+                "message_id": summary_msg_id,
+                "finish_reason": "completed",
+                "usage": {},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+    except Exception:
+        logger.exception("MergeAggregator/SSE summary failed for task=%s", orch_task.id)
 
     # Persist DAG data from tracer
     dag_data = tracer.get_dag_data()
@@ -946,12 +1080,18 @@ async def _dag_workflow_stream(
     tracer = ExecutionTracer()
     workflow = WorkflowBuilder().build(plan_obj, agent_models=agent_models, execution_tracer=tracer)
     runner = AgentHubRunner(node=workflow, app_name="agenthub_orchestrator")
+    logger.info(
+        "DAG workflow start: conv=%s task=%s subtasks=%d prompt=%.80s...",
+        conv_id, orch_task.id, len(plan_obj.subtasks), (prompt or "(empty)")[:80],
+    )
 
     # Build agent emission order from plan subtasks
     agent_order = _build_agent_order(plan_obj.subtasks)
     translator = ADKToSSETranslator(sequential=True, agent_order=agent_order)
 
     try:
+        event_count = 0
+        agent_events: dict[str, int] = {}
         async for sse_event in _accumulate_stream_events(
             translator.translate(
                 runner.stream_single_chat(
@@ -963,7 +1103,18 @@ async def _dag_workflow_stream(
             ),
             conv_id=conv_id,
         ):
+            event_count += 1
+            # Track per-agent event counts from SSE payload
+            event_data = _parse_sse_data(sse_event)
+            if event_data:
+                sender = event_data.get("sender", {})
+                agent = (sender.get("name") or sender.get("id") or "unknown") if isinstance(sender, dict) else "unknown"
+                agent_events[agent] = agent_events.get(agent, 0) + 1
             yield sse_event
+        logger.info(
+            "DAG workflow done: conv=%s total_sse_events=%d agent_breakdown=%s tracer_records=%d",
+            conv_id, event_count, dict(agent_events), len(tracer.records),
+        )
     except Exception:
         logger.exception("DAG workflow stream failed for conv=%s", conv_id)
         yield _format_sse("error", {
@@ -977,8 +1128,14 @@ async def _dag_workflow_stream(
 
     # Update orchestrator_subtasks with execution metrics
     name_to_agent_id: dict[str, UUID] = {}
+    agent_name_counter: dict[str, int] = {}
     for st in plan_obj.subtasks:
-        agent_name = "agent_" + str(st.agent_id).replace("-", "_")
+        base = "agent_" + str(st.agent_id).replace("-", "_")
+        agent_name_counter[base] = agent_name_counter.get(base, 0) + 1
+        if agent_name_counter[base] == 1:
+            agent_name = base
+        else:
+            agent_name = f"{base}_{agent_name_counter[base]}"
         name_to_agent_id[agent_name] = st.agent_id
     await _update_subtask_metrics(
         orch_task_id=orch_task.id,
@@ -1069,12 +1226,20 @@ async def _update_subtask_metrics(
             )
             subtask_rows = list(result.scalars().all())
 
+                        # Sort subtask_rows by execution_order for deterministic dedup naming
+            subtask_rows.sort(key=lambda r: r.execution_order or 0)
+            name_counter: dict[str, int] = {}
             for row in subtask_rows:
                 agent_id_str = str(row.agent_id)
+                base = "agent_" + agent_id_str.replace("-", "_")
+                name_counter[base] = name_counter.get(base, 0) + 1
+                if name_counter[base] == 1:
+                    expected_name = base
+                else:
+                    expected_name = f"{base}_{name_counter[base]}"
                 # Find matching tracer record by agent_name patterns
                 for rec in tracer.records.values():
-                    # DAG mode: agent_name = "agent_<uuid-with-dashes-replaced>"
-                    expected_name = "agent_" + agent_id_str.replace("-", "_")
+                    # DAG mode: agent_name = "agent_<uuid-with-dashes-replaced>[_<n>]"
                     # Coordinator mode: agent_name = AgentModel.name
                     matched_agent_id = agent_name_to_agent_id.get(rec.agent_name)
                     if rec.agent_name == expected_name or matched_agent_id == row.agent_id:
@@ -1089,7 +1254,6 @@ async def _update_subtask_metrics(
                             except (ValueError, TypeError):
                                 pass
                         break
-
             await u_db.commit()
     except Exception:
         logger.exception("Failed to update subtask metrics for task=%s", orch_task_id)
@@ -1138,9 +1302,9 @@ async def stream_conversation(
             _orchestrator_refine_stream(conv_id, refine_task, db, planner_agent_id),
             media_type="text/event-stream",
         )
-
-    # Phase 2: Plan confirmed — execute workflow
-    # Auto-route: agent-planned → DAG; LLM-planned → Coordinator
+    # Phase 2: Plan confirmed — execute workflow (always Coordinator mode)
+    # If planner_agent_id is set, _coordinator_stream uses that agent as
+    # the coordinator; otherwise it falls back to the default orchestrator.
     result = await db.execute(
         select(OrchestratorTask)
         .where(
@@ -1153,18 +1317,10 @@ async def stream_conversation(
     confirmed_task = result.scalar_one_or_none()
 
     if confirmed_task:
-        if confirmed_task.planner_agent_id:
-            # Agent-planned → DAG mode (structured, predictable execution)
-            return StreamingResponse(
-                _dag_workflow_stream(conv_id, user_id, prompt, confirmed_task, db),
-                media_type="text/event-stream",
-            )
-        else:
-            # LLM-planned → Coordinator mode (dynamic scheduling)
-            return StreamingResponse(
-                _coordinator_stream(conv_id, user_id, prompt, confirmed_task, db),
-                media_type="text/event-stream",
-            )
+        return StreamingResponse(
+            _coordinator_stream(conv_id, user_id, prompt, confirmed_task, db),
+            media_type="text/event-stream",
+        )
 
     # If a previous orchestration attempt failed, surface the error instead of
     # silently falling through to single-agent CLI/ADK routing.

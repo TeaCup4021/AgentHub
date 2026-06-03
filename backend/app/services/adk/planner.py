@@ -315,24 +315,28 @@ class OrchestratorPlanner:
         user_message: str,
         agents: List[Agent],
     ) -> OrchestratorPlan:
-        match = re.search(r"\{[\s\S]*\"subtasks\"[\s\S]*\}", raw_text)
-        if match:
+        # Use raw_decode to extract the first complete JSON object, ignoring
+        # any trailing text the LLM may have appended after the JSON block.
+        start = raw_text.find("{")
+        if start != -1:
             try:
-                data = json.loads(match.group(0))
-                subtasks = [
-                    SubTaskPlan(
-                        subtask_id=item.get("subtaskId", self._gen_subtask_id()),
-                        agent_id=UUID(item["agentId"]),
-                        agent_name=item["agentName"],
-                        instruction=item["instruction"],
-                        depends_on=item.get("dependsOn", []),
-                        mode=item.get("mode", "single_turn"),
-                        output_key=item.get("outputKey"),
-                    )
-                    for item in data.get("subtasks", [])
-                ]
-                if subtasks:
-                    return OrchestratorPlan(subtasks=subtasks)
+                decoder = json.JSONDecoder()
+                data, _ = decoder.raw_decode(raw_text, start)
+                if "subtasks" in data:
+                    subtasks = [
+                        SubTaskPlan(
+                            subtask_id=item.get("subtaskId", self._gen_subtask_id()),
+                            agent_id=UUID(item["agentId"]),
+                            agent_name=item["agentName"],
+                            instruction=item["instruction"],
+                            depends_on=item.get("dependsOn", []),
+                            mode=item.get("mode", "single_turn"),
+                            output_key=item.get("outputKey"),
+                        )
+                        for item in data.get("subtasks", [])
+                    ]
+                    if subtasks:
+                        return OrchestratorPlan(subtasks=subtasks)
             except (json.JSONDecodeError, KeyError, ValueError) as e:
                 logger.warning("Plan JSON parse failed: %s", e)
 

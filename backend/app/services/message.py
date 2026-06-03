@@ -165,13 +165,20 @@ class MessageService:
                 if name:
                     meta_fallbacks[(m.sender_type, m.sender_id)] = name
 
+        # batch-check pinned message ids
+        pinned_ids: set = set()
+        from app.models.message_pin import MessagePin as Mpin
+        pin_q = select(Mpin.message_id).where(Mpin.message_id.in_(msg_ids))
+        pin_r = await db.execute(pin_q)
+        pinned_ids = {row[0] for row in pin_r.all()}
+
         # batch-resolve sender_names
         sender_names = await MessageService._batch_get_sender_names(
             db, [(m.sender_type, m.sender_id) for m in messages], meta_fallbacks
         )
 
         items = [
-            MessageService._format_message(m, sender_names.get((m.sender_type, m.sender_id), "Unknown"), art_map.get(m.id, []))
+            MessageService._format_message(m, sender_names.get((m.sender_type, m.sender_id), "Unknown"), art_map.get(m.id, []), is_pinned=m.id in pinned_ids)
             for m in messages
         ]
 
@@ -179,7 +186,7 @@ class MessageService:
         return MessageListResponse(items=items, next_cursor=next_cursor, has_more=has_more)
 
     @staticmethod
-    def _format_message(msg: Message, sender_name: str, artifacts: list) -> dict:
+    def _format_message(msg: Message, sender_name: str, artifacts: list, is_pinned: bool = False) -> dict:
         return {
             "id": msg.id,
             "conversation_id": msg.conversation_id,
@@ -192,6 +199,7 @@ class MessageService:
             "status": msg.status,
             "meta": msg.meta_data,
             "artifacts": artifacts,
+            "is_pinned": is_pinned,
             "created_at": msg.created_at,
             "updated_at": msg.updated_at,
         }

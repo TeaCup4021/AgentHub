@@ -39,12 +39,12 @@ class Settings(BaseSettings):
     CODEX_CLI_PATH: str = "codex"
 
     # Claude Code CLI
-    CLAUDE_CODE_TIMEOUT_SECONDS: int = 300
+    CLAUDE_CODE_TIMEOUT_SECONDS: int = 600
     CLAUDE_CODE_MAX_BUDGET_USD: float = 5.0
     CLAUDE_CODE_ALLOWED_TOOLS: str = "Bash,Read,Edit,Write,Glob,Grep"
 
     # Codex CLI
-    CODEX_CLI_TIMEOUT_SECONDS: int = 300
+    CODEX_CLI_TIMEOUT_SECONDS: int = 600
     CODEX_CLI_MODEL: str = "deepseek-v4-pro"
 
     # Default workspace for CLI tools

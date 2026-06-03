@@ -39,6 +39,7 @@ class MessageResponse(BaseSchema):
     status: Literal["pending", "streaming", "done", "failed"]
     meta: Optional[dict] = None
     artifacts: List[ArtifactBrief] = []
+    is_pinned: bool = False
     created_at: datetime
     updated_at: datetime
 

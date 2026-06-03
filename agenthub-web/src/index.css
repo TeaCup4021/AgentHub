@@ -1,4 +1,4 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -229,4 +229,20 @@ html, body, #root {
   background: var(--color-bg-app);
   transition: color var(--duration-normal) var(--ease-out),
               background var(--duration-normal) var(--ease-out);
+}
+
+/* Pin message jump highlight */
+.message-flash {
+  animation: message-flash-anim 1.5s ease-out;
+  border-radius: var(--radius-lg);
+}
+@keyframes message-flash-anim {
+  0% {
+    background-color: rgba(250, 173, 20, 0.15);
+    box-shadow: 0 0 0 3px rgba(250, 173, 20, 0.55), 0 0 32px rgba(250, 173, 20, 0.25);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 3px transparent, 0 0 32px transparent;
+  }
 }

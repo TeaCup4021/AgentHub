@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useLayoutEffect, memo } from "react";
-import { Spin, Badge } from "@douyinfe/semi-ui";
+import { Spin, Badge, Tooltip } from "@douyinfe/semi-ui";
 import { motion } from "framer-motion";
+import { IconBookmark } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import { AgentDetailPopover } from "./AgentDetailPopover";
 import { AgentAvatarContextMenu } from "./AgentAvatarContextMenu";
@@ -12,6 +13,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CardRenderer } from "@/components/cards";
 import type { Agent, Message, ThinkingStep, PlanSubtask } from "@/types";
 import { ThinkingBlock } from "./ThinkingBlock";
+import { MessageContextMenu } from "./MessageContextMenu";
 import { OrchestratorPlan } from "./OrchestratorPlan";
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -33,7 +35,7 @@ const TimeSeparator = memo(function TimeSeparator({ time }: { time: string }) {
   );
 });
 
-const MessageBubble = memo(function MessageBubble({ message, agents, searchText, onRegenerate, onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId }: {
+const MessageBubble = memo(function MessageBubble({ message, agents, searchText, onRegenerate, onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId, onPin, onUnpin }: {
   message: Message;
   agents: Agent[];
   searchText?: string;
@@ -42,6 +44,9 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
   onAdjustPlan?: (subtasks: PlanSubtask[]) => void;
   onRefinePlan?: () => void;
   dagTaskId?: string | null;
+  onPin?: (msgId: string) => void;
+  onUnpin?: (msgId: string) => void;
+  scrollToMessageId?: string | null;
 }) {
   const isUser = message.senderType === "user";
   const isOrchestrator = message.senderType === "orchestrator";
@@ -55,6 +60,8 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
   const avatarRef = useRef<HTMLDivElement>(null);
   const [showPopover, setShowPopover] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showMsgMenu, setShowMsgMenu] = useState(false);
+  const [msgMenuPos, setMsgMenuPos] = useState({ top: 0, left: 0 });
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
 
@@ -93,6 +100,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
         flexDirection: isUser ? "row-reverse" : "row",
       }}
       title={formatFullTime(message.createdAt)}
+      onContextMenu={(e) => { if (onPin && onUnpin) { e.preventDefault(); setMsgMenuPos({ top: e.clientY, left: e.clientX }); setShowMsgMenu(true); } }}
     >
       {isFailed ? (
         <div style={{
@@ -146,7 +154,16 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
       {showPopover && agent && (
         <AgentDetailPopover agent={agent} position={popoverPos} onClose={closeAll} />
       )}
-      {showMenu && agent && (
+      {showMsgMenu && onPin && onUnpin && (
+          <MessageContextMenu
+            isPinned={message.isPinned}
+            position={msgMenuPos}
+            onPin={() => onPin(message.id)}
+            onUnpin={() => onUnpin(message.id)}
+            onClose={() => setShowMsgMenu(false)}
+          />
+        )}
+        {showMenu && agent && (
         <AgentAvatarContextMenu agentName={agent.name} position={menuPos} onClose={closeAll} />
       )}
 
@@ -162,6 +179,13 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
           </p>
         )}
         <div className="message-bubble-wrap" style={{ position: "relative", display: "inline-block" }}>
+          {message.isPinned && (
+            <div style={{ position: "absolute", top: 6, right: 8, zIndex: 4 }}>
+              <Tooltip content="已 Pin 为长期上下文">
+                <IconBookmark style={{ color: "var(--color-warning)", fontSize: 14 }} />
+              </Tooltip>
+            </div>
+          )}
           <div style={{
             borderRadius: "var(--radius-lg)",
             padding: "8px 16px",
@@ -363,12 +387,15 @@ interface MessageListProps {
   onAdjustPlan?: (subtasks: PlanSubtask[]) => void;
   onRefinePlan?: () => void;
   dagTaskId?: string | null;
+  onPin?: (msgId: string) => void;
+  onUnpin?: (msgId: string) => void;
+  scrollToMessageId?: string | null;
 }
 
 export function MessageList({
   messages, agents, streamingMessageId, streamingAgentName,
   isWaiting, hasMore, isFetchingMore, onLoadMore, searchText, onRegenerate,
-  onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId,
+  onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId, onPin, onUnpin, scrollToMessageId,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -377,6 +404,7 @@ export function MessageList({
   const [unreadCount, setUnreadCount] = useState(0);
   const prevVisibleCountRef = useRef(0);
   const firstMsgIdRef = useRef<string | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const visibleCount =
     messages.length + (streamingMessageId ? 1 : 0) + (isWaiting ? 1 : 0);
@@ -384,6 +412,25 @@ export function MessageList({
   const scrollToBottom = useCallback(() => {
     bottomSentinelRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
+
+  // Scroll to a specific message by id
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    const el = document.querySelector(`[data-message-id="${scrollToMessageId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Use ref so the timer survives React cleanup when scrollToMessageId
+      // is reset by handleJumpToMessage (which clears it after 100ms).
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = setTimeout(() => {
+        el.classList.add("message-flash");
+        setTimeout(() => {
+          el.classList.remove("message-flash");
+          flashTimerRef.current = null;
+        }, 1500);
+      }, 400);
+    }
+  }, [scrollToMessageId]);
 
   useLayoutEffect(() => {
     if (messages.length > 0 && firstMsgIdRef.current !== null && messages[0].id !== firstMsgIdRef.current) {
@@ -462,12 +509,13 @@ export function MessageList({
         return (
           <motion.div
             key={msg.id}
+            data-message-id={msg.id}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
           >
             {needSeparator && <TimeSeparator time={msg.createdAt} />}
-            <MessageBubble message={msg} agents={agents} searchText={searchText} onRegenerate={onRegenerate} onConfirmPlan={onConfirmPlan} onAdjustPlan={onAdjustPlan} onRefinePlan={onRefinePlan} dagTaskId={dagTaskId} />
+            <MessageBubble message={msg} agents={agents} searchText={searchText} onRegenerate={onRegenerate} onConfirmPlan={onConfirmPlan} onAdjustPlan={onAdjustPlan} onRefinePlan={onRefinePlan} dagTaskId={dagTaskId} onPin={onPin} onUnpin={onUnpin} />
           </motion.div>
         );
       })}

@@ -35,8 +35,21 @@ class CoordinatorBuilder:
         self,
         agent_models: list[AgentModel],
         execution_tracer: ExecutionTracer | None = None,
+        coordinator_agent: AgentModel | None = None,
     ) -> LlmAgent:
+        """Build a coordinator LlmAgent with sub_agents.
+
+        If *coordinator_agent* is provided, that agent's model + system_prompt
+        is used as the coordinator; otherwise the default DeepSeek orchestrator
+        handles coordination.
+        """
         sub_agents = self._build_sub_agents(agent_models, execution_tracer)
+
+        if coordinator_agent is not None:
+            return self._build_external_coordinator(
+                coordinator_agent, agent_models, sub_agents, execution_tracer
+            )
+
         coordinator_kwargs: dict = {
             "name": "orchestrator",
             "model": get_deepseek_llm(),
@@ -44,6 +57,42 @@ class CoordinatorBuilder:
             "description": (
                 "Main orchestrator that coordinates sub-agents to complete tasks"
             ),
+            "sub_agents": sub_agents,
+        }
+        if execution_tracer is not None:
+            coordinator_kwargs["before_agent_callback"] = execution_tracer.before_agent
+            coordinator_kwargs["after_agent_callback"] = execution_tracer.after_agent
+        return LlmAgent(**coordinator_kwargs)
+
+    def _build_external_coordinator(
+        self,
+        agent: AgentModel,
+        agent_models: list[AgentModel],
+        sub_agents: list,
+        execution_tracer: ExecutionTracer | None = None,
+    ) -> LlmAgent:
+        """Build a coordinator from a user-specified agent model.
+
+        Uses the agent's own model, provider, and system_prompt so
+        planning decisions reflect that agent's capabilities.
+        """
+        from app.services.adk.models import resolve_agent_model
+        from app.services.adk.runner import _sanitize_agent_name
+
+        model = resolve_agent_model(
+            provider=agent.provider or "",
+            model=agent.model or "",
+            api_key=agent.api_key or None,
+            base_url=agent.base_url or None,
+        )
+
+        instruction = agent.system_prompt or self._build_coordinator_instruction(agent_models)
+
+        coordinator_kwargs: dict = {
+            "name": _sanitize_agent_name(agent.name),
+            "model": model,
+            "instruction": instruction,
+            "description": f"Coordinator powered by {agent.name}",
             "sub_agents": sub_agents,
         }
         if execution_tracer is not None:
@@ -129,7 +178,6 @@ class CoordinatorBuilder:
             kwargs["after_agent_callback"] = execution_tracer.after_agent
 
         return LlmAgent(**kwargs)
-
     def _build_coordinator_instruction(self, agents: list[AgentModel]) -> str:
         agent_descriptions = "\n".join(
             f"- {a.name} (call: request_task_{self._sanitize_name(a.name)}): "
@@ -137,17 +185,14 @@ class CoordinatorBuilder:
             for a in agents
         )
         return (
-            "You are an intelligent orchestrator. Your job is to understand the "
-            "user's request and coordinate the appropriate specialists to complete it.\n\n"
+            "You are an intelligent orchestrator. Understand the user's request "
+            "and coordinate specialists to complete it.\n\n"
             "Guidelines:\n"
-            "1. Analyze the user's intent carefully before acting\n"
-            "2. Break complex tasks into steps and execute them in the right order\n"
-            "3. Delegate to specialists by calling request_task_<agent_name>\n"
-            "4. Wait for each specialist to complete before using their results\n"
-            "5. If a specialist's output is unclear or incomplete, ask the user for clarification\n"
-            "6. Combine results from multiple specialists into a single coherent response\n"
-            "7. If you discover you need information you don't have, ask the user\n\n"
+            "1. Analyze intent and delegate to the right specialist via request_task_<agent_name>\n"
+            "2. If only one specialist was needed, present their output directly without rephrasing\n"
+            "3. If multiple specialists were used, combine their results concisely\n"
+            "4. Only ask for clarification when a specialist's output is incomplete or unclear\n"
+            "5. Do not add unnecessary commentary or summaries\n\n"
             f"Available specialists:\n{agent_descriptions}\n\n"
-            "Remember: you are the conductor. Delegate to specialists, "
-            "don't try to do their work yourself."
+            "Delegate to specialists; do not do their work yourself."
         )

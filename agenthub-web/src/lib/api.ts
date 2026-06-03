@@ -26,6 +26,7 @@ import type {
   UpdateProjectRequest,
   UpdateProjectResponse,
   GetDagResponse,
+  PinInfo,
 } from "@/types";
 
 // [后端对接] Vite 代理 /api → localhost:8080，见 vite.config.ts
@@ -145,6 +146,10 @@ export const conversationApi = {
 
   unpinMessage(conversationId: string, messageId: string) {
     return api.delete<ApiResponse<void>>(`/conversations/${conversationId}/pins/${messageId}`);
+  },
+
+  listPins(conversationId: string) {
+    return api.get<ApiResponse<PinInfo[]>>(`/conversations/${conversationId}/pins`);
   },
 };
 

@@ -3,6 +3,7 @@ import { Tag, Typography, Input, Button } from "@douyinfe/semi-ui";
 import { IconSearch, IconClose } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import type { Conversation, Agent } from "@/types";
+import { PinManager } from "./PinManager";
 
 type SearchMode = "off" | "conv" | "msg";
 
@@ -19,9 +20,11 @@ interface ChatHeaderProps {
   agents: Agent[];
   messageHitCount?: number;
   taskSummary?: TaskSummary | null;
+  onPinChanged?: () => void;
+  onJumpToMessage?: (msgId: string) => void;
 }
 
-export function ChatHeader({ conversation, agents, messageHitCount, taskSummary }: ChatHeaderProps) {
+export function ChatHeader({ conversation, agents, messageHitCount, taskSummary, onPinChanged, onJumpToMessage }: ChatHeaderProps) {
   const [searchMode, setSearchMode] = useState<SearchMode>("off");
   const [searchText, setSearchText] = useState("");
   const searchQuery = useChatStore((s) => s.searchQuery);
@@ -120,6 +123,11 @@ export function ChatHeader({ conversation, agents, messageHitCount, taskSummary 
                   : `${taskSummary.total} 个任务已完成`}
             </div>
           )}
+          <PinManager
+            conversationId={conversation.id}
+            onPinChanged={onPinChanged}
+            onJumpToMessage={onJumpToMessage}
+          />
           <Button
             data-search-toggle
             icon={<IconSearch />}

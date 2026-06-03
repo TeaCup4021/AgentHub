@@ -80,6 +80,7 @@ export interface Message {
   artifacts: Artifact[];
   status: MessageStatus;
   meta?: Record<string, unknown> | null;
+  isPinned: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -303,6 +304,15 @@ export interface DagNode {
 export interface DagEdge {
   from: string;
   to: string;
+}
+
+export interface PinInfo {
+  pin_id: string;
+  message_id: string;
+  content_preview: string;
+  sender_type: string;
+  pinned_at: string | null;
+  pinned_by: string;
 }
 
 export interface DagResponse {

@@ -177,7 +177,7 @@ class CliAdapter(AgentAdapter):
         async def cli_before_model_callback(
             callback_context, llm_request
         ) -> LlmResponse | None:
-            from app.services.adk.cli_tools import claude_code_tool, codex_cli_tool
+            from app.services.adk.cli_runner import claude_code_tool, codex_cli_tool
 
             # Extract user prompt from the LLM request
             prompt_parts: list[str] = []
@@ -197,9 +197,15 @@ class CliAdapter(AgentAdapter):
                 else user_prompt
             )
 
-            # Run the appropriate CLI (non-streaming for orchestration)
+            # Run the appropriate CLI (non-streaming for orchestration).
+            # Use the configured timeout from settings; CLI agents doing
+            # file creation + server startup may need generous headroom.
+            timeout = (
+                settings.CLAUDE_CODE_TIMEOUT_SECONDS if provider == "claude-code-cli"
+                else settings.CODEX_CLI_TIMEOUT_SECONDS
+            )
             base_tool = claude_code_tool if provider == "claude-code-cli" else codex_cli_tool
-            result = await base_tool(prompt=full_prompt)
+            result = await base_tool(prompt=full_prompt, timeout=timeout)
 
             if result.get("success"):
                 return LlmResponse(

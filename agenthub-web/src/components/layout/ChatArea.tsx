@@ -7,7 +7,7 @@ import { useMessages } from "@/hooks/useMessages";
 import { useAgents } from "@/hooks/useAgents";
 import { useCreateConversation, useUpdateAnyConversation } from "@/hooks";
 import { createSSEStream } from "@/lib/sse";
-import { messageApi } from "@/lib/api";
+import { messageApi, conversationApi } from "@/lib/api";
 import { ChatHeader, MessageList, ChatInput, WelcomePage } from "@/components/chat";
 import { AgentProgressBar } from "@/components/chat/AgentProgressBar";
 import { AgentDashboard } from "@/components/chat/AgentDashboard";
@@ -69,6 +69,42 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   }, [agentStatuses, dagTaskId]);
 
   const qc = useQueryClient();
+
+  const handlePin = useCallback(async (msgId: string) => {
+    if (!activeId) return;
+    try {
+      await conversationApi.pinMessage(activeId, msgId);
+      toast.success("已 Pin，将作为长期上下文");
+      qc.invalidateQueries({ queryKey: ["messages", activeId] });
+    } catch {
+      toast.error("Pin 失败");
+    }
+  }, [activeId, qc]);
+
+  const handleUnpin = useCallback(async (msgId: string) => {
+    if (!activeId) return;
+    try {
+      await conversationApi.unpinMessage(activeId, msgId);
+      toast.success("已取消 Pin");
+      qc.invalidateQueries({ queryKey: ["messages", activeId] });
+    } catch {
+      toast.error("取消 Pin 失败");
+    }
+  }, [activeId, qc]);
+
+  const handlePinChanged = useCallback(() => {
+    if (activeId) {
+      qc.invalidateQueries({ queryKey: ["messages", activeId] });
+    }
+  }, [activeId, qc]);
+
+  const [scrollToMsgId, setScrollToMsgId] = useState<string | null>(null);
+  const handleJumpToMessage = useCallback((msgId: string) => {
+    setScrollToMsgId(msgId);
+    // Reset after a tick to allow re-triggering for same message
+    setTimeout(() => setScrollToMsgId(null), 100);
+  }, []);
+
   const {
     data: messagesData,
     hasNextPage,
@@ -472,7 +508,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           setConnectionStatus("failed");
           setIsStreaming(false);
         },
-      }, undefined, "auto_orchestrate", plannerAgentIdRef.current);
+      }, lastPromptRef.current, "auto_orchestrate", plannerAgentIdRef.current);
     }).catch(() => {
       toast.error("确认计划失败，请重试");
     });
@@ -623,7 +659,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <ChatHeader conversation={conversation} agents={agents} messageHitCount={messageSearch ? filteredMessages.length : undefined} taskSummary={taskSummary} />
+      <ChatHeader conversation={conversation} agents={agents} messageHitCount={messageSearch ? filteredMessages.length : undefined} taskSummary={taskSummary} onPinChanged={handlePinChanged} onJumpToMessage={handleJumpToMessage} />
       <div style={{ display: "flex", borderBottom: "1px solid var(--color-border-light)", background: "var(--color-bg-elevated)" }}>
         <TabButton active={viewMode === "chat"} count={rawMessages.length} onClick={() => setViewMode("chat")}>聊天</TabButton>
         <TabButton active={viewMode === "artifacts"} count={artifactCount} onClick={() => setViewMode("artifacts")}>产物</TabButton>
@@ -725,6 +761,9 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           onAdjustPlan={handleAdjustPlan}
           onRefinePlan={handleRefinePlan}
           dagTaskId={dagTaskId}
+          onPin={handlePin}
+          onUnpin={handleUnpin}
+          scrollToMessageId={scrollToMsgId}
         />
       )}
       {filteredMessages.length === 0 && !isStreaming && messageSearch && rawMessages.length > 0 ? (
