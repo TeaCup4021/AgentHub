@@ -6,11 +6,11 @@ from starlette.routing import Route
 from app.services.storage import get_file
 
 _CSP_HEADER = (
-    "sandbox; default-src 'self'; "
+    "default-src 'self' 'unsafe-inline'; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src data: https:; "
-    "script-src 'self'; "
-    "connect-src 'none'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "connect-src *; "
     "frame-src 'none'"
 )
 

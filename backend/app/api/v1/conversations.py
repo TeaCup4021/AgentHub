@@ -1161,6 +1161,10 @@ async def stream_conversation(
     orchestrate_mode: Optional[str] = Query(None, alias="orchestrateMode"),
     planner_agent_id: Optional[UUID] = Query(None, alias="plannerAgentId"),
 ):
+    from app.services.artifact_format import inject_artifact_reminder
+    if prompt:
+        prompt = inject_artifact_reminder(prompt)
+
     # Phase 1: Plan generation (status=planning)
     result = await db.execute(
         select(OrchestratorTask)

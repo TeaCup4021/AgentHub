@@ -1,31 +1,35 @@
-import re
-import json
-import hashlib
-import logging
+import re, json, hashlib, logging
 from uuid import uuid4
 from typing import List, Dict
 
 logger = logging.getLogger("agenthub.artifact_detector")
 
-_CODE_BLOCK_RE = re.compile(
-    r"```(\w+)?\s*\n(.*?)```", re.DOTALL
-)
-
+_CODE_BLOCK_RE = re.compile(r"```(\w+)?\s*\n(.*?)```", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
+_URL_RE = re.compile(r"https?://[^\s\)\]>]+")
 
-_URL_RE = re.compile(
-    r"https?://[^\s\)\]>]+"
-)
+_SELF_CLOSING_ARTIFACT_RE = re.compile(
+    r'<artifact\s+type="(\w+)"\s+'
+    r'(?:title="([^"]*)")?\s*(?:language="([^"]*)")?\s*'
+    r'(?:file="([^"]*)")?\s*(?:filename="([^"]*)")?\s*'
+    r'(?:url="([^"]*)")?\s*(?:name="([^"]*)")?\s*'
+    r'(?:size="([^"]*)")?\s*(?:type="([^"]*)")?\s*/>',
+    re.IGNORECASE | re.DOTALL)
 
-_CREATE_FILE_JSON_RE = re.compile(
-    r'"status"\s*:\s*"created".*?"download_url"\s*:\s*"([^"]+)".*?"file_name"\s*:\s*"([^"]+)".*?"file_size"\s*:\s*(\d+).*?"mime_type"\s*:\s*"([^"]+)"'
-)
+_ARTIFACT_WITH_BODY_RE = re.compile(
+    r'<artifact\s+type="(code|diff|preview)"'
+    r'((?:\s+\w+="[^"]*")*)\s*>(.*?)</artifact>',
+    re.IGNORECASE | re.DOTALL)
 
-_PREVIEW_PUBLISH_JSON_RE = re.compile(
-    r'"status"\s*:\s*"published".*?"preview_id"\s*:\s*"([^"]+)".*?"preview_url"\s*:\s*"([^"]+)"'
-)
+_ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
 
-_PREVIEW_TITLE_RE = re.compile(r'"title"\s*:\s*"([^"]*)"')
+_CDATA_RE = re.compile(r'<!\[CDATA\[(.*?)\]\]>', re.DOTALL)
+
+_SYSTEM_URL_PATTERNS = ["/preview/", "/files/"]
+_EMBEDDABLE_DOMAINS = [
+    "docs.google.com", "office.com", "notion.so",
+    "figma.com", "youtube.com", "youtu.be", "vimeo.com",
+]
 
 
 def build_content_hash(content: Dict) -> str:
@@ -34,237 +38,178 @@ def build_content_hash(content: Dict) -> str:
 
 
 def detect_artifacts(content: str) -> List[Dict]:
-    artifacts: List[Dict] = []
+    artifacts = _detect_xml_artifacts(content)
+    existing = {a["artifactType"] for a in artifacts}
 
-    artifacts.extend(_detect_code_blocks(content))
-    artifacts.extend(_detect_diffs(content))
-    artifacts.extend(_detect_urls(content))
-    artifacts.extend(_detect_file_artifacts(content))
-    artifacts.extend(_detect_preview_artifacts(content))
+    if "code" not in existing or "diff" not in existing:
+        for a in _detect_code_blocks(content):
+            if a["artifactType"] not in existing: artifacts.append(a)
+        for a in _detect_diffs(content):
+            if a["artifactType"] not in existing: artifacts.append(a)
+
+    if "preview" not in existing:
+        artifacts.extend(_detect_urls(content))
 
     for art in artifacts:
-        if "id" not in art:
-            art["id"] = str(uuid4())
-
+        if "id" not in art: art["id"] = str(uuid4())
     return artifacts
 
 
-def _detect_code_blocks(content: str) -> List[Dict]:
+def _parse_attrs(attr_str: str) -> dict:
+    return dict(_ATTR_RE.findall(attr_str))
+
+
+def _detect_xml_artifacts(content: str) -> List[Dict]:
     results = []
-    for idx, match in enumerate(_CODE_BLOCK_RE.finditer(content)):
-        language = (match.group(1) or "").strip()
-        if language == "diff":
-            continue
-        code = match.group(2)
-        results.append({
-            "artifactType": "code",
-            "title": _derive_code_title(language, idx),
-            "content": {
-                "language": language or "text",
-                "code": code.strip(),
-                "fileName": _derive_file_name(language, idx),
-            },
-        })
+    for m in _SELF_CLOSING_ARTIFACT_RE.finditer(content):
+        g = m.groups()
+        art_type = g[0]
+        attrs = {"title": g[1] if len(g) > 1 else None,
+                 "language": g[2] if len(g) > 2 else None, "file": g[3] if len(g) > 3 else None,
+                 "filename": g[4] if len(g) > 4 else None, "url": g[5] if len(g) > 5 else None,
+                 "name": g[6] if len(g) > 6 else None, "size": g[7] if len(g) > 7 else None,
+                 "mime": g[8] if len(g) > 8 else None}
+        a = _build_xml_artifact(art_type, attrs, "")
+        if a: results.append(a)
+    for m in _ARTIFACT_WITH_BODY_RE.finditer(content):
+        art_type = m.group(1)
+        attr_str = m.group(2) or ""
+        body = m.group(3) or ""
+        cdata = _CDATA_RE.search(body)
+        if cdata: body = cdata.group(1)
+        attrs = _parse_attrs(attr_str)
+        a = _build_xml_artifact(art_type, attrs, body.strip())
+        if a: results.append(a)
     return results
 
 
-def _detect_diffs(content: str) -> List[Dict]:
-    results = []
-    for idx, match in enumerate(_CODE_BLOCK_RE.finditer(content)):
-        language = (match.group(1) or "").strip()
-        if language != "diff":
-            continue
-        diff_text = match.group(2)
-        old_code, new_code = _split_diff(diff_text)
-        results.append({
-            "artifactType": "diff",
-            "title": f"变更对比 #{idx + 1}",
-            "content": {
-                "language": "diff",
-                "oldCode": old_code,
-                "newCode": new_code,
-                "fileName": "",
-            },
-        })
-    return results
+def _build_xml_artifact(art_type: str, attrs: dict, body: str):
+    t = attrs.get("title")
+    lang = attrs.get("language")
+    f = attrs.get("file")
+    fn = attrs.get("filename")
+    url = attrs.get("url")
+    name = attrs.get("name")
+    sz = attrs.get("size")
+    mime = attrs.get("mime")
+
+    if art_type == "code":
+        return {"artifactType":"code","title":t or f or "代码","content":{"language":lang or "text","code":body,"fileName":f or fn or ""}}
+    if art_type == "diff":
+        o, n = _split_diff_body(body)
+        return {"artifactType":"diff","title":t or "变更对比","content":{"language":lang or "diff","oldCode":o,"newCode":n,"fileName":f or fn or ""}}
+    if art_type == "preview":
+        u = url
+        if not u and body: u = _publish_preview_html(body)
+        return {"artifactType":"preview","title":t or "预览","content":{"url":u or "","title":t or "预览","previewType":"web"}}
+    if art_type == "file":
+        return {"artifactType":"file","title":name or "文件","content":{"fileName":name or "","fileUrl":url or "","fileType":mime or "application/octet-stream","fileSize":int(sz) if sz and sz.isdigit() else 0}}
+    if art_type == "deploy_status":
+        return {"artifactType":"deploy_status","title":t or "部署","content":{"status":"deployed","url":url or ""}}
+    return None
 
 
-_SYSTEM_URL_PATTERNS = ["/preview/", "/files/"]
+def _split_diff_body(body):
+    bm, am = "--- before", "+++ after"
+    if bm in body and am in body:
+        parts = body.split(bm, 1)[1].split(am, 1)
+        return parts[0].strip(), parts[1].strip()
+    o, n = [], []
+    for line in body.split("\n"):
+        if line.startswith("---") or line.startswith("+++") or line.startswith("@@"): continue
+        if line.startswith("-"): o.append(line[1:])
+        elif line.startswith("+"): n.append(line[1:])
+        elif line.startswith(" "): t=line[1:]; o.append(t); n.append(t)
+        elif line.strip(): o.append(line); n.append(line)
+    return "\n".join(o), "\n".join(n)
 
 
-def _is_system_url(url: str) -> bool:
-    return any(p in url for p in _SYSTEM_URL_PATTERNS)
+def _publish_preview_html(html):
+    try:
+        from app.services.storage import upload_file
+        from app.core.config import settings
+        pid = str(uuid4())
+        upload_file(html.encode("utf-8"), f"previews/{pid}.html", "text/html")
+        return f"{settings.PREVIEW_SERVER_URL}/preview/{pid}"
+    except Exception:
+        logger.exception("publish_preview_html failed")
+        return ""
 
 
-_EMBEDDABLE_DOMAINS = [
-    "docs.google.com", "office.com", "notion.so",
-    "figma.com", "youtube.com", "youtu.be", "vimeo.com",
-]
+def _detect_code_blocks(content):
+    r = []
+    for i, m in enumerate(_CODE_BLOCK_RE.finditer(content)):
+        lang = (m.group(1) or "").strip()
+        if lang == "diff": continue
+        code = m.group(2)
+        r.append({"artifactType":"code","title":_derive_code_title(lang,i),"content":{"language":lang or "text","code":code.strip(),"fileName":_derive_file_name(lang,i)}})
+    return r
 
 
-def _is_embeddable(url: str) -> bool:
-    url_lower = url.lower()
-    if any(d in url_lower for d in _EMBEDDABLE_DOMAINS):
-        return True
-    if any(url_lower.endswith(ext) for ext in [".pdf", ".doc", ".xls", ".ppt"]):
-        return True
+def _detect_diffs(content):
+    r = []
+    for i, m in enumerate(_CODE_BLOCK_RE.finditer(content)):
+        lang = (m.group(1) or "").strip()
+        if lang != "diff": continue
+        o, n = _split_diff(m.group(2))
+        r.append({"artifactType":"diff","title":f"变更对比 #{i+1}","content":{"language":"diff","oldCode":o,"newCode":n,"fileName":""}})
+    return r
+
+
+def _is_system_url(url): return any(p in url for p in _SYSTEM_URL_PATTERNS)
+
+
+def _is_embeddable(url):
+    u = url.lower()
+    if any(d in u for d in _EMBEDDABLE_DOMAINS): return True
+    if any(u.endswith(e) for e in [".pdf",".doc",".xls",".ppt"]): return True
     return False
 
 
-def _detect_urls(content: str) -> List[Dict]:
-    cleaned = _INLINE_CODE_RE.sub(" ", content)
-    cleaned = _CODE_BLOCK_RE.sub("", cleaned)
-    seen = set()
-    results = []
-    for idx, match in enumerate(_URL_RE.finditer(cleaned)):
-        url = match.group(0).rstrip(".,;:!?\"'`)]*_")
-        if url in seen:
-            continue
+def _detect_urls(content):
+    c = _INLINE_CODE_RE.sub(" ", content); c = _CODE_BLOCK_RE.sub("", c)
+    seen, r = set(), []
+    for i, m in enumerate(_URL_RE.finditer(c)):
+        url = m.group(0).rstrip(".,;:!?\"'`)]*_")
+        if url in seen: continue
         seen.add(url)
-
-        if _is_system_url(url):
-            continue
-
+        if _is_system_url(url): continue
         if _is_embeddable(url):
-            preview_type = "doc" if any(
-                d in url.lower() for d in ["docs.google.com", "office.com", "notion.so", "figma.com", ".pdf", ".doc", ".xls", ".ppt"]
-            ) else "web"
-            results.append({
-                "artifactType": "preview",
-                "title": _preview_title(url, idx),
-                "content": {
-                    "url": url,
-                    "title": url,
-                    "previewType": preview_type,
-                },
-            })
+            pt = "doc" if any(d in url.lower() for d in ["docs.google.com","office.com","notion.so","figma.com",".pdf",".doc",".xls",".ppt"]) else "web"
+            r.append({"artifactType":"preview","title":_preview_title(url,i),"content":{"url":url,"title":url,"previewType":pt}})
         else:
-            og_data = _try_fetch_og(url)
-            results.append({
-                "artifactType": "link_preview",
-                "title": og_data.get("title") or _preview_title(url, idx),
-                "content": {
-                    "url": url,
-                    "title": og_data.get("title"),
-                    "description": og_data.get("description"),
-                    "image": og_data.get("image"),
-                    "favicon": og_data.get("favicon"),
-                    "siteName": og_data.get("site_name"),
-                },
-            })
-    return results
+            og = _try_fetch_og(url)
+            r.append({"artifactType":"link_preview","title":og.get("title") or _preview_title(url,i),"content":{"url":url,"title":og.get("title"),"description":og.get("description"),"image":og.get("image"),"favicon":og.get("favicon"),"siteName":og.get("site_name")}})
+    return r
 
 
-def _detect_file_artifacts(content: str) -> List[Dict]:
-    results = []
-    seen = set()
-    for match in _CREATE_FILE_JSON_RE.finditer(content):
-        download_url = match.group(1)
-        file_name = match.group(2)
-        file_size = int(match.group(3))
-        mime_type = match.group(4)
-        key = f"{file_name}:{file_size}"
-        if key in seen:
-            continue
-        seen.add(key)
-        results.append({
-            "artifactType": "file",
-            "title": file_name,
-            "content": {
-                "fileName": file_name,
-                "fileUrl": download_url,
-                "fileType": mime_type,
-                "fileSize": file_size,
-            },
-        })
-    return results
-
-
-def _detect_preview_artifacts(content: str) -> List[Dict]:
-    results = []
-    seen = set()
-    for match in _PREVIEW_PUBLISH_JSON_RE.finditer(content):
-        preview_id = match.group(1)
-        preview_url = match.group(2)
-        if preview_id in seen:
-            continue
-        seen.add(preview_id)
-        title_match = _PREVIEW_TITLE_RE.search(match.group(0))
-        title = title_match.group(1) if title_match else "预览页面"
-        results.append({
-            "artifactType": "preview",
-            "title": title,
-            "content": {
-                "url": preview_url,
-                "title": title,
-                "previewType": "web",
-            },
-        })
-    return results
-
-
-def _split_diff(diff_text: str) -> tuple[str, str]:
-    old_lines: List[str] = []
-    new_lines: List[str] = []
+def _split_diff(diff_text):
+    o, n = [], []
     for line in diff_text.split("\n"):
-        if line.startswith("---") or line.startswith("+++"):
-            continue
-        if line.startswith("@@"):
-            continue
-        if line.startswith("-"):
-            old_lines.append(line[1:])
-        elif line.startswith("+"):
-            new_lines.append(line[1:])
-        elif line.startswith(" "):
-            text = line[1:]
-            old_lines.append(text)
-            new_lines.append(text)
-        elif line.strip():
-            old_lines.append(line)
-            new_lines.append(line)
-    return "\n".join(old_lines), "\n".join(new_lines)
+        if line.startswith("---") or line.startswith("+++") or line.startswith("@@"): continue
+        if line.startswith("-"): o.append(line[1:])
+        elif line.startswith("+"): n.append(line[1:])
+        elif line.startswith(" "): t=line[1:]; o.append(t); n.append(t)
+        elif line.strip(): o.append(line); n.append(line)
+    return "\n".join(o), "\n".join(n)
 
 
-def _derive_code_title(language: str, idx: int) -> str:
-    if language:
-        return f"{language} 代码 #{idx + 1}"
-    return f"代码 #{idx + 1}"
+def _derive_code_title(lang, i): return f"{lang} 代码 #{i+1}" if lang else f"代码 #{i+1}"
 
+def _derive_file_name(lang, i):
+    exts = {"python":f"code_{i+1}.py","javascript":f"code_{i+1}.js","typescript":f"code_{i+1}.ts","tsx":f"code_{i+1}.tsx","jsx":f"code_{i+1}.jsx","html":f"code_{i+1}.html","css":f"code_{i+1}.css","json":f"code_{i+1}.json","yaml":f"code_{i+1}.yaml","sql":f"code_{i+1}.sql","rust":f"code_{i+1}.rs","go":f"code_{i+1}.go","java":f"code_{i+1}.java","sh":f"code_{i+1}.sh","bash":f"code_{i+1}.sh"}
+    return exts.get(lang, f"code_{i+1}.{lang or 'txt'}")
 
-def _derive_file_name(language: str, idx: int) -> str:
-    exts = {
-        "python": f"code_{idx+1}.py",
-        "javascript": f"code_{idx+1}.js",
-        "typescript": f"code_{idx+1}.ts",
-        "tsx": f"code_{idx+1}.tsx",
-        "jsx": f"code_{idx+1}.jsx",
-        "html": f"code_{idx+1}.html",
-        "css": f"code_{idx+1}.css",
-        "json": f"code_{idx+1}.json",
-        "yaml": f"code_{idx+1}.yaml",
-        "sql": f"code_{idx+1}.sql",
-        "rust": f"code_{idx+1}.rs",
-        "go": f"code_{idx+1}.go",
-        "java": f"code_{idx+1}.java",
-        "sh": f"code_{idx+1}.sh",
-        "bash": f"code_{idx+1}.sh",
-    }
-    return exts.get(language, f"code_{idx+1}.{language or 'txt'}")
-
-
-def _preview_title(url: str, idx: int) -> str:
+def _preview_title(url, i):
     try:
         from urllib.parse import urlparse
-        host = urlparse(url).netloc
-        return f"{host} #{idx + 1}"
-    except Exception:
-        return f"链接预览 #{idx + 1}"
+        return f"{urlparse(url).netloc} #{i+1}"
+    except: return f"链接预览 #{i+1}"
 
-
-def _try_fetch_og(url: str) -> Dict:
+def _try_fetch_og(url):
     try:
         from app.services.og_fetcher import fetch_og_metadata
         return fetch_og_metadata(url)
-    except Exception:
+    except:
         logger.debug("OG fetch skipped for %s", url)
         return {}

@@ -17,6 +17,7 @@ from google.adk.agents import LlmAgent
 from app.models.agent import Agent
 from app.services.adk.tool_loader import ToolLoader
 from app.services.pin_spec_injector import before_model_callback
+from app.services.artifact_format import build_instruction
 
 logger = logging.getLogger("agenthub.adapter")
 
@@ -68,7 +69,7 @@ class AgentAdapter(ABC):
         return LlmAgent(
             name=_sanitize_agent_name(agent.name),
             model=self.resolve_model(agent),
-            instruction=agent.system_prompt or "You are a helpful assistant.",
+            instruction=build_instruction(agent),
             tools=tools,
             before_model_callback=before_model_callback,
         )

@@ -229,3 +229,27 @@ html, body, #root {
   transition: color var(--duration-normal) var(--ease-out),
               background var(--duration-normal) var(--ease-out);
 }
+
+@keyframes pending-dot-bounce {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shake {
+  0% { transform: translateX(-4px); }
+  25% { transform: translateX(4px); }
+  50% { transform: translateX(-3px); }
+  75% { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
+.create-error-shake {
+  animation: shake 0.35s ease;
+}
+
+.pending-dot-bounce {
+  display: inline-flex;
+  gap: 2px;
+  animation: pending-dot-bounce 1.4s infinite ease-in-out both;
+  letter-spacing: 1px;
+}

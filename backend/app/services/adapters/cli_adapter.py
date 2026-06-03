@@ -191,11 +191,9 @@ class CliAdapter(AgentAdapter):
             user_prompt = "\n".join(prompt_parts) if prompt_parts else ""
 
             # Merge system prompt with user request
-            full_prompt = (
-                agent.system_prompt + "\n\nTask:\n" + user_prompt
-                if agent.system_prompt
-                else user_prompt
-            )
+            from app.services.artifact_format import build_instruction
+            base_instruction = build_instruction(agent)
+            full_prompt = base_instruction + "\n\nTask:\n" + user_prompt
 
             # Run the appropriate CLI (non-streaming for orchestration)
             base_tool = claude_code_tool if provider == "claude-code-cli" else codex_cli_tool

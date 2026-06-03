@@ -682,41 +682,42 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         </Banner>
       )}
       {conversation.type === "group" && (
+        <div style={{
+          padding: "8px 16px",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          borderBottom: "1px solid var(--color-border-light)",
+          background: "var(--color-bg-subtle)",
+        }}>
+          <span style={{ fontSize: 12, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
+            任务分配:
+          </span>
+          <Select
+            value={plannerAgentId ?? ""}
+            onChange={(v) => {
+              const value = v ? String(v) : null;
+              setPlannerAgentId(value);
+              plannerAgentIdRef.current = value;
+            }}
+            placeholder="自动 (Orchestrator)"
+            size="small"
+            style={{ flex: 1, minWidth: 140 }}
+          >
+            <Select.Option value="">自动 (Orchestrator)</Select.Option>
+            {conversation.agentIds
+              .map((id) => agents.find((a) => a.id === id))
+              .filter(Boolean)
+              .map((a) => (
+                <Select.Option key={a!.id} value={a!.id}>
+                  {a!.name}
+                </Select.Option>
+              ))}
+          </Select>
+        </div>
+      )}
+      {agentStatuses.length > 0 && (
         <>
-          {/* Planner Selector */}
-          <div style={{
-            padding: "8px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            borderBottom: "1px solid var(--color-border-light)",
-            background: "var(--color-bg-subtle)",
-          }}>
-            <span style={{ fontSize: 12, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>
-              任务分配:
-            </span>
-            <Select
-              value={plannerAgentId ?? ""}
-              onChange={(v) => {
-                const value = v ? String(v) : null;
-                setPlannerAgentId(value);
-                plannerAgentIdRef.current = value;
-              }}
-              placeholder="自动 (Orchestrator)"
-              size="small"
-              style={{ flex: 1, minWidth: 140 }}
-            >
-              <Select.Option value="">自动 (Orchestrator)</Select.Option>
-              {conversation.agentIds
-                .map((id) => agents.find((a) => a.id === id))
-                .filter(Boolean)
-                .map((a) => (
-                  <Select.Option key={a!.id} value={a!.id}>
-                    {a!.name}
-                  </Select.Option>
-                ))}
-            </Select>
-          </div>
           <div onClick={toggleDashboard} className="cursor-pointer">
             <AgentProgressBar agents={agentStatuses} />
           </div>

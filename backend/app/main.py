@@ -51,3 +51,6 @@ app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
 app.include_router(api_router, prefix="/api")
+
+from app.services.preview_server import preview_app
+app.mount("/preview", preview_app)

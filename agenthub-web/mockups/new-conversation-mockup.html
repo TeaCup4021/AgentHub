@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新建对话 — 设计稿</title>
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --surface: #ffffff;
+    --border: #e5e5e8;
+    --text: #18181b;
+    --text-secondary: #71717a;
+    --text-tertiary: #a1a1aa;
+    --primary: #2563eb;
+    --primary-light: #e8f0fe;
+    --primary-hover: #1d4ed8;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --radius-sm: 6px;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow-modal: 0 25px 60px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.3);
+    backdrop-filter: blur(2px);
+    display: flex; justify-content: center; align-items: center;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 18px;
+    width: 520px;
+    max-height: 90vh;
+    box-shadow: var(--shadow-modal);
+    animation: slideUp 0.25s cubic-bezier(0.16,1,0.3,1);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .modal-header {
+    padding: 22px 28px 0;
+    font-size: 18px; font-weight: 700; color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .modal-body {
+    padding: 20px 28px 24px;
+    overflow-y: auto; flex: 1;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+
+  .modal-footer {
+    padding: 12px 28px 20px;
+    display: flex; align-items: center; gap: 10px;
+    border-top: 1px solid var(--border);
+    background: #fafafa;
+  }
+
+  /* ======== Form ======== */
+  .field-label {
+    font-size: 13px; font-weight: 600; color: var(--text);
+    margin-bottom: 6px; letter-spacing: -0.005em;
+  }
+  .field-hint {
+    font-size: 11px; color: var(--text-tertiary); margin-top: 5px;
+  }
+
+  .input {
+    width: 100%; height: 42px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0 14px; font-size: 14px; color: var(--text);
+    background: var(--surface);
+    outline: none; transition: border-color 0.15s;
+  }
+  .input:focus { border-color: var(--primary); }
+  .input::placeholder { color: var(--text-tertiary); }
+
+  /* Type Toggle */
+  .type-toggle {
+    display: flex; gap: 0;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .type-btn {
+    flex: 1; height: 40px;
+    border: none; background: transparent;
+    font-size: 14px; font-weight: 600; color: var(--text-secondary);
+    cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .type-btn.active { background: var(--primary); color: #fff; }
+  .type-btn:not(.active):hover { background: #f4f4f5; }
+
+  /* ======== Agent Cards ======== */
+  .agent-scroll {
+    display: flex; flex-direction: column; gap: 8px;
+    max-height: 280px; overflow-y: auto;
+    padding-right: 2px;
+  }
+  .agent-scroll::-webkit-scrollbar { width: 4px; }
+  .agent-scroll::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 2px; }
+
+  .agent-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.16,1,0.3,1);
+    user-select: none;
+  }
+  .agent-card:hover {
+    border-color: #c7c9cf;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .agent-card.selected {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.08);
+  }
+
+  .agent-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; color: #fff;
+    flex-shrink: 0; letter-spacing: -0.02em;
+  }
+
+  .agent-info { flex: 1; min-width: 0; }
+  .agent-name {
+    font-size: 14px; font-weight: 600; color: var(--text);
+    letter-spacing: -0.005em;
+  }
+  .agent-meta {
+    font-size: 12px; color: var(--text-secondary);
+    margin-top: 2px;
+  }
+
+  .agent-check {
+    width: 22px; height: 22px; border-radius: 50%;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; border: 2px solid var(--border);
+  }
+  .agent-card.selected .agent-check { background: var(--primary); border-color: var(--primary); }
+  .agent-check svg { opacity: 0; transition: opacity 0.15s; }
+  .agent-card.selected .agent-check svg { opacity: 1; }
+
+  .group-check {
+    width: 20px; height: 20px; border-radius: 5px;
+    border: 2px solid var(--border); flex-shrink: 0; transition: all 0.15s;
+    position: relative;
+  }
+  .agent-card.selected .group-check { background: var(--primary); border-color: var(--primary); }
+  .group-check svg { display: none; }
+  .agent-card.selected .group-check svg {
+    display: block; position: absolute; inset: 0; margin: auto;
+  }
+
+  /* ======== Validation Hint ======== */
+  .validation-hint {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--danger);
+    padding: 10px 14px;
+    background: var(--danger-light);
+    border-radius: var(--radius);
+    border: 1px solid #fecaca;
+    animation: shakeIn 0.3s ease;
+    flex: 1;
+  }
+  .validation-hint svg { flex-shrink: 0; }
+  @keyframes shakeIn {
+    0% { transform: translateX(-4px); }
+    25% { transform: translateX(4px); }
+    50% { transform: translateX(-3px); }
+    75% { transform: translateX(2px); }
+    100% { transform: translateX(0); }
+  }
+
+  /* Footer Buttons */
+  .footer-right { display: flex; gap: 10px; }
+  .btn {
+    height: 38px; padding: 0 22px; border-radius: var(--radius);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; border: 1.5px solid transparent;
+  }
+  .btn-cancel {
+    background: transparent; border-color: var(--border); color: var(--text-secondary);
+  }
+  .btn-cancel:hover { background: #f4f4f5; }
+  .btn-primary {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+    box-shadow: 0 1px 2px rgba(37,99,235,0.15);
+  }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-primary.has-error { animation: btnPulse 0.5s ease 1; }
+  @keyframes btnPulse {
+    0%, 100% { box-shadow: 0 1px 2px rgba(37,99,235,0.15); }
+    50% { box-shadow: 0 0 0 4px rgba(220,38,38,0.25); border-color: var(--danger); }
+  }
+</style>
+</head>
+<body>
+
+<div class="backdrop">
+  <div class="modal">
+    <div class="modal-header">新建对话</div>
+
+    <div class="modal-body">
+
+      <!-- 对话名称 -->
+      <div>
+        <div class="field-label">对话名称</div>
+        <input class="input" type="text" id="titleInput"
+               placeholder="与 Claude Code 的对话"
+               oninput="updateTitle()" />
+        <div class="field-hint">留空则自动使用 Agent 名称</div>
+      </div>
+
+      <!-- 对话类型 -->
+      <div>
+        <div class="field-label">对话类型</div>
+        <div class="type-toggle">
+          <button class="type-btn active" id="typeSingle" onclick="setType('single')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            单聊
+          </button>
+          <button class="type-btn" id="typeGroup" onclick="setType('group')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            群聊
+          </button>
+        </div>
+      </div>
+
+      <!-- Agent 列表 -->
+      <div>
+        <div class="field-label" style="margin-bottom: 10px;">选择 Agent</div>
+        <input class="input" type="text" id="agentSearch"
+               placeholder="搜索 Agent..." oninput="renderAgents()"
+               style="margin-bottom: 12px; height: 36px; font-size: 13px;" />
+        <div class="agent-scroll" id="agentList"></div>
+        <div class="field-hint" id="agentHint" style="margin-top:8px;display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer">
+      <div id="validationHint" class="validation-hint" style="display:none;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span id="validationText"></span>
+      </div>
+      <div class="footer-right" style="margin-left: auto;">
+        <button class="btn btn-cancel" onclick="resetDialog()">取消</button>
+        <button class="btn btn-primary" id="createBtn" onclick="handleCreate()">创建对话</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Same color palette as getAgentColor() in production
+  function getAgentColor(name) {
+    var colors = ["#5b7aad","#6b9b7a","#b08968","#8b7eac","#c47e6e","#788c9e"];
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return colors[Math.abs(h) % colors.length];
+  }
+
+  var agents = [
+    { id: "1", name: "Claude Code", provider: "Anthropic", model: "claude-sonnet-4-6" },
+    { id: "2", name: "Codex CLI", provider: "OpenAI", model: "codex" },
+    { id: "3", name: "GPT-4o", provider: "LiteLLM", model: "openai/gpt-4o" },
+    { id: "4", name: "DeepSeek V4", provider: "LiteLLM", model: "deepseek-v4-pro" },
+  ];
+
+  var chatType = "single";
+  var selectedIds = new Set();
+
+  function setType(t) {
+    chatType = t;
+    document.getElementById("typeSingle").classList.toggle("active", t === "single");
+    document.getElementById("typeGroup").classList.toggle("active", t === "group");
+    if (t === "single" && selectedIds.size > 1) {
+      selectedIds = new Set([[].concat.apply([], [Array.from(selectedIds)])[0]]);
+    }
+    updateTitle();
+    renderAgents();
+    clearValidation();
+  }
+
+  function toggleAgent(id) {
+    if (chatType === "single") {
+      // Clicking the already-selected agent deselects it
+      if (selectedIds.has(id)) { selectedIds.clear(); }
+      else { selectedIds.clear(); selectedIds.add(id); }
+    } else {
+      selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
+    }
+    updateTitle();
+    renderAgents();
+    clearValidation();
+  }
+
+  function updateTitle() {
+    var input = document.getElementById("titleInput");
+    if (input.value.trim()) return;
+    var names = [];
+    selectedIds.forEach(function(id) {
+      var a = agents.find(function(x) { return x.id === id; });
+      if (a) names.push(a.name);
+    });
+    input.placeholder = names.length ? "与 " + names.join(", ") + " 的对话" : "输入对话名称...";
+  }
+
+  function handleCreate() {
+    var title = document.getElementById("titleInput").value.trim();
+
+    if (!title) {
+      showValidation("请输入对话名称，或留空自动生成");
+      document.getElementById("titleInput").focus();
+      return;
+    }
+    if (selectedIds.size === 0) {
+      showValidation("请至少选择一个 Agent");
+      return;
+    }
+    if (chatType === "group" && selectedIds.size < 2) {
+      showValidation("群聊至少需要选择 2 个 Agent");
+      return;
+    }
+    document.getElementById("validationHint").style.display = "none";
+    alert("创建成功！");
+  }
+
+  function showValidation(msg) {
+    var hintEl = document.getElementById("validationHint");
+    var textEl = document.getElementById("validationText");
+    var btn = document.getElementById("createBtn");
+    textEl.textContent = msg;
+    hintEl.style.display = "flex";
+    hintEl.style.animation = "none";
+    hintEl.offsetHeight;
+    hintEl.style.animation = "shakeIn 0.3s ease";
+    btn.classList.add("has-error");
+    setTimeout(function() { btn.classList.remove("has-error"); }, 500);
+  }
+
+  function clearValidation() {
+    document.getElementById("validationHint").style.display = "none";
+    document.getElementById("createBtn").classList.remove("has-error");
+  }
+
+  function renderAgents() {
+    var q = (document.getElementById("agentSearch").value || "").toLowerCase();
+    var filtered = agents.filter(function(a) { return a.name.toLowerCase().indexOf(q) >= 0; });
+    var list = document.getElementById("agentList");
+
+    list.innerHTML = filtered.map(function(agent) {
+      var sel = selectedIds.has(agent.id);
+      return [
+        '<div class="agent-card ' + (sel ? "selected" : "") + '" onclick="toggleAgent(\'' + agent.id + '\')">',
+          '<div class="agent-avatar" style="background:' + getAgentColor(agent.name) + '">' + agent.name.charAt(0) + '</div>',
+          '<div class="agent-info">',
+            '<div class="agent-name">' + agent.name + '</div>',
+            '<div class="agent-meta">' + agent.provider + ' &middot; ' + agent.model + '</div>',
+          '</div>',
+          chatType === "single"
+            ? '<div class="agent-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>'
+            : '<div class="group-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>',
+        '</div>'
+      ].join("");
+    }).join("");
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-tertiary);font-size:13px;">没有匹配的 Agent</div>';
+    }
+  }
+
+  function resetDialog() {
+    selectedIds = new Set();
+    chatType = "single";
+    document.getElementById("titleInput").value = "";
+    document.getElementById("agentSearch").value = "";
+    setType("single");
+    updateTitle();
+    renderAgents();
+    clearValidation();
+  }
+
+  renderAgents();
+  updateTitle();
+</script>
+</body>
+</html>

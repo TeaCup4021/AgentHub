@@ -6,7 +6,6 @@ import {
   Input,
   Modal,
   Dropdown,
-  Badge,
   Empty,
 } from "@douyinfe/semi-ui";
 import {
@@ -23,7 +22,7 @@ import {
 import { useChatStore } from "@/stores/chatStore";
 import { useUIStore } from "@/stores/uiStore";
 import { useUpdateAnyConversation, useDeleteConversation } from "@/hooks";
-import { formatRelativeTime, truncate } from "@/lib/utils";
+import { formatRelativeTime, truncate, getAgentColor } from "@/lib/utils";
 import { CreateAgentModal, AgentManageModal } from "@/components/agent";
 import { ConversationSkeleton } from "@/components/chat/Skeleton";
 import { exportConversation } from "@/lib/exportConversation";
@@ -81,23 +80,33 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
     };
   }, [conversations, searchQuery]);
 
+  const [createError, setCreateError] = useState("");
+  const [errorKey, setErrorKey] = useState(0);
+
+  const showError = (msg: string) => { setCreateError(msg); setErrorKey((k) => k + 1); };
+
   const handleNewConversation = useCallback(() => {
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim()) { showError("请输入对话名称"); return; }
+    if (selectedAgentIds.length === 0) { showError("请至少选择一个 Agent"); return; }
+    if (newType === "group" && selectedAgentIds.length < 2) { showError("群聊至少需要选择 2 个 Agent"); return; }
     onCreateConversation(newTitle.trim(), newType, selectedAgentIds);
     setNewTitle("");
     setNewType("single");
     setSelectedAgentIds([]);
     setAgentSearch("");
+    setCreateError("");
     setShowNewDialog(false);
   }, [newTitle, newType, selectedAgentIds, onCreateConversation]);
 
   const openNewDialog = useCallback(() => {
     setNewTitle("");
     setNewType("single");
-    setSelectedAgentIds(agents.length > 0 ? [agents[0].id] : []);
+    setSelectedAgentIds([]);
     setAgentSearch("");
+    setCreateError("");
+    setErrorKey(0);
     setShowNewDialog(true);
-  }, [agents]);
+  }, []);
 
   const handlePin = (conv: Conversation) => {
     updateConversation.mutate({ id: conv.id, isPinned: !conv.isPinned });
@@ -492,70 +501,92 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
       <Modal
         visible={showNewDialog}
         title="新建对话"
-        onCancel={() => { setShowNewDialog(false); setAgentSearch(""); }}
+        onCancel={() => { setShowNewDialog(false); setAgentSearch(""); setCreateError(""); setErrorKey(0); }}
         onOk={handleNewConversation}
-        okButtonProps={{
-          disabled:
-            !newTitle.trim() ||
-            selectedAgentIds.length === 0 ||
-            (newType === "group" && selectedAgentIds.length < 2),
-        }}
         cancelButtonProps={{ theme: "borderless" }}
         maskClosable
-        style={{ width: 448 }}
+        style={{ width: 520 }}
+        footer={
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {createError && (
+              <div key={errorKey} className="create-error-shake" style={{
+                display: "flex", alignItems: "center", gap: 8, flex: 1,
+                fontSize: 12, color: "var(--color-danger)",
+                padding: "8px 14px", background: "var(--color-danger-light-default)", borderRadius: "var(--radius-md)",
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                {createError}
+              </div>
+            )}
+            <Button theme="borderless" onClick={() => { setShowNewDialog(false); setAgentSearch(""); setCreateError(""); setErrorKey(0); }}>取消</Button>
+            <Button theme="solid" type="primary" onClick={handleNewConversation}>创建对话</Button>
+          </div>
+        }
       >
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginBottom: 6 }}>对话名称</div>
         <Input
           value={newTitle}
-          onChange={setNewTitle}
-          placeholder="输入对话标题..."
+          onChange={(v) => { setNewTitle(v); setCreateError(""); }}
+          placeholder="输入对话名称..."
           autoFocus
+          size="large"
           onEnterPress={handleNewConversation}
         />
 
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <Button
-            block
-            theme={newType === "single" ? "solid" : "light"}
-            type={newType === "single" ? "primary" : "tertiary"}
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginTop: 16, marginBottom: 8 }}>对话类型</div>
+        <div style={{ display: "flex", border: "1.5px solid var(--color-border-light)", borderRadius: "var(--radius-md)", overflow: "hidden" }}>
+          <button
             onClick={() => {
               setNewType("single");
-              setSelectedAgentIds((prev) => (prev.length > 0 ? [prev[0]] : agents.length > 0 ? [agents[0].id] : []));
+              if (selectedAgentIds.length > 1) setSelectedAgentIds([]);
+              setCreateError("");
+            }}
+            style={{
+              flex: 1, height: 40, border: "none", cursor: "pointer",
+              background: newType === "single" ? "var(--color-primary)" : "transparent",
+              color: newType === "single" ? "#fff" : "var(--color-text-secondary)",
+              fontSize: 14, fontWeight: 600, transition: "all 0.15s",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
             }}
           >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             单聊
-          </Button>
-          <Button
-            block
-            theme={newType === "group" ? "solid" : "light"}
-            type={newType === "group" ? "primary" : "tertiary"}
-            onClick={() => setNewType("group")}
+          </button>
+          <button
+            onClick={() => { setNewType("group"); setCreateError(""); }}
+            style={{
+              flex: 1, height: 40, border: "none", cursor: "pointer",
+              background: newType === "group" ? "var(--color-primary)" : "transparent",
+              color: newType === "group" ? "#fff" : "var(--color-text-secondary)",
+              fontSize: 14, fontWeight: 600, transition: "all 0.15s",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            }}
           >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             群聊
-          </Button>
+          </button>
         </div>
 
-        <div style={{ marginTop: 12 }}>
-          <Input
-            value={agentSearch}
-            onChange={setAgentSearch}
-            placeholder="搜索 Agent..."
-            size="small"
-          />
-        </div>
-
-        <div style={{ marginTop: 8, maxHeight: 192, overflowY: "auto" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", marginTop: 16, marginBottom: 10 }}>选择 Agent</div>
+        <Input
+          value={agentSearch}
+          onChange={setAgentSearch}
+          placeholder="搜索 Agent..."
+          size="small"
+          style={{ marginBottom: 12 }}
+        />
+        <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
           {agents
             .filter((a) => a.isActive && (!agentSearch || a.name.toLowerCase().includes(agentSearch.toLowerCase())))
             .map((agent) => {
               const selected = selectedAgentIds.includes(agent.id);
               return (
-                <Button
+                <div
                   key={agent.id}
-                  theme="borderless"
-                  block
                   onClick={() => {
+                    setCreateError("");
                     if (newType === "single") {
-                      setSelectedAgentIds([agent.id]);
+                      setSelectedAgentIds(selected ? [] : [agent.id]);
                     } else {
                       setSelectedAgentIds((prev) =>
                         prev.includes(agent.id) ? prev.filter((id) => id !== agent.id) : [...prev, agent.id],
@@ -563,50 +594,50 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
                     }
                   }}
                   style={{
-                    justifyContent: "flex-start",
-                    padding: "8px 12px",
-                    background: selected ? "var(--color-bg-active)" : "transparent",
-                    borderRadius: "var(--radius-md)",
-                    marginBottom: 2,
+                    display: "flex", alignItems: "center", gap: 14,
+                    padding: "14px 16px", cursor: "pointer",
+                    background: selected ? "var(--color-primary-light-default)" : "var(--color-bg-elevated)",
+                    border: selected ? "2px solid var(--color-primary)" : "2px solid var(--color-border-light)",
+                    borderRadius: 12, transition: "all 0.15s",
+                    userSelect: "none",
                   }}
                 >
                   <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 32,
-                    height: 32,
-                    borderRadius: "50%",
-                    background: selected ? "var(--color-gray-950)" : "var(--color-gray-600)",
-                    color: "#fff",
-                    fontSize: "var(--font-size-xs)",
-                    fontWeight: 600,
-                    marginRight: 12,
-                    flexShrink: 0,
-                  }}>
-                    {agent.name.charAt(0)}
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 40, height: 40, borderRadius: "50%",
+                    background: getAgentColor(agent.name), color: "#fff",
+                    fontSize: 16, fontWeight: 700, flexShrink: 0,
+                  }}>{agent.name.charAt(0)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>{agent.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--color-text-tertiary)", marginTop: 2 }}>{agent.provider} · {agent.model}</div>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                    <div style={{ fontSize: "var(--font-size-md)", fontWeight: 500, color: "var(--color-text-primary)" }}>
-                      {agent.name}
-                    </div>
-                    <div style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-tertiary)" }}>
-                      {agent.model}
-                    </div>
-                  </div>
-                  {selected && (
-                    <Badge dot theme="solid" style={{ color: "var(--color-primary)" }} />
-                  )}
-                  {newType === "group" && !selected && (
+                  {newType === "single" ? (
                     <div style={{
-                      width: 16,
-                      height: 16,
-                      borderRadius: 2,
-                      border: "2px solid var(--color-border-medium)",
-                      flexShrink: 0,
-                    }} />
+                      width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                      border: selected ? "none" : "2px solid var(--color-border-medium)",
+                      background: selected ? "var(--color-primary)" : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      transition: "all 0.15s",
+                    }}>
+                      {selected && (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                      border: selected ? "none" : "2px solid var(--color-border-medium)",
+                      background: selected ? "var(--color-primary)" : "transparent",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      transition: "all 0.15s", position: "relative",
+                    }}>
+                      {selected && (
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      )}
+                    </div>
                   )}
-                </Button>
+                </div>
               );
             })}
           {agents.filter((a) => a.isActive).length === 0 && (
@@ -615,12 +646,6 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
             </p>
           )}
         </div>
-
-        {newType === "group" && selectedAgentIds.length < 2 && selectedAgentIds.length > 0 && (
-          <p style={{ marginTop: 4, fontSize: "var(--font-size-xs)", color: "var(--color-warning)" }}>
-            群聊至少需要选择 2 个 Agent
-          </p>
-        )}
       </Modal>
 
       <Modal

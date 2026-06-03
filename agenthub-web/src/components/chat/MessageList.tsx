@@ -19,9 +19,22 @@ function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
   const cards: React.ReactNode[] = [];
 
   if (!hasArtifactType("diff")) {
+    let idx = 0;
+    const makeDiffCard = (oldCode: string, newCode: string, title: string) => {
+      const fallback: Artifact = {
+        id: `fallback-diff-${idx++}`,
+        artifactType: "diff",
+        title,
+        content: { oldCode, newCode, language: "diff", fileName: "" },
+        version: 1,
+        createdAt: new Date().toISOString(),
+      };
+      cards.push(<CardRenderer key={fallback.id} artifact={fallback} />);
+    };
+
+    // 1. Explicit ```diff blocks
     const diffRe = /```diff\n([\s\S]*?)```/g;
     let match;
-    let idx = 0;
     while ((match = diffRe.exec(content)) !== null) {
       const oldLines: string[] = [];
       const newLines: string[] = [];
@@ -30,20 +43,39 @@ function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
         else if (line.startsWith("+")) newLines.push(line.slice(1));
         else { oldLines.push(line); newLines.push(line); }
       }
-      const fallback: Artifact = {
-        id: `fallback-diff-${idx++}`,
-        artifactType: "diff",
-        title: "变更对比",
-        content: {
-          oldCode: oldLines.join("\n"),
-          newCode: newLines.join("\n"),
-          language: "diff",
-          fileName: "",
-        },
-        version: 1,
-        createdAt: new Date().toISOString(),
-      };
-      cards.push(<CardRenderer key={fallback.id} artifact={fallback} />);
+      makeDiffCard(oldLines.join("\n"), newLines.join("\n"), "变更对比");
+    }
+
+    // 2. Paired code blocks: "修改前/before" followed by "修改后/after"
+    if (idx === 0) {
+      const pairRe = /(?:修改前|before|原始|旧代码|old)[\s\S]*?```\w*\n([\s\S]*?)```[\s\S]*?(?:修改后|after|修改|新代码|new)[\s\S]*?```\w*\n([\s\S]*?)```/gi;
+      let pm;
+      while ((pm = pairRe.exec(content)) !== null) {
+        makeDiffCard(pm[1].trim(), pm[2].trim(), "变更对比");
+      }
+    }
+
+    // 3. Any code block with +/- diff lines (even without diff language tag)
+    if (idx === 0) {
+      const codeRe = /```(\w*)\n([\s\S]*?)```/g;
+      let cm;
+      while ((cm = codeRe.exec(content)) !== null) {
+        const lang = cm[1];
+        if (lang === "diff") continue;
+        const body = cm[2];
+        const hasDiffMarkers = /^[+-]/m.test(body) && (body.includes("\n-") || body.includes("\n+"));
+        if (!hasDiffMarkers) continue;
+        const oldLines: string[] = [];
+        const newLines: string[] = [];
+        for (const line of body.split("\n")) {
+          if (line.startsWith("-")) oldLines.push(line.slice(1));
+          else if (line.startsWith("+")) newLines.push(line.slice(1));
+          else { oldLines.push(line); newLines.push(line); }
+        }
+        if (oldLines.length > 0) {
+          makeDiffCard(oldLines.join("\n"), newLines.join("\n"), "变更对比");
+        }
+      }
     }
   }
 
@@ -368,16 +400,16 @@ const PendingMessageBubble = memo(function PendingMessageBubble() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        width: 32,
-        height: 32,
+        width: 36,
+        height: 36,
         borderRadius: "50%",
-        background: "var(--color-gray-400)",
+        background: "var(--color-primary)",
         color: "#fff",
-        fontSize: "var(--font-size-xs)",
-        fontWeight: 500,
+        fontSize: "var(--font-size-sm)",
+        fontWeight: 600,
         flexShrink: 0,
       }}>
-        A
+        <span className="pending-dot-bounce">···</span>
       </div>
       <div style={{ maxWidth: "75%" }}>
         <div style={{

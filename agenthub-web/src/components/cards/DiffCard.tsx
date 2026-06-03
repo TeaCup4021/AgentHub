@@ -115,6 +115,7 @@ export function DiffCard({ artifact }: DiffCardProps) {
 
       <div className="artifact-card__body" style={{ flex: 1, minHeight: 0 }}>
         <DiffEditor
+          key={`${artifact.id}-${splitView ? "split" : "unified"}`}
           height="100%"
           original={c.oldCode}
           modified={c.newCode}
@@ -129,6 +130,8 @@ export function DiffCard({ artifact }: DiffCardProps) {
             lineNumbers: "on",
             padding: { top: 8 },
           }}
+          keepCurrentOriginalModel={true}
+          keepCurrentModifiedModel={true}
         />
       </div>
 

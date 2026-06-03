@@ -76,3 +76,14 @@ def delete_file(object_name: str, bucket: str | None = None) -> bool:
     except S3Error:
         logger.exception("MinIO delete failed: %s/%s", bucket, object_name)
         return False
+
+
+def stat_object(object_name: str, bucket: str | None = None):
+    bucket = bucket or settings.MINIO_BUCKET
+    client = _get_client()
+    try:
+        return client.stat_object(bucket_name=bucket, object_name=object_name)
+    except S3Error as e:
+        if e.code == "NoSuchKey":
+            raise FileNotFoundError(f"'{object_name}' not found in '{bucket}'")
+        raise

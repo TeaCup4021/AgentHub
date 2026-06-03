@@ -20,7 +20,8 @@ export function LinkPreviewCard({ artifact }: LinkPreviewCardProps) {
   const { cardRef, resizeRef, sizeLabelRef, resetSize } = useResizable({ defaultHeight: DEFAULT_HEIGHT });
   const hostname = getHostname(c.url);
   const hasOgData = !!c.title || !!c.description || !!c.image;
-  const faviconSrc = c.favicon || `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+  const isInternal = hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("192.168.") || hostname.startsWith("10.") || hostname.startsWith("172.16.");
+  const faviconSrc = c.favicon || (isInternal ? "" : `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`);
 
   const handleClick = () => {
     window.open(c.url, "_blank", "noopener,noreferrer");
@@ -104,12 +105,14 @@ export function LinkPreviewCard({ artifact }: LinkPreviewCardProps) {
             </p>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-            <img
-              src={faviconSrc}
-              alt=""
-              style={{ width: 14, height: 14, flexShrink: 0 }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
+            {faviconSrc ? (
+              <img
+                src={faviconSrc}
+                alt=""
+                style={{ width: 14, height: 14, flexShrink: 0 }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : null}
             <span style={{ fontSize: 10, color: "var(--color-text-disabled)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {c.siteName || hostname}
             </span>

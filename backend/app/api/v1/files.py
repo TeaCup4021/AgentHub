@@ -52,13 +52,26 @@ async def get_file_info(
     user_id: str = Depends(get_current_user_id),
 ):
     url = f"/api/v1/files/{file_id}/download"
-    return FileInfoResponse(url=url, fileName="", mimeType="", fileSize=0)
+    for prefix, suffix, fallback_mime in [
+        ("files/", "", None),
+        ("previews/", ".html", "text/html"),
+    ]:
+        try:
+            obj = storage.stat_object(f"{prefix}{file_id}{suffix}")
+            return FileInfoResponse(
+                url=url,
+                fileName=file_id + suffix,
+                mimeType=fallback_mime or obj.content_type or "application/octet-stream",
+                fileSize=obj.size or 0,
+            )
+        except FileNotFoundError:
+            continue
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: str,
-    user_id: str = Depends(get_current_user_id),
 ):
     try:
         content = storage.get_file(f"files/{file_id}")
