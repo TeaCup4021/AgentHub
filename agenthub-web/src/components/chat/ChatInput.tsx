@@ -3,10 +3,12 @@ import { useChatStore } from "@/stores/chatStore";
 import { Button, Popover, Avatar } from "@douyinfe/semi-ui";
 import { IconSend, IconClose } from "@douyinfe/semi-icons";
 import { mentionsFromText } from "@/lib/mentionParser";
-import type { Agent } from "@/types";
+import { fileApi } from "@/lib/api";
+import { AttachmentPreview } from "@/components/chat/AttachmentPreview";
+import type { Agent, Attachment } from "@/types";
 
 interface ChatInputProps {
-  onSend: (content: string, mentions: string[]) => void;
+  onSend: (content: string, mentions: string[], attachments: Attachment[]) => void;
   onStop?: () => void;
   disabled?: boolean;
   agents: Agent[];
@@ -146,17 +148,23 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
     }
   }, [focusKey]);
 
+  const pendingAttachments = useChatStore((s) => s.pendingAttachments);
+  const removePendingAttachment = useChatStore((s) => s.removePendingAttachment);
+  const clearPendingAttachments = useChatStore((s) => s.clearPendingAttachments);
+
   const handleSend = useCallback(() => {
     const el = editorRef.current;
     if (!el || disabled) return;
     const plain = getPlainText(el).trim();
-    if (!plain) return;
+    const readyAttachments = pendingAttachments.filter((a) => a.fileId);
+    if (!plain && readyAttachments.length === 0) return;
     const mentions = mentionsFromText(plain, agents);
-    onSend(plain, mentions);
+    onSend(plain, mentions, readyAttachments);
     setMentionActive(false);
     while (el.firstChild) el.removeChild(el.firstChild);
+    clearPendingAttachments();
     el.focus();
-  }, [disabled, onSend, agents]);
+  }, [disabled, onSend, agents, pendingAttachments, clearPendingAttachments]);
 
   useEffect(() => {
     if (disabled) return;
@@ -263,16 +271,37 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
 
   const [dragOver, setDragOver] = useState(false);
 
+  const addPendingAttachment = useChatStore((s) => s.addPendingAttachment);
+
+  const uploadFile = useCallback(async (file: File) => {
+    const tempId = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const isImage = file.type.startsWith("image/");
+    const tempUrl = isImage ? URL.createObjectURL(file) : "";
+    const temp: Attachment = {
+      id: tempId, fileId: "", fileName: file.name, fileUrl: tempUrl,
+      fileType: file.type, fileSize: file.size,
+    };
+    addPendingAttachment(temp);
+    try {
+      const res = await fileApi.upload(file);
+      const d = res.data.data;
+      addPendingAttachment({ ...temp, id: tempId + "-done", fileId: d.id, fileUrl: d.url || tempUrl });
+    } catch {
+      addPendingAttachment({ ...temp, id: tempId + "-error" });
+    }
+  }, [addPendingAttachment]);
+
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith("image/")) {
+    const files = e.clipboardData?.files;
+    if (!files?.length) return;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      if (f.type.startsWith("image/") || f.type.startsWith("application/")) {
         e.preventDefault();
-        return;
+        uploadFile(f);
       }
     }
-  }, []);
+  }, [uploadFile]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -287,6 +316,15 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    const files = e.dataTransfer?.files;
+    if (!files?.length) return;
+    for (let i = 0; i < files.length; i++) {
+      uploadFile(files[i]);
+    }
+  }, [uploadFile]);
+
+  const handleBlur = useCallback(() => {
+    setTimeout(() => setMentionActive(false), 150);
   }, []);
 
   return (
@@ -295,6 +333,7 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
       padding: "12px 16px",
       background: "var(--color-bg-elevated)",
     }}>
+      <AttachmentPreview attachments={pendingAttachments} onRemove={removePendingAttachment} />
       {pendingQuote && (
         <div style={{
           display: "flex",
@@ -412,6 +451,7 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
+              onBlur={handleBlur}
               style={{
                 borderRadius: "var(--radius-md)",
                 border: `1px solid ${dragOver ? "var(--color-primary)" : "var(--color-border-medium)"}`,

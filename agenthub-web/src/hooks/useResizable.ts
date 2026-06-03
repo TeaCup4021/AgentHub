@@ -19,7 +19,6 @@ export function useResizable(options: UseResizableOptions) {
     minH = 140,
     maxW = 1200,
     maxH = 700,
-    defaultWidth = "100%",
     defaultHeight,
   } = options;
 
@@ -27,6 +26,21 @@ export function useResizable(options: UseResizableOptions) {
   const resizeRef = useRef<HTMLDivElement>(null);
   const sizeLabelRef = useRef<HTMLSpanElement>(null);
 
+  // ResizeObserver: unified label update using border-box size
+  useEffect(() => {
+    const card = cardRef.current;
+    const label = sizeLabelRef.current;
+    if (!card || !label) return;
+
+    const ro = new ResizeObserver(() => {
+      const rect = card.getBoundingClientRect();
+      label.textContent = Math.round(rect.width) + "×" + Math.round(rect.height);
+    });
+    ro.observe(card);
+    return () => ro.disconnect();
+  }, []);
+
+  // Drag-to-resize
   useEffect(() => {
     const handle = resizeRef.current;
     const card = cardRef.current;
@@ -52,14 +66,10 @@ export function useResizable(options: UseResizableOptions) {
 
     const onMove = (e: MouseEvent) => {
       if (!dragging) return;
-      const w = clamp(sw + (e.clientX - sx), minW, maxW);
-      const h = clamp(sh + (e.clientY - sy), minH, maxH);
+      const w = clamp(sw + (e.clientX - sx), minW, Math.max(maxW, sw));
+      const h = clamp(sh + (e.clientY - sy), minH, Math.max(maxH, sh));
       card.style.width = w + "px";
       card.style.height = h + "px";
-      if (sizeLabelRef.current) {
-        sizeLabelRef.current.textContent = Math.round(w) + "×" + Math.round(h);
-        sizeLabelRef.current.classList.add("visible");
-      }
     };
 
     const onUp = () => {
@@ -83,23 +93,14 @@ export function useResizable(options: UseResizableOptions) {
     const card = cardRef.current;
     if (!card) return;
     card.classList.add("artifact-card--restoring");
-    card.style.width = defaultWidth;
+    card.style.width = "";
     card.style.height = defaultHeight + "px";
-    if (sizeLabelRef.current) {
-      sizeLabelRef.current.classList.remove("visible");
-    }
-    requestAnimationFrame(() => {
-      if (sizeLabelRef.current && cardRef.current) {
-        const w = cardRef.current.getBoundingClientRect().width;
-        sizeLabelRef.current.textContent = Math.round(w) + "×" + defaultHeight;
-      }
-    });
     const onEnd = () => {
       card.classList.remove("artifact-card--restoring");
       card.removeEventListener("transitionend", onEnd);
     };
     card.addEventListener("transitionend", onEnd);
-  }, [defaultWidth, defaultHeight]);
+  }, [defaultHeight]);
 
   return { cardRef, resizeRef, sizeLabelRef, resetSize };
 }

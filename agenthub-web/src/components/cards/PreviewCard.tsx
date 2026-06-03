@@ -11,10 +11,31 @@ const DEFAULT_HEIGHT = 260;
 
 export function PreviewCard({ artifact }: PreviewCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [error, setError] = useState(false);
   const c = artifact.content as unknown as PreviewArtifactContent;
   const { cardRef, resizeRef, sizeLabelRef, resetSize } = useResizable({ defaultHeight: DEFAULT_HEIGHT });
 
   const openFullscreen = useCallback(() => setExpanded(true), []);
+  const handleError = useCallback(() => setError(true), []);
+
+  const IframeEl = (_props: { fullscreen?: boolean }) => (
+    error ? (
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        height: "100%", color: "var(--color-text-tertiary)", fontSize: 12,
+      }}>
+        预览不可用
+      </div>
+    ) : (
+      <iframe
+        src={c.url}
+        title={c.title || "preview"}
+        onError={handleError}
+        style={{ width: "100%", height: "100%", border: "none" }}
+        sandbox="allow-scripts"
+      />
+    )
+  );
 
   return (
     <>
@@ -41,7 +62,7 @@ export function PreviewCard({ artifact }: PreviewCardProps) {
             {c.previewType}
           </span>
           <div style={{ flex: 1 }} />
-          <span ref={sizeLabelRef} className="artifact-card__size-label">{"100% × " + DEFAULT_HEIGHT}</span>
+          <span ref={sizeLabelRef} className="artifact-card__size-label" />
           <button className="artifact-card__reset" onClick={resetSize} title="恢复默认大小">
             <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
@@ -57,12 +78,7 @@ export function PreviewCard({ artifact }: PreviewCardProps) {
         </div>
 
         <div className="artifact-card__body" style={{ flex: 1, minHeight: 0, background: "#fff" }}>
-          <iframe
-            src={c.url}
-            title={c.title || "preview"}
-            style={{ width: "100%", height: "100%", border: "none" }}
-            sandbox="allow-scripts allow-same-origin"
-          />
+          <IframeEl />
         </div>
 
         <div ref={resizeRef} className="artifact-card__resize" title="拖拽调整大小">
@@ -80,12 +96,7 @@ export function PreviewCard({ artifact }: PreviewCardProps) {
         title={c.title || "全屏预览"}
         bodyStyle={{ padding: 0, height: "calc(100% - 48px)" }}
       >
-        <iframe
-          src={c.url}
-          title={c.title || "preview"}
-          style={{ width: "100%", height: "100%", border: "none" }}
-          sandbox="allow-scripts allow-same-origin"
-        />
+        <IframeEl fullscreen />
       </Modal>
     </>
   );

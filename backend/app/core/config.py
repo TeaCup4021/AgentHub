@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "agenthub-artifacts"
     CORS_ORIGINS: List[str] = ["http://localhost:5173"]
+    PREVIEW_SERVER_PORT: int = 8080
+    PREVIEW_SERVER_URL: str = "http://localhost:8080"
 
     # ADK Streaming
     AGENTHUB_USE_ADK_STREAM: str = "0"

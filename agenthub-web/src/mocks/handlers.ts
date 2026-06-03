@@ -694,6 +694,8 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
         model: body.model,
         capabilities: body.capabilities || [],
         systemPrompt: body.systemPrompt,
+        baseUrl: body.baseUrl || "",
+        apiKey: body.apiKey || "",
         toolConfig: body.toolConfig || {},
         isBuiltin: false,
         isActive: true,
@@ -743,6 +745,60 @@ export function setupMockHandlers(api: AxiosInstance): () => void {
     else if (method === "delete" && /^\/conversations\/[^/]+\/pins\/[^/]+$/.test(url)) {
       await delay();
       const [, responseBody] = successResponse(null);
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /conversations/:id/pins
+    else if (method === "get" && /^\/conversations\/[^/]+\/pins$/.test(url)) {
+      await delay();
+      const convId = url.split("/")[2];
+      const msgs = messages[convId] || [];
+      const pinned = msgs.slice(0, 2).map((m) => ({
+        messageId: m.id,
+        conversationId: m.conversationId,
+        content: m.content.slice(0, 100),
+        senderName: m.senderName || "Agent",
+        createdAt: m.createdAt,
+      }));
+      const [, responseBody] = successResponse(pinned);
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // POST /files/upload
+    else if (method === "post" && url === "/files/upload") {
+      await delay(200);
+      const fileId = `file-${generateId()}`;
+      const [, responseBody] = successResponse({
+        id: fileId,
+        url: `https://picsum.photos/800/600?random=${Date.now()}`,
+        filename: "uploaded-file",
+        size: 123456,
+        mime_type: "image/png",
+        width: 800,
+        height: 600,
+      });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // GET /files/:id
+    else if (method === "get" && /^\/files\/[^/]+$/.test(url) && !url.includes("/content") && !url.includes("/apply-diff")) {
+      await delay();
+      const [, responseBody] = successResponse({
+        url: `https://picsum.photos/800/600?random=${Date.now()}`,
+        fileName: "file.png",
+        mimeType: "image/png",
+      });
+      config.adapter = () =>
+        Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
+    }
+
+    // PUT /files/:id/content (for Monaco editor)
+    else if (method === "put" && /^\/files\/[^/]+\/content$/.test(url)) {
+      await delay();
+      const [, responseBody] = successResponse({ status: "updated" });
       config.adapter = () =>
         Promise.resolve({ data: responseBody, status: 200, statusText: "OK", headers: {}, config });
     }

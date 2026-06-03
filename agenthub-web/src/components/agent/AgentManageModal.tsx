@@ -1,8 +1,11 @@
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { Modal, Input, Button, Tag, Empty } from "@douyinfe/semi-ui";
-import { IconSearch, IconPlus } from "@douyinfe/semi-icons";
+import { IconSearch, IconPlus, IconComment } from "@douyinfe/semi-icons";
 import { useAgents, useDeleteAgent } from "@/hooks/useAgents";
+import { useCreateConversation } from "@/hooks/useConversations";
+import { useChatStore } from "@/stores/chatStore";
 import { CreateAgentModal } from "./CreateAgentModal";
 import type { Agent } from "@/types";
 
@@ -19,6 +22,22 @@ export function AgentManageModal({ open, onClose }: AgentManageModalProps) {
   const [showCreate, setShowCreate] = useState(false);
 
   const deleteAgent = useDeleteAgent();
+  const createConv = useCreateConversation();
+  const qc = useQueryClient();
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation);
+
+  const handleConversationalCreate = useCallback(() => {
+    createConv.mutate(
+      { title: "创建新 Agent", type: "group", agentIds: [] },
+      {
+        onSuccess: (conv) => {
+          onClose();
+          setActiveConversation(conv.id);
+          qc.invalidateQueries({ queryKey: ["conversations"] });
+        },
+      },
+    );
+  }, [createConv, onClose, setActiveConversation, qc]);
 
   const filtered = agents.filter((a) =>
     !search || a.name.toLowerCase().includes(search.toLowerCase())
@@ -63,6 +82,13 @@ export function AgentManageModal({ open, onClose }: AgentManageModalProps) {
               onClick={() => setShowCreate(true)}
             >
               创建
+            </Button>
+            <Button
+              icon={<IconComment />}
+              theme="light"
+              onClick={handleConversationalCreate}
+            >
+              对话式创建
             </Button>
           </div>
 

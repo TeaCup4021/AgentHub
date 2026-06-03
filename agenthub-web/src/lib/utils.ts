@@ -53,6 +53,25 @@ const AGENT_COLORS = [
   "#788c9e",
 ];
 
+/**
+ * Normalize REST API artifact from snake_case to camelCase.
+ * SSE artifacts pass through unchanged (already camelCase).
+ */
+export function normalizeArtifact(raw: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(raw)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+    normalized[camelKey] = value;
+  }
+
+  if (!normalized.id) {
+    normalized.id = `artifact-${normalized.createdAt || Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  }
+
+  return normalized;
+}
+
 export function getAgentColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {

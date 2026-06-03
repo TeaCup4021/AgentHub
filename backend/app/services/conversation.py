@@ -23,12 +23,16 @@ class ConversationService:
         page: int = 1,
         page_size: int = 10,
         keyword: Optional[str] = None,
-        project_id: Optional[UUID] = None,
+        project_id: Optional[str] = None,
     ) -> Page:
         query = select(Conversation).where(Conversation.owner_id == user_id, Conversation.is_deleted == False)
 
         if project_id:
-            query = query.where(Conversation.project_id == project_id)
+            try:
+                pid = UUID(project_id)
+                query = query.where(Conversation.project_id == pid)
+            except ValueError:
+                pass  # invalid UUID → ignore filter silently
 
         if keyword:
             query = query.where(Conversation.title.ilike(f"%{keyword}%"))

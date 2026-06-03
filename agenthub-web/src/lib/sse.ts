@@ -16,6 +16,8 @@ export interface SSECallbacks {
   onThinking?: (data: SSEThinking) => void;
   onMessageEnd?: (data: SSEMessageEnd) => void;
   onError?: (data: SSEError) => void;
+  onConflict?: (data: import("@/types").SSEConflict) => void;
+  onAttachment?: (data: unknown) => void;
   onConnectionError?: (error: Event) => void;
 }
 
@@ -48,12 +50,14 @@ export function createSSEStream(
     thinking: (d) => callbacks.onThinking?.(d as SSEThinking),
     message_end: (d) => callbacks.onMessageEnd?.(d as SSEMessageEnd),
     error: (d) => callbacks.onError?.(d as SSEError),
+    conflict_detected: (d) => callbacks.onConflict?.(d as import("@/types").SSEConflict),
+    attachment: (d) => callbacks.onAttachment?.(d),
   };
 
   const streamUrl = new URL(`/api/v1/conversations/${conversationId}/stream`, window.location.origin);
   if (prompt) streamUrl.searchParams.set("prompt", prompt);
-  if (orchestrateMode) streamUrl.searchParams.set("orchestrate_mode", orchestrateMode);
-  if (plannerAgentId) streamUrl.searchParams.set("planner_agent_id", plannerAgentId);
+  if (orchestrateMode) streamUrl.searchParams.set("orchestrateMode", orchestrateMode);
+  if (plannerAgentId) streamUrl.searchParams.set("plannerAgentId", plannerAgentId);
   fetch(streamUrl.toString(), {
     method: "GET",
     headers: {

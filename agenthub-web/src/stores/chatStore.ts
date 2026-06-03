@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Artifact, ThinkingStep, PlanSubtask } from "@/types";
+import type { Artifact, ThinkingStep, PlanSubtask, Attachment } from "@/types";
 
 interface StreamingMessage {
   content: string;
@@ -50,6 +50,14 @@ interface ChatUIState {
   setDagTaskId: (id: string | null) => void;
   setPersistedThinkingSteps: (steps: ThinkingStep[]) => void;
   appendPersistedThinkingStep: (step: ThinkingStep) => void;
+  pinnedMessageIds: string[];
+  addPinnedMessage: (id: string) => void;
+  removePinnedMessage: (id: string) => void;
+  setPinnedMessages: (ids: string[]) => void;
+  pendingAttachments: Attachment[];
+  addPendingAttachment: (att: Attachment) => void;
+  removePendingAttachment: (id: string) => void;
+  clearPendingAttachments: () => void;
 }
 
 export const useChatStore = create<ChatUIState>((set, get) => ({
@@ -65,6 +73,8 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
   pendingPlan: null,
   dagTaskId: null,
   persistedThinkingSteps: [],
+  pinnedMessageIds: [],
+  pendingAttachments: [],
 
   setActiveConversation: (id) => set({ activeConversationId: id }),
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -168,4 +178,17 @@ export const useChatStore = create<ChatUIState>((set, get) => ({
       }
       return { persistedThinkingSteps: [...s.persistedThinkingSteps, step] };
     }),
+
+  addPinnedMessage: (id) => set((s) => {
+    if (s.pinnedMessageIds.includes(id)) return s;
+    return { pinnedMessageIds: [...s.pinnedMessageIds, id] };
+  }),
+  removePinnedMessage: (id) => set((s) => ({
+    pinnedMessageIds: s.pinnedMessageIds.filter((pid) => pid !== id),
+  })),
+  setPinnedMessages: (ids) => set({ pinnedMessageIds: ids }),
+
+  addPendingAttachment: (att) => set((s) => ({ pendingAttachments: [...s.pendingAttachments, att] })),
+  removePendingAttachment: (id) => set((s) => ({ pendingAttachments: s.pendingAttachments.filter((a) => a.id !== id) })),
+  clearPendingAttachments: () => set({ pendingAttachments: [] }),
 }));

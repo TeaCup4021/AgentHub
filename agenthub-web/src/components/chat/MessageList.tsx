@@ -11,10 +11,99 @@ import { formatTime, formatFullTime } from "@/lib/formatTime";
 import { getAgentColor } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { CardRenderer } from "@/components/cards";
-import type { Agent, Message, ThinkingStep, PlanSubtask } from "@/types";
+import type { Agent, Message, ThinkingStep, PlanSubtask, Artifact } from "@/types";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { MessageContextMenu } from "./MessageContextMenu";
 import { OrchestratorPlan } from "./OrchestratorPlan";
+
+function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
+  const hasArtifactType = (type: string) => existingArtifacts.some((a) => a.artifactType === type);
+  const cards: React.ReactNode[] = [];
+
+  if (!hasArtifactType("diff")) {
+    let idx = 0;
+    const makeDiffCard = (oldCode: string, newCode: string, title: string) => {
+      const fallback: Artifact = {
+        id: `fallback-diff-${idx++}`,
+        artifactType: "diff",
+        title,
+        content: { oldCode, newCode, language: "diff", fileName: "" },
+        version: 1,
+        createdAt: new Date().toISOString(),
+      };
+      cards.push(<CardRenderer key={fallback.id} artifact={fallback} />);
+    };
+
+    // 1. Explicit ```diff blocks
+    const diffRe = /```diff\n([\s\S]*?)```/g;
+    let match;
+    while ((match = diffRe.exec(content)) !== null) {
+      const oldLines: string[] = [];
+      const newLines: string[] = [];
+      for (const line of match[1].split("\n")) {
+        if (line.startsWith("-")) oldLines.push(line.slice(1));
+        else if (line.startsWith("+")) newLines.push(line.slice(1));
+        else { oldLines.push(line); newLines.push(line); }
+      }
+      makeDiffCard(oldLines.join("\n"), newLines.join("\n"), "变更对比");
+    }
+
+    // 2. Paired code blocks: "修改前/before" followed by "修改后/after"
+    if (idx === 0) {
+      const pairRe = /(?:修改前|before|原始|旧代码|old)[\s\S]*?```\w*\n([\s\S]*?)```[\s\S]*?(?:修改后|after|修改|新代码|new)[\s\S]*?```\w*\n([\s\S]*?)```/gi;
+      let pm;
+      while ((pm = pairRe.exec(content)) !== null) {
+        makeDiffCard(pm[1].trim(), pm[2].trim(), "变更对比");
+      }
+    }
+
+    // 3. Any code block with +/- diff lines (even without diff language tag)
+    if (idx === 0) {
+      const codeRe = /```(\w*)\n([\s\S]*?)```/g;
+      let cm;
+      while ((cm = codeRe.exec(content)) !== null) {
+        const lang = cm[1];
+        if (lang === "diff") continue;
+        const body = cm[2];
+        const hasDiffMarkers = /^[+-]/m.test(body) && (body.includes("\n-") || body.includes("\n+"));
+        if (!hasDiffMarkers) continue;
+        const oldLines: string[] = [];
+        const newLines: string[] = [];
+        for (const line of body.split("\n")) {
+          if (line.startsWith("-")) oldLines.push(line.slice(1));
+          else if (line.startsWith("+")) newLines.push(line.slice(1));
+          else { oldLines.push(line); newLines.push(line); }
+        }
+        if (oldLines.length > 0) {
+          makeDiffCard(oldLines.join("\n"), newLines.join("\n"), "变更对比");
+        }
+      }
+    }
+  }
+
+  if (!hasArtifactType("link_preview")) {
+    const urlRe = /https?:\/\/[^\s\)\]>]+/g;
+    let match;
+    const seen = new Set<string>();
+    let idx = 0;
+    while ((match = urlRe.exec(content)) !== null) {
+      const url = match[0].replace(/[.,;:!?\"')\]]*$/, "");
+      if (seen.has(url)) continue;
+      seen.add(url);
+      const fallback: Artifact = {
+        id: `fallback-link-${idx++}`,
+        artifactType: "link_preview",
+        title: url,
+        content: { url },
+        version: 1,
+        createdAt: new Date().toISOString(),
+      };
+      cards.push(<CardRenderer key={fallback.id} artifact={fallback} />);
+    }
+  }
+
+  return cards;
+}
 
 const FIVE_MINUTES = 5 * 60 * 1000;
 
@@ -89,15 +178,19 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
   }, [agent]);
 
   const isFailed = message.status === "failed";
+  const pinnedIds = useChatStore((s) => s.pinnedMessageIds);
+  const isPinned = !isUser && !isOrchestrator && pinnedIds.includes(message.id);
   const avatarCursor = agent ? "pointer" : "";
 
   return (
     <div
+      id={`msg-${message.id}`}
       style={{
         display: "flex",
         gap: 12,
-        padding: "12px 16px",
+        padding: isPinned ? "12px 16px 12px 13px" : "12px 16px",
         flexDirection: isUser ? "row-reverse" : "row",
+        borderLeft: isPinned ? "3px solid var(--color-primary)" : "3px solid transparent",
       }}
       title={formatFullTime(message.createdAt)}
       onContextMenu={(e) => { if (onPin && onUnpin) { e.preventDefault(); setMsgMenuPos({ top: e.clientY, left: e.clientX }); setShowMsgMenu(true); } }}
@@ -223,7 +316,23 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
                       text={searchText ? highlightText(message.content, searchText) : message.content}
                     />
                   )}
+                  {message.attachments && message.attachments.map((att) => (
+                    <div key={att.id} style={{ marginTop: 8 }}>
+                      {att.fileType.startsWith("image/") ? (
+                        <img src={att.fileUrl} alt={att.fileName} style={{ maxWidth: 320, maxHeight: 240, borderRadius: "var(--radius-sm)", cursor: "pointer" }} />
+                      ) : (
+                        <a href={att.fileUrl} download={att.fileName} style={{
+                          display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+                          border: "1px solid var(--color-border-light)", borderRadius: "var(--radius-sm)",
+                          color: "var(--color-text-secondary)", textDecoration: "none", fontSize: "var(--font-size-sm)",
+                        }}>
+                          {att.fileName} ({att.fileSize > 0 ? `${(att.fileSize / 1024).toFixed(1)} KB` : "未知大小"})
+                        </a>
+                      )}
+                    </div>
+                  ))}
                   {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+                  {message.status === "done" && renderFallbackCards(message.content, message.artifacts)}
                 </>
               )}
             </ErrorBoundary>
@@ -315,16 +424,16 @@ const PendingMessageBubble = memo(function PendingMessageBubble() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        width: 32,
-        height: 32,
+        width: 36,
+        height: 36,
         borderRadius: "50%",
-        background: "var(--color-gray-400)",
+        background: "var(--color-primary)",
         color: "#fff",
-        fontSize: "var(--font-size-xs)",
-        fontWeight: 500,
+        fontSize: "var(--font-size-sm)",
+        fontWeight: 600,
         flexShrink: 0,
       }}>
-        A
+        <span className="pending-dot-bounce">···</span>
       </div>
       <div style={{ maxWidth: "75%" }}>
         <div style={{
@@ -485,6 +594,21 @@ export function MessageList({
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const handleScrollTo = (e: Event) => {
+      const { messageId } = (e as CustomEvent<{ messageId: string }>).detail;
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.transition = "background 0.3s";
+        el.style.background = "var(--color-bg-active)";
+        setTimeout(() => { el.style.background = ""; }, 1500);
+      }
+    };
+    window.addEventListener("scroll-to-message", handleScrollTo);
+    return () => window.removeEventListener("scroll-to-message", handleScrollTo);
   }, []);
 
   return (

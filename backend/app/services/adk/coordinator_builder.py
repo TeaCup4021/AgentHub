@@ -9,6 +9,7 @@ from app.services.adapters.base import AdapterRegistry
 from app.services.adk.execution_tracer import ExecutionTracer
 from app.services.adk.models import get_deepseek_llm
 from app.services.adk.tool_loader import ToolLoader
+from app.services.pin_spec_injector import before_model_callback
 
 # Regex matching ADK template variables like {identifier} or {identifier?}
 _ADK_TEMPLATE_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\??\}")
@@ -172,6 +173,7 @@ class CoordinatorBuilder:
             "instruction": am.system_prompt or "You are a helpful assistant.",
             "tools": tool_loader.load(am.tool_config),
             "mode": "task",
+            "before_model_callback": before_model_callback,
         }
         if execution_tracer is not None:
             kwargs["before_agent_callback"] = execution_tracer.before_agent

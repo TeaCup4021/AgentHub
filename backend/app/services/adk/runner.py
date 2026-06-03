@@ -13,6 +13,7 @@ from app.models.agent import Agent as AgentModel
 from app.services.adk.models import resolve_agent_model
 from app.services.adk.tool_loader import ToolLoader
 from app.services.pin_spec_injector import before_model_callback
+from app.services.artifact_format import build_instruction
 
 logger = logging.getLogger("agenthub.runner")
 
@@ -71,7 +72,7 @@ def _build_agent_fallback(agent_model: AgentModel) -> LlmAgent:
     return LlmAgent(
         name=_sanitize_agent_name(agent_model.name),
         model=model,
-        instruction=agent_model.system_prompt or "You are a helpful assistant.",
+        instruction=build_instruction(agent_model),
         tools=tools,
         before_model_callback=before_model_callback,
     )

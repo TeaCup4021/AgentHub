@@ -78,3 +78,26 @@ export type GetDagResponse = ApiResponse<import("./chat").DagResponse>;
 // ========== Message API ==========
 
 export type GetMessageListResponse = ApiResponse<MessageListData>;
+
+// ========== Pin API ==========
+
+export interface PinnedMessage {
+  messageId: string;
+  conversationId: string;
+  content: string;
+  senderName: string;
+  createdAt: string;
+}
+export type GetPinsResponse = ApiResponse<PinnedMessage[]>;
+
+// ========== File API ==========
+
+export type UploadFileResponse = ApiResponse<{
+  id: string;
+  url: string;
+  filename: string;
+  size: number;
+  mime_type: string;
+  width?: number;
+  height?: number;
+}>;
