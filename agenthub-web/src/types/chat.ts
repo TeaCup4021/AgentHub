@@ -193,6 +193,10 @@ export interface DocumentArtifactContent {
   fileSize: number;
 }
 
+export function getArtifactContent<T>(artifact: Artifact): T {
+  return artifact.content as unknown as T;
+}
+
 export interface LinkPreviewArtifactContent {
   url: string;
   title?: string;

@@ -39,6 +39,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const streamMsgIdRef = useRef<string | null>(null);
   const streamAgentRef = useRef<string>("");
   const streamSenderIdRef = useRef<string>("");
+  const prevActiveIdRef = useRef<string | undefined>(activeId);
   const lastPromptRef = useRef<string>("");
   const planMetaRef = useRef<{ plan: PlanSubtask[]; plannerAgentId?: string | null; plannerAgentName?: string | null } | null>(null);
   const [plannerAgentId, setPlannerAgentId] = useState<string | null>(null);
@@ -94,18 +95,6 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     }
   }, [activeId, qc]);
 
-  const handlePinChanged = useCallback(() => {
-    if (activeId) {
-      qc.invalidateQueries({ queryKey: ["messages", activeId] });
-    }
-  }, [activeId, qc]);
-
-  const [scrollToMsgId, setScrollToMsgId] = useState<string | null>(null);
-  const handleJumpToMessage = useCallback((msgId: string) => {
-    setScrollToMsgId(msgId);
-    // Reset after a tick to allow re-triggering for same message
-    setTimeout(() => setScrollToMsgId(null), 100);
-  }, []);
 
   const {
     data: messagesData,
@@ -165,6 +154,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       content: "",
       artifacts: [],
       status: "done",
+      isPinned: false,
       meta: {
         planId: pendingPlan.planId,
         subtasks: pendingPlan.subtasks,
@@ -206,11 +196,12 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const sendRef = useRef<(convId: string, content: string, mentions: string[], attachments?: Attachment[]) => void>(null!);
 
   useEffect(() => {
+    const prevId = prevActiveIdRef.current;
     const msgId = streamMsgIdRef.current;
-    if (msgId) {
+    if (msgId && prevId) {
       const sc = useChatStore.getState().getStreamingContent(msgId);
       if (sc && sc.content) {
-        qc.setQueryData<InfiniteData<MessageListData>>(["messages", activeId], (old) => {
+        qc.setQueryData<InfiniteData<MessageListData>>(["messages", prevId], (old) => {
           if (!old) return old;
           return {
             ...old,
@@ -221,11 +212,12 @@ export function ChatArea({ conversations }: ChatAreaProps) {
                 return { ...page, items: page.items.map((m) => m.id === msgId ? { ...m, content: sc.content, artifacts: sc.artifacts } : m) };
               }
               const partial: Message = {
-                id: msgId, conversationId: activeId ?? "",
+                id: msgId, conversationId: prevId,
                 senderType: "agent", senderId: streamSenderIdRef.current,
                 senderName: streamAgentRef.current, contentType: "text",
                 content: sc.content, artifacts: sc.artifacts,
-                status: "failed", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+                status: "failed", isPinned: false,
+                createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
               };
               return { ...page, items: [partial, ...page.items] };
             }),
@@ -243,10 +235,15 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     setDagTaskId(null);
     setPlannerAgentId(null);
     useChatStore.getState().setPersistedThinkingSteps([]);
+    useChatStore.getState().setPendingPlan(null);
+    if (retryRef.current.timeoutId) {
+      clearTimeout(retryRef.current.timeoutId);
+      retryRef.current.timeoutId = null;
+    }
 
     // Load pinned messages for the current conversation
     if (activeId) {
-      conversationApi.listPins(activeId).then((res) => {
+      conversationApi.getPins(activeId).then((res) => {
         const pins = res.data?.data;
         if (pins) {
           useChatStore.getState().setPinnedMessages(pins.map((p) => p.message_id));
@@ -261,6 +258,10 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       streamAgentRef.current = "";
       setIsStreaming(false);
     };
+  }, [activeId]);
+
+  useEffect(() => {
+    prevActiveIdRef.current = activeId;
   }, [activeId]);
 
   const buildCallbacks = useCallback((convId: string, conv: Conversation | undefined) => ({
@@ -352,7 +353,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       setDagTaskId(null);
       clearAgentStatuses();
     },
-  }), [qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses]);
+  }), [qc, setIsStreaming, initStreaming, appendToken, appendArtifact, appendThinkingStep, finalizeStreaming, setConnectionStatus, setRetryCount, updateAgentStatus, clearAgentStatuses, agents]);
 
   const executeSend = useCallback((convId: string, content: string, mentions: string[], conv: Conversation | undefined, attachments?: Attachment[]) => {
     setConnectionStatus('connected');
@@ -374,6 +375,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       artifacts: [],
       attachments: attachments ?? [],
       status: "done",
+      isPinned: false,
       meta: null,
       createdAt: now,
       updatedAt: now,
@@ -667,8 +669,19 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     if (!activeId || !conversation) return;
     setConnectionStatus('connected');
     setRetryCount(0);
-    executeSend(activeId, "", [], conversation);
-  }, [activeId, conversation, setConnectionStatus, setRetryCount, executeSend]);
+    disconnectRef.current?.();
+    setIsStreaming(true);
+    const streamMode = conversation.type === "group" ? "auto_orchestrate" : undefined;
+    const callbacks = buildCallbacks(activeId, conversation);
+    disconnectRef.current = createSSEStream(activeId, {
+      ...callbacks,
+      onConnectionError: () => {
+        setConnectionStatus('failed');
+        setIsStreaming(false);
+        qc.invalidateQueries({ queryKey: ["messages", activeId] });
+      },
+    }, lastPromptRef.current, streamMode, plannerAgentIdRef.current);
+  }, [activeId, conversation, setConnectionStatus, setRetryCount, buildCallbacks, setIsStreaming, qc]);
 
   const handleDismissBanner = useCallback(() => {
     setConnectionStatus('connected');
@@ -702,7 +715,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <ChatHeader conversation={conversation} agents={agents} messageHitCount={messageSearch ? filteredMessages.length : undefined} taskSummary={taskSummary} onPinChanged={handlePinChanged} onJumpToMessage={handleJumpToMessage} />
+      <ChatHeader conversation={conversation} agents={agents} messageHitCount={messageSearch ? filteredMessages.length : undefined} taskSummary={taskSummary} />
       <div style={{ display: "flex", borderBottom: "1px solid var(--color-border-light)", background: "var(--color-bg-elevated)" }}>
         <TabButton active={viewMode === "chat"} count={rawMessages.length} onClick={() => setViewMode("chat")}>聊天</TabButton>
         <TabButton active={viewMode === "artifacts"} count={artifactCount} onClick={() => setViewMode("artifacts")}>产物</TabButton>
@@ -807,7 +820,6 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           dagTaskId={dagTaskId}
           onPin={handlePin}
           onUnpin={handleUnpin}
-          scrollToMessageId={scrollToMsgId}
         />
       )}
       {filteredMessages.length === 0 && !isStreaming && messageSearch && rawMessages.length > 0 ? (

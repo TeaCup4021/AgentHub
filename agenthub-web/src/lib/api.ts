@@ -19,7 +19,6 @@ import type {
   GetMessageListResponse,
   ApiResponse,
   Message,
-  PinInfo,
   CreateProjectRequest,
   CreateProjectResponse,
   GetProjectListResponse,
@@ -27,6 +26,8 @@ import type {
   UpdateProjectRequest,
   UpdateProjectResponse,
   GetDagResponse,
+  PinInfo,
+  UploadFileResponse,
 } from "@/types";
 
 // [后端对接] Vite 代理 /api → localhost:8080，见 vite.config.ts
@@ -67,15 +68,9 @@ api.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    // Extract server error message and wrap in a useful Error
-    const serverMsg = (error.response?.data as Record<string, unknown>)?.message;
-    if (serverMsg && typeof serverMsg === "string") {
-      (error as AxiosError & { serverMessage?: string }).serverMessage = serverMsg;
-    }
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
-
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry) {
       const refreshToken = localStorage.getItem("refresh_token");
 
       if (!refreshToken) {
@@ -90,7 +85,7 @@ api.interceptors.response.use(
           const res = await axios.post("/api/v1/auth/refresh", null, {
             params: { refresh_token: refreshToken },
           });
-          const newToken = res.data.data.access_token;
+          const newToken = res.data.data.accessToken;
           localStorage.setItem("token", newToken);
           isRefreshing = false;
           onRefreshed(newToken);
@@ -154,7 +149,7 @@ export const conversationApi = {
     return api.delete<ApiResponse<void>>(`/conversations/${conversationId}/pins/${messageId}`);
   },
 
-  listPins(conversationId: string) {
+  getPins(conversationId: string) {
     return api.get<ApiResponse<PinInfo[]>>(`/conversations/${conversationId}/pins`);
   },
 };
@@ -211,6 +206,7 @@ export interface SendMessageRequest {
   plannerAgentId?: string | null;
   plan_id?: string;
   plan?: ConfirmPlanItem[];
+  attachments?: import("@/types").Attachment[];
 }
 
 export interface SendMessageResponse extends ApiResponse<Message> {}
@@ -302,6 +298,10 @@ export const fileApi = {
 
   applyDiff(data: ApplyDiffParams) {
     return api.post<ApiResponse<ApplyDiffResult>>("/files/apply-diff", data);
+  },
+
+  getDownloadUrl(fileId: string): string {
+    return `/api/v1/files/${fileId}/download`;
   },
 };
 

@@ -43,7 +43,11 @@ class ADKToSSETranslator:
             if not event:
                 continue
 
-            message_id = getattr(event, "invocation_id", None) or str(uuid.uuid4())
+            inv_id = getattr(event, "invocation_id", None)
+            if inv_id:
+                message_id = inv_id[2:] if inv_id.startswith("e-") else inv_id
+            else:
+                message_id = str(uuid.uuid4())
 
             message_start = self._to_message_start(event, conversation_id, message_id, state)
             if message_start:

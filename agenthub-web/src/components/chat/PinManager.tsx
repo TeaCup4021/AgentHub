@@ -22,9 +22,8 @@ export function PinManager({
     if (!conversationId) return;
     setLoading(true);
     try {
-      const res = await conversationApi.listPins(conversationId);
-      const body = (res as any)?.data;
-      const data = body?.data ?? body ?? [];
+      const res = await conversationApi.getPins(conversationId);
+      const data = (res.data.data ?? []) as PinInfo[];
       setPins(Array.isArray(data) ? data : []);
     } catch {
       // silently ignore

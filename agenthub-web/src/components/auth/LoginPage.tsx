@@ -56,9 +56,11 @@ export function LoginPage() {
         navigate("/", { replace: true });
       } catch (e: unknown) {
         let msg = "操作失败";
-        if (e instanceof Error) {
-          const axErr = e as Error & { serverMessage?: string; response?: { data?: { message?: string } } };
-          msg = axErr.serverMessage || axErr.response?.data?.message || e.message;
+        if (e && typeof e === "object" && "response" in e) {
+          const axiosErr = e as { response?: { data?: { detail?: string; message?: string } }; message?: string };
+          msg = axiosErr.response?.data?.detail || axiosErr.response?.data?.message || axiosErr.message || msg;
+        } else if (e instanceof Error) {
+          msg = e.message;
         }
         setError(msg);
       }

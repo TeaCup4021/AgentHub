@@ -16,12 +16,20 @@ import { ThinkingBlock } from "./ThinkingBlock";
 import { MessageContextMenu } from "./MessageContextMenu";
 import { OrchestratorPlan } from "./OrchestratorPlan";
 
-/** Strip <artifact> XML tags from text so they don't leak through the markdown renderer. */
 function stripArtifactTags(text: string): string {
   return text
     .replace(/<artifact\b[^>]*>[\s\S]*?<\/artifact>/gi, '')
     .replace(/<artifact\b[^>]*\/>/gi, '')
     .trim();
+}
+
+function cleanContent(message: Message): string {
+  let text = stripArtifactTags(message.content || "");
+  if (message.senderType === "orchestrator") {
+    const idx = text.search(/\{\s*"subtasks?"/);
+    if (idx > 0) text = text.slice(0, idx).trim();
+  }
+  return text;
 }
 
 function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
@@ -89,6 +97,26 @@ function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
     }
   }
 
+  if (!hasArtifactType("preview")) {
+    const htmlRe = /```html\n([\s\S]*?)```/g;
+    let hm;
+    let pidx = 0;
+    while ((hm = htmlRe.exec(content)) !== null) {
+      const htmlContent = hm[1].trim();
+      if (htmlContent.includes("<!DOCTYPE") || htmlContent.includes("<html") || htmlContent.length > 200) {
+        const previewFallback: Artifact = {
+          id: `fallback-preview-${pidx++}`,
+          artifactType: "preview",
+          title: "HTML 预览",
+          content: { url: "", title: "HTML 预览", previewType: "web" },
+          version: 1,
+          createdAt: new Date().toISOString(),
+        };
+        cards.push(<CardRenderer key={previewFallback.id} artifact={previewFallback} />);
+      }
+    }
+  }
+
   if (!hasArtifactType("link_preview")) {
     const urlRe = /https?:\/\/[^\s\)\]>]+/g;
     let match;
@@ -143,7 +171,6 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
   dagTaskId?: string | null;
   onPin?: (msgId: string) => void;
   onUnpin?: (msgId: string) => void;
-  scrollToMessageId?: string | null;
 }) {
   const isUser = message.senderType === "user";
   const isOrchestrator = message.senderType === "orchestrator";
@@ -180,6 +207,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
   const handleAvatarContextMenu = useCallback((e: React.MouseEvent) => {
     if (!agent) return;
     e.preventDefault();
+    e.stopPropagation();
     setMenuPos({ top: e.clientY, left: e.clientX });
     setShowMenu(true);
     setShowPopover(false);
@@ -201,7 +229,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
         borderLeft: isPinned ? "3px solid var(--color-primary)" : "3px solid transparent",
       }}
       title={formatFullTime(message.createdAt)}
-      onContextMenu={(e) => { if (onPin && onUnpin) { e.preventDefault(); setMsgMenuPos({ top: e.clientY, left: e.clientX }); setShowMsgMenu(true); } }}
+      onContextMenu={(e) => { if (onPin && onUnpin && !isUser) { e.preventDefault(); e.stopPropagation(); setMsgMenuPos({ top: e.clientY, left: e.clientX }); setShowMsgMenu(true); } }}
     >
       {isFailed ? (
         <div style={{
@@ -321,7 +349,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
                   {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
                   {message.content && (
                     <MarkdownBubble
-                      text={searchText ? highlightText(stripArtifactTags(message.content), searchText) : stripArtifactTags(message.content)}
+                      text={searchText ? highlightText(cleanContent(message), searchText) : cleanContent(message)}
                     />
                   )}
                   {message.attachments && message.attachments.map((att) => (
@@ -340,7 +368,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
                     </div>
                   ))}
                   {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
-                  {message.status === "done" && renderFallbackCards(stripArtifactTags(message.content), message.artifacts)}
+                  {renderFallbackCards(message.content, message.artifacts)}
                 </>
               )}
             </ErrorBoundary>
@@ -418,6 +446,7 @@ const StreamingMessageBubble = memo(function StreamingMessageBubble({ messageId,
             {sc.thinkingSteps.length > 0 && <ThinkingBlock steps={sc.thinkingSteps} isStreaming />}
             {sc.content && <MarkdownBubble text={stripArtifactTags(sc.content)} isStreaming />}
             {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
+            {renderFallbackCards(sc.content, [])}
           </ErrorBoundary>
         </div>
       </div>
@@ -506,13 +535,12 @@ interface MessageListProps {
   dagTaskId?: string | null;
   onPin?: (msgId: string) => void;
   onUnpin?: (msgId: string) => void;
-  scrollToMessageId?: string | null;
 }
 
 export function MessageList({
   messages, agents, streamingMessageId, streamingAgentName,
   isWaiting, hasMore, isFetchingMore, onLoadMore, searchText, onRegenerate,
-  onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId, onPin, onUnpin, scrollToMessageId,
+  onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId, onPin, onUnpin,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -521,7 +549,6 @@ export function MessageList({
   const [unreadCount, setUnreadCount] = useState(0);
   const prevVisibleCountRef = useRef(0);
   const firstMsgIdRef = useRef<string | null>(null);
-  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const visibleCount =
     messages.length + (streamingMessageId ? 1 : 0) + (isWaiting ? 1 : 0);
@@ -529,25 +556,6 @@ export function MessageList({
   const scrollToBottom = useCallback(() => {
     bottomSentinelRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
-
-  // Scroll to a specific message by id
-  useEffect(() => {
-    if (!scrollToMessageId) return;
-    const el = document.querySelector(`[data-message-id="${scrollToMessageId}"]`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      // Use ref so the timer survives React cleanup when scrollToMessageId
-      // is reset by handleJumpToMessage (which clears it after 100ms).
-      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-      flashTimerRef.current = setTimeout(() => {
-        el.classList.add("message-flash");
-        setTimeout(() => {
-          el.classList.remove("message-flash");
-          flashTimerRef.current = null;
-        }, 1500);
-      }, 400);
-    }
-  }, [scrollToMessageId]);
 
   useLayoutEffect(() => {
     if (messages.length > 0 && firstMsgIdRef.current !== null && messages[0].id !== firstMsgIdRef.current) {
