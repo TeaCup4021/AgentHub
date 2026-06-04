@@ -16,6 +16,14 @@ import { ThinkingBlock } from "./ThinkingBlock";
 import { MessageContextMenu } from "./MessageContextMenu";
 import { OrchestratorPlan } from "./OrchestratorPlan";
 
+/** Strip <artifact> XML tags from text so they don't leak through the markdown renderer. */
+function stripArtifactTags(text: string): string {
+  return text
+    .replace(/<artifact\b[^>]*>[\s\S]*?<\/artifact>/gi, '')
+    .replace(/<artifact\b[^>]*\/>/gi, '')
+    .trim();
+}
+
 function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
   const hasArtifactType = (type: string) => existingArtifacts.some((a) => a.artifactType === type);
   const cards: React.ReactNode[] = [];
@@ -313,7 +321,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
                   {thinkingSteps.length > 0 && <ThinkingBlock steps={thinkingSteps} />}
                   {message.content && (
                     <MarkdownBubble
-                      text={searchText ? highlightText(message.content, searchText) : message.content}
+                      text={searchText ? highlightText(stripArtifactTags(message.content), searchText) : stripArtifactTags(message.content)}
                     />
                   )}
                   {message.attachments && message.attachments.map((att) => (
@@ -332,7 +340,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
                     </div>
                   ))}
                   {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
-                  {message.status === "done" && renderFallbackCards(message.content, message.artifacts)}
+                  {message.status === "done" && renderFallbackCards(stripArtifactTags(message.content), message.artifacts)}
                 </>
               )}
             </ErrorBoundary>
@@ -408,7 +416,7 @@ const StreamingMessageBubble = memo(function StreamingMessageBubble({ messageId,
         }}>
           <ErrorBoundary label="流式消息渲染">
             {sc.thinkingSteps.length > 0 && <ThinkingBlock steps={sc.thinkingSteps} isStreaming />}
-            {sc.content && <MarkdownBubble text={sc.content} isStreaming />}
+            {sc.content && <MarkdownBubble text={stripArtifactTags(sc.content)} isStreaming />}
             {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
           </ErrorBoundary>
         </div>

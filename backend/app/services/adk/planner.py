@@ -259,7 +259,7 @@ class OrchestratorPlanner:
 
         return (
             f"{'Create' if mode == 'create' else 'Modify'} an execution plan for the "
-            f"following request. Break it into subtasks with dependencies.\n\n"
+            f"following request.\n\n"
             f"Available agents:\n{agent_list}\n\n"
             f"{current_plan_text}"
             "Output ONLY a JSON object (no markdown, no extra text):\n"
@@ -278,9 +278,12 @@ class OrchestratorPlanner:
             '}\n\n'
             "Rules:\n"
             "1. Use exact agentId and agentName from the list above\n"
-            "2. Each instruction must be self-contained and actionable\n"
-            '3. "dependsOn" lists subtaskIds that must finish before this subtask starts\n'
-            "4. Independent subtasks should have empty dependsOn (they run in parallel)\n"
+            "2. DISTRIBUTE subtasks across DIFFERENT agents — do not assign all work "
+            "to a single agent. Each available agent should be assigned at least one "
+            "subtask that matches its expertise.\n"
+            "3. Each instruction must be self-contained and actionable\n"
+            '4. "dependsOn" controls frontend display ordering — set it to show sequential '
+            "or parallel relationships visually (empty = no visual dependency)\n"
             '5. "mode": "single_turn" or "task" (for agents that may need clarification)\n'
             "6. subtaskId must be unique within the plan (e.g. s1, s2, s3)\n"
             f"User request: {user_message}"

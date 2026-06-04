@@ -29,7 +29,13 @@ class ConfigurableAnthropicLlm(AnthropicLlm):
         if self._custom_api_key:
             kwargs["api_key"] = self._custom_api_key
         if self._custom_base_url:
-            kwargs["base_url"] = self._custom_base_url
+            # Strip trailing /v1/messages — Anthropic SDK appends it automatically
+            cleaned = self._custom_base_url.rstrip("/")
+            if cleaned.endswith("/v1/messages"):
+                cleaned = cleaned[:-len("/v1/messages")]
+            elif cleaned.endswith("/v1"):
+                cleaned = cleaned[:-len("/v1")]
+            kwargs["base_url"] = cleaned
         return AsyncAnthropic(**kwargs) if kwargs else AsyncAnthropic()
 
 
@@ -38,15 +44,10 @@ def get_anthropic_llm(model: str = "claude-sonnet-4-6") -> AnthropicLlm:
 
 
 def get_deepseek_llm(model: str | None = None) -> LiteLlm:
-    """Return a LiteLlm instance configured for DeepSeek.
-
-    The model is resolved in order:
-    1. Explicit *model* argument
-    2. ``AGENTHUB_ORCHESTRATOR_MODEL`` environment variable
-    3. Default ``"deepseek/deepseek-v4-pro"``
-
-    Credentials are read from ``DEEPSEEK_API_KEY`` / ``DEEPSEEK_BASE_URL``
-    env vars and passed to LiteLlm explicitly.
+    """
+    返回一个为DeepSeek配置的LiteLlm实例。
+    该模型按以下顺序解析：1. 显式*model*参数 2. “AGENTHUB_ORCHESTRATOR_MODEL”环境变量 3. 默认值“deepseek/deepseek-v4-pro”
+    凭据从环境变量“DEEPSEEK_API_KEY”/“DEEPSEEK_BASE_URL”中读取，并明确传递给LiteLlm。
     """
     import logging
     from app.core.config import settings
@@ -109,7 +110,12 @@ def resolve_agent_model(
     if api_key:
         litellm_kwargs["api_key"] = api_key
     if base_url:
-        litellm_kwargs["api_base"] = base_url
+        # Strip trailing /chat/completions if user included the full path;
+        # LiteLlm/LiteLLM will append it automatically.
+        cleaned = base_url.rstrip("/")
+        if cleaned.endswith("/chat/completions"):
+            cleaned = cleaned[:-len("/chat/completions")].rstrip("/")
+        litellm_kwargs["api_base"] = cleaned
 
     import logging
     logging.getLogger("agenthub.runner").info(

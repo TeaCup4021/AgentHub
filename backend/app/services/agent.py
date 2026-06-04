@@ -111,6 +111,16 @@ class AgentService:
         db: AsyncSession, db_agent: Agent, user_id: uuid.UUID
     ) -> None:
         _check_agent_owner(db_agent, user_id)
+        # Bulk-delete FK references before the agent itself
+        from sqlalchemy import delete as sa_delete
+        from app.models.message_mention import MessageMention
+        from app.models.orchestrator_subtask import OrchestratorSubtask
+        await db.execute(
+            sa_delete(MessageMention).where(MessageMention.agent_id == db_agent.id)
+        )
+        await db.execute(
+            sa_delete(OrchestratorSubtask).where(OrchestratorSubtask.agent_id == db_agent.id)
+        )
         await db.delete(db_agent)
         await db.commit()
 

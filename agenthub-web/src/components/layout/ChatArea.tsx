@@ -74,6 +74,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     if (!activeId) return;
     try {
       await conversationApi.pinMessage(activeId, msgId);
+      useChatStore.getState().addPinnedMessage(msgId);
       toast.success("已 Pin，将作为长期上下文");
       qc.invalidateQueries({ queryKey: ["messages", activeId] });
     } catch {
@@ -85,6 +86,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     if (!activeId) return;
     try {
       await conversationApi.unpinMessage(activeId, msgId);
+      useChatStore.getState().removePinnedMessage(msgId);
       toast.success("已取消 Pin");
       qc.invalidateQueries({ queryKey: ["messages", activeId] });
     } catch {
@@ -241,6 +243,16 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     setDagTaskId(null);
     setPlannerAgentId(null);
     useChatStore.getState().setPersistedThinkingSteps([]);
+
+    // Load pinned messages for the current conversation
+    if (activeId) {
+      conversationApi.listPins(activeId).then((res) => {
+        const pins = res.data?.data;
+        if (pins) {
+          useChatStore.getState().setPinnedMessages(pins.map((p) => p.message_id));
+        }
+      }).catch(() => {});
+    }
 
     return () => {
       disconnectRef.current?.();

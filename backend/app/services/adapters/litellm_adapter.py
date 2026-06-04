@@ -41,7 +41,11 @@ class LiteLlmAdapter(AgentAdapter):
         if agent.api_key:
             litellm_kwargs["api_key"] = agent.api_key
         if agent.base_url:
-            litellm_kwargs["api_base"] = agent.base_url
+            # Strip trailing /chat/completions — LiteLlm appends it automatically
+            cleaned = agent.base_url.rstrip("/")
+            if cleaned.endswith("/chat/completions"):
+                cleaned = cleaned[:-len("/chat/completions")].rstrip("/")
+            litellm_kwargs["api_base"] = cleaned
 
         logger.info(
             "LiteLlmAdapter.resolve_model: provider=%s model=%s resolved=%s base_url=%s",

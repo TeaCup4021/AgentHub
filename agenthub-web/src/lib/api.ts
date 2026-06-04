@@ -19,6 +19,7 @@ import type {
   GetMessageListResponse,
   ApiResponse,
   Message,
+  PinInfo,
   CreateProjectRequest,
   CreateProjectResponse,
   GetProjectListResponse,
@@ -66,9 +67,15 @@ api.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    // Extract server error message and wrap in a useful Error
+    const serverMsg = (error.response?.data as Record<string, unknown>)?.message;
+    if (serverMsg && typeof serverMsg === "string") {
+      (error as AxiosError & { serverMessage?: string }).serverMessage = serverMsg;
+    }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       const refreshToken = localStorage.getItem("refresh_token");
 
       if (!refreshToken) {
@@ -145,6 +152,10 @@ export const conversationApi = {
 
   unpinMessage(conversationId: string, messageId: string) {
     return api.delete<ApiResponse<void>>(`/conversations/${conversationId}/pins/${messageId}`);
+  },
+
+  listPins(conversationId: string) {
+    return api.get<ApiResponse<PinInfo[]>>(`/conversations/${conversationId}/pins`);
   },
 };
 
@@ -262,6 +273,35 @@ export const authApi = {
 
   updateProfile(data: { name?: string; avatarUrl?: string }) {
     return api.patch<ApiResponse<import("@/stores/authStore").User>>("/auth/me", data);
+  },
+};
+
+interface ApplyDiffParams {
+  fileName: string;
+  code: string;
+  language?: string;
+}
+
+interface ApplyDiffResult {
+  fileId: string;
+  downloadUrl: string;
+}
+
+export const fileApi = {
+  upload(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<UploadFileResponse>("/files/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  updateContent(fileId: string, content: string) {
+    return api.put(`/files/${fileId}/content`, { content });
+  },
+
+  applyDiff(data: ApplyDiffParams) {
+    return api.post<ApiResponse<ApplyDiffResult>>("/files/apply-diff", data);
   },
 };
 

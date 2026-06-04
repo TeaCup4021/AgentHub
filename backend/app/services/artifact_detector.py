@@ -37,8 +37,8 @@ def build_content_hash(content: Dict) -> str:
     return hashlib.md5(raw.encode()).hexdigest()[:12]
 
 
-def detect_artifacts(content: str) -> List[Dict]:
-    artifacts = _detect_xml_artifacts(content)
+async def detect_artifacts(content: str) -> List[Dict]:
+    artifacts = await _detect_xml_artifacts(content)
     existing = {a["artifactType"] for a in artifacts}
 
     if "code" not in existing or "diff" not in existing:
@@ -59,7 +59,7 @@ def _parse_attrs(attr_str: str) -> dict:
     return dict(_ATTR_RE.findall(attr_str))
 
 
-def _detect_xml_artifacts(content: str) -> List[Dict]:
+async def _detect_xml_artifacts(content: str) -> List[Dict]:
     results = []
     for m in _SELF_CLOSING_ARTIFACT_RE.finditer(content):
         g = m.groups()
@@ -69,7 +69,7 @@ def _detect_xml_artifacts(content: str) -> List[Dict]:
                  "filename": g[4] if len(g) > 4 else None, "url": g[5] if len(g) > 5 else None,
                  "name": g[6] if len(g) > 6 else None, "size": g[7] if len(g) > 7 else None,
                  "mime": g[8] if len(g) > 8 else None}
-        a = _build_xml_artifact(art_type, attrs, "")
+        a = await _build_xml_artifact(art_type, attrs, "")
         if a: results.append(a)
     for m in _ARTIFACT_WITH_BODY_RE.finditer(content):
         art_type = m.group(1)
@@ -78,12 +78,12 @@ def _detect_xml_artifacts(content: str) -> List[Dict]:
         cdata = _CDATA_RE.search(body)
         if cdata: body = cdata.group(1)
         attrs = _parse_attrs(attr_str)
-        a = _build_xml_artifact(art_type, attrs, body.strip())
+        a = await _build_xml_artifact(art_type, attrs, body.strip())
         if a: results.append(a)
     return results
 
 
-def _build_xml_artifact(art_type: str, attrs: dict, body: str):
+async def _build_xml_artifact(art_type: str, attrs: dict, body: str):
     t = attrs.get("title")
     lang = attrs.get("language")
     f = attrs.get("file")
@@ -100,7 +100,7 @@ def _build_xml_artifact(art_type: str, attrs: dict, body: str):
         return {"artifactType":"diff","title":t or "变更对比","content":{"language":lang or "diff","oldCode":o,"newCode":n,"fileName":f or fn or ""}}
     if art_type == "preview":
         u = url
-        if not u and body: u = _publish_preview_html(body)
+        if not u and body: u = await _publish_preview_html(body)
         return {"artifactType":"preview","title":t or "预览","content":{"url":u or "","title":t or "预览","previewType":"web"}}
     if art_type == "file":
         return {"artifactType":"file","title":name or "文件","content":{"fileName":name or "","fileUrl":url or "","fileType":mime or "application/octet-stream","fileSize":int(sz) if sz and sz.isdigit() else 0}}
@@ -124,12 +124,15 @@ def _split_diff_body(body):
     return "\n".join(o), "\n".join(n)
 
 
-def _publish_preview_html(html):
+async def _publish_preview_html(html):
+    import asyncio
+    from app.services.storage import upload_file
+    from app.core.config import settings
+    pid = str(uuid4())
     try:
-        from app.services.storage import upload_file
-        from app.core.config import settings
-        pid = str(uuid4())
-        upload_file(html.encode("utf-8"), f"previews/{pid}.html", "text/html")
+        await asyncio.get_event_loop().run_in_executor(
+            None, lambda: upload_file(html.encode("utf-8"), f"previews/{pid}.html", "text/html")
+        )
         return f"{settings.PREVIEW_SERVER_URL}/preview/{pid}"
     except Exception:
         logger.exception("publish_preview_html failed")
@@ -161,9 +164,11 @@ def _is_system_url(url): return any(p in url for p in _SYSTEM_URL_PATTERNS)
 
 def _is_embeddable(url):
     u = url.lower()
-    if any(d in u for d in _EMBEDDABLE_DOMAINS): return True
     if any(u.endswith(e) for e in [".pdf",".doc",".xls",".ppt"]): return True
-    return False
+    if any(d in u for d in _EMBEDDABLE_DOMAINS): return True
+    # 所有 http/https 链接都作为可预览网页处理
+    return u.startswith("http")
+
 
 
 def _detect_urls(content):

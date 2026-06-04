@@ -55,7 +55,11 @@ export function LoginPage() {
         }
         navigate("/", { replace: true });
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "操作失败";
+        let msg = "操作失败";
+        if (e instanceof Error) {
+          const axErr = e as Error & { serverMessage?: string; response?: { data?: { message?: string } } };
+          msg = axErr.serverMessage || axErr.response?.data?.message || e.message;
+        }
         setError(msg);
       }
     },

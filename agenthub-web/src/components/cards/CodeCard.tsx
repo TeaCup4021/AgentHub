@@ -4,7 +4,6 @@ import type { Artifact, CodeArtifactContent } from "@/types";
 import { HighlightedCode } from "@/components/chat/HighlightedCode";
 import { MonacoCodeEditor } from "@/components/editor/MonacoCodeEditor";
 import { useResizable } from "@/hooks/useResizable";
-import { fileApi } from "@/lib/api";
 
 interface CodeCardProps {
   artifact: Artifact;
@@ -20,13 +19,22 @@ export function CodeCard({ artifact }: CodeCardProps) {
 
   const handleSave = useCallback(async (code: string) => {
     try {
-      await fileApi.updateContent(artifact.id, code);
-      toast.success("已保存");
+      const fileName = c.fileName || `code.${c.language || 'txt'}`;
+      const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
       setEditing(false);
+      toast.success(`已保存到 ${fileName}`);
     } catch {
       toast.error("保存失败");
     }
-  }, [artifact.id]);
+  }, [c.fileName, c.language]);
 
   const handleCancel = useCallback(() => {
     setEditedCode(c.code);

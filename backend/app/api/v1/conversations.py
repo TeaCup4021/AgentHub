@@ -1,3 +1,4 @@
+import re
 from uuid import UUID, uuid4
 from typing import Optional, AsyncGenerator
 from datetime import datetime, timezone
@@ -207,6 +208,22 @@ def _parse_sse_data(payload: str) -> Optional[dict]:
 
 
 
+_ARTIFACT_TAG_RE = re.compile(r'<artifact\b[^>]*>.*?</artifact>', re.DOTALL | re.IGNORECASE)
+_ARTIFACT_SELF_CLOSING_RE = re.compile(r'<artifact\b[^>]*/>', re.IGNORECASE)
+
+
+def _strip_artifact_tags(content: str) -> str:
+    """Remove <artifact> XML markup, keeping any non-artifact text.
+
+    Used before persisting message content so the frontend's MarkdownBubble
+    does not display raw XML tags (CDATA sections, etc.) that leak through
+    the rehypeRaw markdown renderer.
+    """
+    content = _ARTIFACT_TAG_RE.sub('', content)
+    content = _ARTIFACT_SELF_CLOSING_RE.sub('', content)
+    return content.strip()
+
+
 async def _adk_sse_stream(
     conv_id: UUID,
     user_id: UUID,
@@ -241,23 +258,26 @@ async def _adk_sse_stream(
                 mid = event_data.get("message_id")
                 acc = accumulators.pop(mid, None) if mid else None
                 if acc and acc["content"]:
+                    clean_content = _strip_artifact_tags(acc["content"])
+                    real_msg = None
                     try:
                         async with async_session_maker() as db:
-                            await MessageService.persist_stream_message(
+                            real_msg = await MessageService.persist_stream_message(
                                 db=db,
                                 conv_id=conv_id,
                                 message_id=mid,
                                 sender_name=acc["sender_name"],
-                                content=acc["content"],
+                                content=clean_content,
                                 status="done",
                             )
                             await db.commit()
                     except Exception:
                         logger.exception("persist stream message failed")
-                    artifacts = detect_artifacts(acc["content"])
+                    real_msg_id = str(real_msg.id) if real_msg else str(uuid4())
+                    artifacts = await detect_artifacts(acc["content"])
                     logger.info(
-                        "_adk_sse_stream: message_end mid=%s content_len=%d artifacts_found=%d",
-                        mid, len(acc["content"]), len(artifacts),
+                        "_adk_sse_stream: message_end mid=%s real_msg_id=%s content_len=%d artifacts_found=%d",
+                        mid, real_msg_id, len(acc["content"]), len(artifacts),
                     )
                     for art in artifacts:
                         art_event_id = str(uuid4())
@@ -265,7 +285,7 @@ async def _adk_sse_stream(
                             "version": "v1",
                             "event_id": art_event_id,
                             "conversation_id": str(conv_id),
-                            "message_id": mid,
+                            "message_id": real_msg_id,
                             "artifact": art,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
@@ -275,7 +295,7 @@ async def _adk_sse_stream(
                                 await ArtifactService.append_version(
                                     db=db,
                                     conversation_id=conv_id,
-                                    message_id=UUID(mid),
+                                    message_id=UUID(real_msg_id),
                                     artifact_payload=art,
                                     event_id=art_event_id,
                                 )
@@ -402,6 +422,34 @@ async def pin_message(
     db.add(pin)
     await db.commit()
     return {"status": "pinned"}
+
+
+@router.get("/{conv_id}/pins", response_model=None)
+async def list_pins(
+    conv_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id)
+):
+    from app.models.message import Message as MsgModel
+
+    query = select(MessagePin).where(MessagePin.conversation_id == conv_id).order_by(MessagePin.created_at.desc())
+    result = await db.execute(query)
+    pins = result.scalars().all()
+
+    items = []
+    for pin in pins:
+        msg = await db.get(MsgModel, pin.message_id)
+        content_preview = (msg.content[:200] if msg.content else "") if msg else ""
+        items.append({
+            "pin_id": str(pin.id),
+            "message_id": str(pin.message_id),
+            "content_preview": content_preview,
+            "sender_type": msg.sender_type if msg else "unknown",
+            "pinned_at": pin.created_at.isoformat() if pin.created_at else None,
+            "pinned_by": str(pin.created_by),
+        })
+
+    return items
 
 
 @router.delete("/{conv_id}/pins/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -806,20 +854,23 @@ async def _accumulate_stream_events(
             mid = event_data.get("message_id")
             acc = accumulators.pop(mid, None) if mid else None
             if acc and acc["content"]:
+                clean_content = _strip_artifact_tags(acc["content"])
+                real_msg = None
                 try:
                     async with async_session_maker() as persist_db:
-                        await MessageService.persist_stream_message(
+                        real_msg = await MessageService.persist_stream_message(
                             db=persist_db, conv_id=conv_id, message_id=mid,
-                            sender_name=acc["sender_name"], content=acc["content"],
+                            sender_name=acc["sender_name"], content=clean_content,
                             status="done",
                         )
                         await persist_db.commit()
                 except Exception:
                     logger.exception("persist stream message failed")
+                real_msg_id = str(real_msg.id) if real_msg else str(uuid4())
                 artifacts = detect_artifacts(acc["content"])
                 logger.info(
-                    "_accumulate_stream_events: message_end mid=%s content_len=%d artifacts_found=%d",
-                    mid, len(acc["content"]), len(artifacts),
+                    "_accumulate_stream_events: message_end mid=%s real_msg_id=%s content_len=%d artifacts_found=%d",
+                    mid, real_msg_id, len(acc["content"]), len(artifacts),
                 )
                 for art in artifacts:
                     art_event_id = str(uuid4())
@@ -827,7 +878,7 @@ async def _accumulate_stream_events(
                         "version": "v1",
                         "event_id": art_event_id,
                         "conversation_id": str(conv_id),
-                        "message_id": mid,
+                        "message_id": real_msg_id,
                         "artifact": art,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
@@ -837,7 +888,7 @@ async def _accumulate_stream_events(
                             await ArtifactService.append_version(
                                 db=db,
                                 conversation_id=conv_id,
-                                message_id=UUID(mid),
+                                message_id=UUID(real_msg_id),
                                 artifact_payload=art,
                                 event_id=art_event_id,
                             )
@@ -871,11 +922,12 @@ async def _accumulate_stream_events(
     # Fallback: persist remaining accumulators that didn't receive message_end
     for mid, acc in accumulators.items():
         if acc["content"]:
+            clean_content = _strip_artifact_tags(acc["content"])
             try:
                 async with async_session_maker() as persist_db:
                     await MessageService.persist_stream_message(
                         db=persist_db, conv_id=conv_id, message_id=mid,
-                        sender_name=acc["sender_name"], content=acc["content"],
+                        sender_name=acc["sender_name"], content=clean_content,
                         status="done",
                     )
                     await persist_db.commit()

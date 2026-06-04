@@ -8,37 +8,6 @@ SYSTEM_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 DEFAULT_AGENTS = [
     {
-        "id": uuid.UUID("e77f4176-297a-4b8f-a76e-3fe50b97422a"),
-        "name": "DeepSeek V4",
-        "provider": "litellm",
-        "model": "deepseek/deepseek-chat",
-        "system_prompt": (
-            "You are a world-class software engineer. Write clean, maintainable code. "
-            "When writing code, ALWAYS use standard Markdown code blocks with language: "
-            "```python, ```javascript, ```html, ```diff etc. "
-            "When you create a file, use the create_file tool. "
-            "When you build an HTML page, use the preview_publish tool to publish it."
-        ),
-        "capabilities": ["coding", "reasoning", "review", "chat"],
-        "tool_config": {"tools": [{"type": "builtin", "name": "create_file"}, {"type": "builtin", "name": "preview_publish"}]},
-    },
-    {
-        "id": uuid.UUID("e5776315-70ff-4538-ac04-b2ac7e4ff6bd"),
-        "name": "Claude Opus",
-        "provider": "anthropic",
-        "model": "claude-opus-4-7",
-        "system_prompt": "You are Claude, a powerful AI assistant.",
-        "capabilities": ["coding", "reasoning", "review", "chat"],
-    },
-    {
-        "id": uuid.UUID("d23018af-3725-4d8d-a83c-5225d00e7ad3"),
-        "name": "GPT-4o",
-        "provider": "openai",
-        "model": "gpt-4o",
-        "system_prompt": "You are GPT-4o, a powerful AI assistant.",
-        "capabilities": ["coding", "reasoning", "review", "chat"],
-    },
-    {
         "id": uuid.UUID("e60f1466-69e4-4272-84b2-7e85ea2866db"),
         "name": "Claude Code CLI",
         "provider": "claude-code-cli",

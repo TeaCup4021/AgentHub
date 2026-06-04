@@ -32,7 +32,7 @@ export function PreviewCard({ artifact }: PreviewCardProps) {
         title={c.title || "preview"}
         onError={handleError}
         style={{ width: "100%", height: "100%", border: "none" }}
-        sandbox="allow-scripts"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
       />
     )
   );

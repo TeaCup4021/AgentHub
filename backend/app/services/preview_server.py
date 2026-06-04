@@ -31,5 +31,5 @@ async def serve_preview(request):
 
 
 preview_app = Starlette(
-    routes=[Route("/preview/{preview_id}", serve_preview)],
+    routes=[Route("/{preview_id}", serve_preview)],
 )
