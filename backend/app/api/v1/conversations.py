@@ -911,7 +911,7 @@ async def _accumulate_stream_events(
                 except Exception:
                     logger.exception("persist stream message failed")
                 real_msg_id = str(real_msg.id) if real_msg else str(uuid4())
-                artifacts = detect_artifacts(acc["content"])
+                artifacts = await detect_artifacts(acc["content"])
                 logger.info(
                     "_accumulate_stream_events: message_end mid=%s real_msg_id=%s content_len=%d artifacts_found=%d",
                     mid, real_msg_id, len(acc["content"]), len(artifacts),

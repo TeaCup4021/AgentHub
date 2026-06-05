@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useChatStore } from "@/stores/chatStore";
+import { useChatStore, type PendingQuote } from "@/stores/chatStore";
 import { Button, Popover, Avatar } from "@douyinfe/semi-ui";
 import { IconSend, IconClose } from "@douyinfe/semi-icons";
 import { mentionsFromText } from "@/lib/mentionParser";
@@ -17,6 +17,32 @@ interface ChatInputProps {
 
 function getPlainText(root: HTMLElement): string {
   return root.textContent ?? "";
+}
+
+/**
+ * Build the actual prompt sent to the agent from a pending quote + the user's
+ * description. A code-snippet quote (codeRange present) becomes a selection-level
+ * rewrite request — the `[选区修改]` prefix is the stable sentinel the backend
+ * detects to inject a diff-targeting directive. A plain quote becomes a blockquote.
+ */
+export function composeQuotedPrompt(quote: PendingQuote, description: string): string {
+  const desc = description.trim();
+  if (quote.codeRange) {
+    const { fileName, language, snippet } = quote.codeRange;
+    const meta = [fileName && `文件：${fileName}`, language && `语言：${language}`]
+      .filter(Boolean)
+      .join(" · ");
+    const fence = language || "";
+    const header = meta
+      ? `[选区修改] 请仅修改以下选中的代码片段（${meta}），其余代码保持不变，并以 diff 形式给出改动：`
+      : `[选区修改] 请仅修改以下选中的代码片段，其余代码保持不变，并以 diff 形式给出改动：`;
+    return `${header}\n\n\`\`\`${fence}\n${snippet}\n\`\`\`\n\n修改要求：${desc}`;
+  }
+  const quoted = quote.content
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n");
+  return desc ? `${quoted}\n\n${desc}` : quoted;
 }
 
 function createMentionChip(agent: Agent): HTMLSpanElement {
@@ -157,14 +183,19 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
     if (!el || disabled) return;
     const plain = getPlainText(el).trim();
     const readyAttachments = pendingAttachments.filter((a) => a.fileId);
-    if (!plain && readyAttachments.length === 0) return;
+    // A pending quote carries content on its own, so it can be sent without
+    // typed text (e.g. quote a snippet then send to ask "explain this").
+    if (!plain && !pendingQuote && readyAttachments.length === 0) return;
+    // Mentions come from the typed description, not the quoted body.
     const mentions = mentionsFromText(plain, agents);
-    onSend(plain, mentions, readyAttachments);
+    const outgoing = pendingQuote ? composeQuotedPrompt(pendingQuote, plain) : plain;
+    onSend(outgoing, mentions, readyAttachments);
     setMentionActive(false);
     while (el.firstChild) el.removeChild(el.firstChild);
     clearPendingAttachments();
+    if (pendingQuote) setPendingQuote(null);
     el.focus();
-  }, [disabled, onSend, agents, pendingAttachments, clearPendingAttachments]);
+  }, [disabled, onSend, agents, pendingAttachments, clearPendingAttachments, pendingQuote, setPendingQuote]);
 
   useEffect(() => {
     if (disabled) return;
@@ -347,13 +378,29 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
           background: "var(--color-bg-hover)",
           fontSize: "var(--font-size-sm)",
           color: "var(--color-text-secondary)",
-          borderLeft: "3px solid var(--color-gray-600)",
+          borderLeft: `3px solid ${pendingQuote.codeRange ? "var(--color-primary)" : "var(--color-gray-600)"}`,
         }}>
+          {pendingQuote.codeRange && (
+            <span style={{
+              flexShrink: 0,
+              fontSize: 10,
+              fontWeight: 700,
+              padding: "1px 6px",
+              borderRadius: 8,
+              background: "rgba(51,112,255,0.1)",
+              color: "var(--color-primary)",
+            }}>
+              {pendingQuote.codeRange.language
+                ? `选区 · ${pendingQuote.codeRange.language}`
+                : "选区"}
+            </span>
+          )}
           <span style={{
             flex: 1,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
+            fontFamily: pendingQuote.codeRange ? "monospace" : undefined,
           }}>
             {pendingQuote.content.slice(0, 120)}
           </span>
@@ -499,7 +546,7 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
             theme="solid"
             type="primary"
             icon={<IconSend />}
-            disabled={isEmptyState || charCount > charLimit}
+            disabled={(isEmptyState && !pendingQuote) || charCount > charLimit}
             onClick={handleSend}
             style={{
               borderRadius: "var(--radius-md)",

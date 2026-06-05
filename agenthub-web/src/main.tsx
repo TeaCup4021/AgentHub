@@ -7,7 +7,7 @@ import "./index.css";
 import App from "./App";
 
 // [后端对接] VITE_USE_MOCK=false 切换真实 API，默认 Mock
-const useMock = import.meta.env.VITE_USE_MOCK !== "false";
+const useMock = import.meta.env.VITE_USE_MOCK !== "true";
 
 if (useMock) {
   enableMockMode();

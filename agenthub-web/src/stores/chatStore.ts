@@ -9,6 +9,21 @@ interface StreamingMessage {
 
 export type ConnectionStatus = 'connected' | 'reconnecting' | 'failed';
 
+/** A captured code selection to be rewritten by an agent (selection-level edit). */
+export interface QuoteCodeRange {
+  fileName?: string;
+  language?: string;
+  snippet: string;
+}
+
+/** Pending quote shown in the input bar. `codeRange` distinguishes a code-snippet
+ * quote (selection-level rewrite) from a plain whole-message quote. */
+export interface PendingQuote {
+  messageId: string;
+  content: string;
+  codeRange?: QuoteCodeRange;
+}
+
 export interface OrchestratorPendingPlan {
   planId: string;
   subtasks: PlanSubtask[];
@@ -24,7 +39,7 @@ interface ChatUIState {
   pendingMention: string | null;
   connectionStatus: ConnectionStatus;
   retryCount: number;
-  pendingQuote: { messageId: string; content: string } | null;
+  pendingQuote: PendingQuote | null;
   messageSearch: string;
   pendingPlan: OrchestratorPendingPlan | null;
   dagTaskId: string | null;
@@ -45,7 +60,7 @@ interface ChatUIState {
   setPendingMention: (name: string | null) => void;
   setConnectionStatus: (status: ConnectionStatus) => void;
   setRetryCount: (n: number) => void;
-  setPendingQuote: (quote: { messageId: string; content: string } | null) => void;
+  setPendingQuote: (quote: PendingQuote | null) => void;
   setPendingPlan: (plan: OrchestratorPendingPlan | null) => void;
   setDagTaskId: (id: string | null) => void;
   setPersistedThinkingSteps: (steps: ThinkingStep[]) => void;

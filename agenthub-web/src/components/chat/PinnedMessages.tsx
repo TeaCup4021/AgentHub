@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Popover, Button, Empty, Spin } from "@douyinfe/semi-ui";
 import { IconMapPin, IconClose } from "@douyinfe/semi-icons";
 import { conversationApi } from "@/lib/api";
@@ -15,11 +15,14 @@ export function PinnedMessages({ conversationId, onJumpTo }: PinnedMessagesProps
   const [visible, setVisible] = useState(false);
   const pinnedIds = useChatStore((s) => s.pinnedMessageIds);
   const removePinned = useChatStore((s) => s.removePinnedMessage);
+  const qc = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isFetching } = useQuery({
     queryKey: ["pins", conversationId],
     queryFn: () => conversationApi.getPins(conversationId),
     enabled: visible,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const pins = data?.data?.data ?? [];
@@ -29,15 +32,17 @@ export function PinnedMessages({ conversationId, onJumpTo }: PinnedMessagesProps
     try {
       await conversationApi.unpinMessage(conversationId, messageId);
       removePinned(messageId);
+      qc.invalidateQueries({ queryKey: ["pins", conversationId] });
+      qc.invalidateQueries({ queryKey: ["messages", conversationId] });
       toast.success("已取消固定");
     } catch {
       toast.error("取消固定失败");
     }
-  }, [conversationId, removePinned]);
+  }, [conversationId, removePinned, qc]);
 
   const content = (
     <div style={{ width: 300, maxHeight: 360, overflowY: "auto" }}>
-      {isLoading ? (
+      {isFetching && pins.length === 0 ? (
         <div style={{ padding: 24, textAlign: "center" }}><Spin /></div>
       ) : pins.length === 0 ? (
         <Empty title="暂无固定消息" description="右键消息可将其固定为上下文" />

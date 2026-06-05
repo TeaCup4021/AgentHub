@@ -61,6 +61,7 @@ export type GetAgentDetailResponse = ApiResponse<Agent>;
 // ========== Artifact API ==========
 
 export type GetArtifactsResponse = ApiResponse<Artifact[]>;
+export type UpdateArtifactResponse = ApiResponse<Artifact>;
 
 // ========== Project API ==========
 

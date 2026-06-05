@@ -18,12 +18,20 @@ def test_build_merge_key_prefers_artifact_id():
 
 
 def test_build_merge_key_fallback():
+    import hashlib
+    import json
+
     mid = str(uuid4())
+    # No id → fallback key is fallback:{message_id}:{type}:{md5(content)[:12]}.
+    # This payload has no "content", so the hash is over an empty dict.
+    content_hash = hashlib.md5(
+        json.dumps({}, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()[:12]
     key = build_artifact_merge_key(
         message_id=mid,
         artifact_payload={"artifactType": "code", "title": "demo"},
     )
-    assert key == f"fallback:{mid}:code:demo"
+    assert key == f"fallback:{mid}:code:{content_hash}"
 
 
 class _FakeExecuteResult:
@@ -151,3 +159,53 @@ async def test_append_version_retries_once_on_integrity_error():
     assert row.version == 1
     assert db.rollback_calls == 1
     assert db.flush_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_update_content_appends_new_version_and_preserves_fields():
+    conv_id = uuid4()
+    msg_id = uuid4()
+    existing = SimpleNamespace(
+        id="art-edit",
+        conversation_id=conv_id,
+        message_id=msg_id,
+        artifact_type="code",
+        title="demo",
+        content={"language": "python", "fileName": "x.py", "code": "old", "_mergeKey": "artifact_id:art-edit", "_eventId": "e0"},
+        storage_key="sk",
+        mime_type="text/x-python",
+        version=1,
+    )
+    # call order: 1) load by id -> existing, 2) max(version) query -> 1
+    db = _FakeDB([existing, 1])
+
+    row = await ArtifactService.update_content(
+        db=db,
+        artifact_id="art-edit",
+        new_content={"code": "new code"},
+    )
+
+    assert row.version == 2
+    assert row.content["code"] == "new code"
+    # untouched fields survive
+    assert row.content["language"] == "python"
+    assert row.content["fileName"] == "x.py"
+    # merge key chains to the same version line; event id is refreshed
+    assert row.content["_mergeKey"] == "artifact_id:art-edit"
+    assert row.content["_eventId"] != "e0"
+    # inherited metadata
+    assert row.conversation_id == conv_id
+    assert row.message_id == msg_id
+    assert row.artifact_type == "code"
+    assert row.storage_key == "sk"
+
+
+@pytest.mark.asyncio
+async def test_update_content_missing_artifact_raises():
+    db = _FakeDB([None])  # load by id -> None
+    with pytest.raises(ValueError):
+        await ArtifactService.update_content(
+            db=db,
+            artifact_id="nope",
+            new_content={"code": "x"},
+        )

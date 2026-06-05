@@ -27,6 +27,11 @@ class ArtifactBrief(BaseSchema):
     created_at: datetime
 
 
+class ArtifactUpdate(BaseSchema):
+    """User edit to an artifact's content; persisted as a new version."""
+    content: dict
+
+
 class MessageResponse(BaseSchema):
     id: UUID
     conversation_id: UUID

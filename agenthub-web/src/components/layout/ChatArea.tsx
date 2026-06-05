@@ -78,6 +78,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       useChatStore.getState().addPinnedMessage(msgId);
       toast.success("已 Pin，将作为长期上下文");
       qc.invalidateQueries({ queryKey: ["messages", activeId] });
+      qc.invalidateQueries({ queryKey: ["pins", activeId] });
     } catch {
       toast.error("Pin 失败");
     }
@@ -90,6 +91,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       useChatStore.getState().removePinnedMessage(msgId);
       toast.success("已取消 Pin");
       qc.invalidateQueries({ queryKey: ["messages", activeId] });
+      qc.invalidateQueries({ queryKey: ["pins", activeId] });
     } catch {
       toast.error("取消 Pin 失败");
     }

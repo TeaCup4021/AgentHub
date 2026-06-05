@@ -4,6 +4,7 @@ import { Button } from "@douyinfe/semi-ui";
 import { IconCopy, IconQuote, IconRefresh, IconMapPin } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
 import { conversationApi } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
 import type { Message } from "@/types";
 
 interface MessageActionsProps {
@@ -46,6 +47,8 @@ export const MessageActions = memo(function MessageActions({ message, isStreamin
         addPinned(message.id);
         toast.success("已固定消息");
       }
+      queryClient.invalidateQueries({ queryKey: ["messages", activeConversationId] });
+      queryClient.invalidateQueries({ queryKey: ["pins", activeConversationId] });
     } catch {
       toast.error("操作失败");
     }

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { ConfigProvider, Spin } from "@douyinfe/semi-ui";
 import { AnimatePresence, motion } from "framer-motion";
@@ -8,15 +8,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { LoginPage } from "@/components/auth";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30000,
-      retry: 1,
-    },
-  },
-});
+import { queryClient } from "@/lib/queryClient";
 
 function resolveTheme(theme: "light" | "dark" | "system"): "light" | "dark" {
   if (theme === "system") {

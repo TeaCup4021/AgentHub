@@ -166,8 +166,11 @@ def _is_embeddable(url):
     u = url.lower()
     if any(u.endswith(e) for e in [".pdf",".doc",".xls",".ppt"]): return True
     if any(d in u for d in _EMBEDDABLE_DOMAINS): return True
-    # 所有 http/https 链接都作为可预览网页处理
-    return u.startswith("http")
+    # 普通 http/https 链接默认不可 iframe 内嵌：多数站点设置 X-Frame-Options:
+    # DENY/SAMEORIGIN 或 CSP frame-ancestors，强行内嵌会显示"拒绝连接"。
+    # 只对已知可嵌入域名（_EMBEDDABLE_DOMAINS）和文档文件内嵌，其余降级为
+    # LinkPreviewCard（OG 卡片 + 新标签页打开）。
+    return False
 
 
 

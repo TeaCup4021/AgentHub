@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.schemas.message import ArtifactBrief, MessageCreate, MessageResponse, MessageListResponse
+from app.schemas.message import ArtifactBrief, ArtifactUpdate, MessageCreate, MessageResponse, MessageListResponse
 from app.models.agent import Agent
 from app.models.message import Message
 from app.models.artifact import Artifact
@@ -220,3 +220,37 @@ async def get_message_artifacts(
         }
         for a in artifacts
     ]
+
+
+@messages_router.patch("/artifacts/{artifact_id}", response_model=ArtifactBrief)
+async def update_artifact(
+    artifact_id: UUID,
+    data: ArtifactUpdate,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Persist a user edit as a new version of an existing artifact.
+
+    Used by editable cards (e.g. CodeCard) so saved changes survive a reload
+    instead of only downloading locally. Reuses the artifact's version chain.
+    """
+    from app.services.artifact import ArtifactService
+
+    try:
+        row = await ArtifactService.update_content(
+            db=db, artifact_id=artifact_id, new_content=data.content,
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    await db.commit()
+
+    return {
+        "id": row.id,
+        "artifactType": row.artifact_type,
+        "title": row.title,
+        "content": row.content,
+        "storageKey": row.storage_key,
+        "mimeType": row.mime_type,
+        "version": row.version,
+        "createdAt": row.created_at,
+    }

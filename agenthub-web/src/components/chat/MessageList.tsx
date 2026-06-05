@@ -215,7 +215,8 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
 
   const isFailed = message.status === "failed";
   const pinnedIds = useChatStore((s) => s.pinnedMessageIds);
-  const isPinned = !isUser && !isOrchestrator && pinnedIds.includes(message.id);
+  const isPinnedByStore = pinnedIds.includes(message.id);
+  const isPinned = !isUser && !isOrchestrator && isPinnedByStore;
   const avatarCursor = agent ? "pointer" : "";
 
   return (
@@ -229,7 +230,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
         borderLeft: isPinned ? "3px solid var(--color-primary)" : "3px solid transparent",
       }}
       title={formatFullTime(message.createdAt)}
-      onContextMenu={(e) => { if (onPin && onUnpin && !isUser) { e.preventDefault(); e.stopPropagation(); setMsgMenuPos({ top: e.clientY, left: e.clientX }); setShowMsgMenu(true); } }}
+      onContextMenu={(e) => { if (onPin && onUnpin) { e.preventDefault(); e.stopPropagation(); setMsgMenuPos({ top: e.clientY, left: e.clientX }); setShowMsgMenu(true); } }}
     >
       {isFailed ? (
         <div style={{
@@ -285,7 +286,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
       )}
       {showMsgMenu && onPin && onUnpin && (
           <MessageContextMenu
-            isPinned={message.isPinned}
+            isPinned={isPinnedByStore}
             position={msgMenuPos}
             onPin={() => onPin(message.id)}
             onUnpin={() => onUnpin(message.id)}
@@ -308,7 +309,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
           </p>
         )}
         <div className="message-bubble-wrap" style={{ position: "relative", display: "inline-block" }}>
-          {message.isPinned && (
+          {isPinnedByStore && (
             <div style={{ position: "absolute", top: 6, right: 8, zIndex: 4 }}>
               <Tooltip content="已 Pin 为长期上下文">
                 <IconBookmark style={{ color: "var(--color-warning)", fontSize: 14 }} />
