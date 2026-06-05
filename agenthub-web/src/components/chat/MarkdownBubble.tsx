@@ -97,6 +97,24 @@ interface MarkdownBubbleProps {
   isStreaming?: boolean;
 }
 
+const EVENT_ATTR_RE = /\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+
+function sanitizeMarkdown(raw: string): string {
+  return raw
+    // Self-closing artifact tags (file, deploy_status): remove them
+    .replace(/<artifact\b[^>]*\/>/gi, "")
+    // Artifact tags with CDATA body: extract into visible markdown code block
+    .replace(/<artifact\b[^>]*>[\s\S]*?<!\[CDATA\[([\s\S]*?)\]\]>[\s\S]*?<\/artifact>/gi,
+      (_, code) => "\n```\n" + code.trim() + "\n```\n")
+    // Fallback: artifact with body but no CDATA
+    .replace(/<artifact\b[^>]*>([\s\S]*?)<\/artifact>/gi,
+      (_, inner) => inner.trim() ? "\n```\n" + inner.trim() + "\n```\n" : "")
+    // Sanitize textarea/event handler injection
+    .replace(/<textarea\b[^>]*>/gi, (tag) => tag.replace(EVENT_ATTR_RE, "").replace(/textarea/gi, "pre"))
+    .replace(/<\/textarea>/gi, "</pre>")
+    .replace(EVENT_ATTR_RE, "");
+}
+
 export const MarkdownBubble = memo(function MarkdownBubble({ text, isStreaming }: MarkdownBubbleProps) {
   const body = useMemo(() => {
     if (!text) return null;
@@ -106,7 +124,7 @@ export const MarkdownBubble = memo(function MarkdownBubble({ text, isStreaming }
         rehypePlugins={[rehypeRaw]}
         components={components}
       >
-        {text}
+        {sanitizeMarkdown(text)}
       </ReactMarkdown>
     );
   }, [text]);

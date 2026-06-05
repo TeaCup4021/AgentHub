@@ -69,6 +69,7 @@ class WorkflowBuilder:
                         agent.after_agent_callback = execution_tracer.after_agent
                 except ValueError:
                     # No adapter registered: build directly (non-CLI agents)
+                    from app.services.pin_spec_injector import before_model_callback
                     instruction = self._merge_instruction(db_agent, st.instruction)
                     model = self._resolve_model(db_agent)
                     tools = tool_loader.load(db_agent.tool_config)
@@ -79,6 +80,7 @@ class WorkflowBuilder:
                         "tools": tools,
                         "output_key": st.output_key,
                         "mode": agent_mode,
+                        "before_model_callback": before_model_callback,
                     }
                     if execution_tracer is not None:
                         agent_kwargs["before_agent_callback"] = execution_tracer.before_agent
@@ -162,10 +164,9 @@ class WorkflowBuilder:
     def _merge_instruction(db_agent: Agent, task_instruction: str) -> str:
         """Merge the DB agent's system_prompt (general capability) with the
         Planner's task instruction (specific task)."""
-        base = db_agent.system_prompt.strip() if db_agent.system_prompt else ""
-        if base:
-            return base + "\n\nYour specific task: " + task_instruction
-        return task_instruction
+        from app.services.artifact_format import build_instruction
+        base = build_instruction(db_agent)
+        return base + "\n\nYour specific task: " + task_instruction
 
     @staticmethod
     def _resolve_model(db_agent: Agent):

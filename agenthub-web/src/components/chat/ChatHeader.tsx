@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Tag, Typography, Input, Button } from "@douyinfe/semi-ui";
 import { IconSearch, IconClose } from "@douyinfe/semi-icons";
 import { useChatStore } from "@/stores/chatStore";
-import { PinManager } from "@/components/chat/PinManager";
+import { PinnedMessages } from "./PinnedMessages";
 import type { Conversation, Agent } from "@/types";
 
 type SearchMode = "off" | "conv" | "msg";
@@ -20,17 +20,19 @@ interface ChatHeaderProps {
   agents: Agent[];
   messageHitCount?: number;
   taskSummary?: TaskSummary | null;
-  onPinChanged?: () => void;
-  onJumpToMessage?: (messageId: string) => void;
 }
 
-export function ChatHeader({ conversation, agents, messageHitCount, taskSummary, onPinChanged, onJumpToMessage }: ChatHeaderProps) {
+export function ChatHeader({ conversation, agents, messageHitCount, taskSummary }: ChatHeaderProps) {
   const [searchMode, setSearchMode] = useState<SearchMode>("off");
   const [searchText, setSearchText] = useState("");
   const searchQuery = useChatStore((s) => s.searchQuery);
   const setSearchQuery = useChatStore((s) => s.setSearchQuery);
   const messageSearch = useChatStore((s) => s.messageSearch);
   const setMessageSearch = useChatStore((s) => s.setMessageSearch);
+
+  const handleJumpTo = useCallback((messageId: string) => {
+    window.dispatchEvent(new CustomEvent("scroll-to-message", { detail: { messageId } }));
+  }, []);
 
   const handleSearchChange = useCallback((v: string) => {
     setSearchText(v);
@@ -123,10 +125,9 @@ export function ChatHeader({ conversation, agents, messageHitCount, taskSummary,
                   : `${taskSummary.total} 个任务已完成`}
             </div>
           )}
-          <PinManager
+          <PinnedMessages
             conversationId={conversation.id}
-            onJumpToMessage={onJumpToMessage}
-            onPinChanged={onPinChanged}
+            onJumpTo={handleJumpTo}
           />
           <Button
             data-search-toggle

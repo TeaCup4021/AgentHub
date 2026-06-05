@@ -285,11 +285,13 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
     try {
       const res = await fileApi.upload(file);
       const d = res.data.data;
-      addPendingAttachment({ ...temp, id: tempId + "-done", fileId: d.id, fileUrl: d.url || tempUrl });
+      removePendingAttachment(tempId);
+      addPendingAttachment({ ...temp, fileId: d.id, fileUrl: d.url || tempUrl });
     } catch {
-      addPendingAttachment({ ...temp, id: tempId + "-error" });
+      removePendingAttachment(tempId);
+      addPendingAttachment({ ...temp, fileId: "error", fileUrl: "" });
     }
-  }, [addPendingAttachment]);
+  }, [addPendingAttachment, removePendingAttachment]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const files = e.clipboardData?.files;

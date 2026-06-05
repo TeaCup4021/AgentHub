@@ -17,6 +17,7 @@ from app.schemas.base import Page
 from app.models.conversation import Conversation
 from app.models.conversation_participant import ConversationParticipant
 from app.models.agent import Agent as AgentModel
+from app.models.message import Message
 from app.models.message_pin import MessagePin
 from app.models.orchestrator_task import OrchestratorTask
 from app.models.message_mention import MessageMention
@@ -471,6 +472,49 @@ async def unpin_message(
     await db.delete(pin)
     await db.commit()
     return
+
+
+@router.get("/{conv_id}/pins")
+async def get_pins(
+    conv_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id)
+):
+    conv = await db.get(Conversation, conv_id)
+    if not conv or conv.owner_id != user_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    result = await db.execute(
+        select(MessagePin).where(MessagePin.conversation_id == conv_id)
+    )
+    pins = result.scalars().all()
+    if not pins:
+        return []
+    message_ids = [p.message_id for p in pins]
+    msg_result = await db.execute(
+        select(Message).where(Message.id.in_(message_ids))
+    )
+    messages_by_id = {m.id: m for m in msg_result.scalars().all()}
+    sender_names = await MessageService._batch_get_sender_names(
+        db,
+        [(messages_by_id[mid].sender_type, messages_by_id[mid].sender_id) for mid in message_ids if mid in messages_by_id],
+    )
+    items = []
+    for pin in pins:
+        msg = messages_by_id.get(pin.message_id)
+        if not msg:
+            continue
+        sender_key = (msg.sender_type, msg.sender_id)
+        sender_name = sender_names.get(sender_key, "Unknown")
+        items.append({
+            "pinId": str(pin.id),
+            "messageId": str(pin.message_id),
+            "content": (msg.content or "")[:100],
+            "senderType": msg.sender_type,
+            "senderName": sender_name,
+            "createdAt": pin.created_at.isoformat() if pin.created_at else None,
+            "pinnedBy": str(pin.created_by) if pin.created_by else None,
+        })
+    return items
 
 
 _planning_locks: set[UUID] = set()

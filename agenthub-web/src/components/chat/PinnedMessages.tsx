@@ -5,7 +5,6 @@ import { IconMapPin, IconClose } from "@douyinfe/semi-icons";
 import { conversationApi } from "@/lib/api";
 import { useChatStore } from "@/stores/chatStore";
 import { toast } from "sonner";
-import type { PinnedMessage } from "@/types";
 
 interface PinnedMessagesProps {
   conversationId: string;
@@ -43,10 +42,10 @@ export function PinnedMessages({ conversationId, onJumpTo }: PinnedMessagesProps
       ) : pins.length === 0 ? (
         <Empty title="暂无固定消息" description="右键消息可将其固定为上下文" />
       ) : (
-        pins.map((pin: PinnedMessage) => (
+        pins.map((pin) => (
           <div
-            key={pin.messageId}
-            onClick={() => { onJumpTo(pin.messageId); setVisible(false); }}
+            key={pin.message_id}
+            onClick={() => { onJumpTo(pin.message_id); setVisible(false); }}
             style={{
               padding: "10px 12px",
               cursor: "pointer",
@@ -63,7 +62,7 @@ export function PinnedMessages({ conversationId, onJumpTo }: PinnedMessagesProps
                 color: "var(--color-text-tertiary)",
                 marginBottom: 4,
               }}>
-                {pin.senderName}
+                {pin.sender_type === "user" ? "我" : pin.sender_type}
               </div>
               <div style={{
                 fontSize: "var(--font-size-sm)",
@@ -72,14 +71,14 @@ export function PinnedMessages({ conversationId, onJumpTo }: PinnedMessagesProps
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}>
-                {pin.content}
+                {pin.content_preview}
               </div>
             </div>
             <Button
               icon={<IconClose />}
               theme="borderless"
               size="small"
-              onClick={(e) => handleUnpin(pin.messageId, e)}
+              onClick={(e) => handleUnpin(pin.message_id, e)}
             />
           </div>
         ))

@@ -10,6 +10,7 @@ from app.services.adk.execution_tracer import ExecutionTracer
 from app.services.adk.models import get_deepseek_llm
 from app.services.adk.tool_loader import ToolLoader
 from app.services.pin_spec_injector import before_model_callback
+from app.services.artifact_format import build_instruction
 
 # Regex matching ADK template variables like {identifier} or {identifier?}
 _ADK_TEMPLATE_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\??\}")
@@ -87,7 +88,7 @@ class CoordinatorBuilder:
             base_url=agent.base_url or None,
         )
 
-        instruction = agent.system_prompt or self._build_coordinator_instruction(agent_models)
+        instruction = build_instruction(agent) if agent.system_prompt else self._build_coordinator_instruction(agent_models)
 
         coordinator_kwargs: dict = {
             "name": _sanitize_agent_name(agent.name),
@@ -95,6 +96,7 @@ class CoordinatorBuilder:
             "instruction": instruction,
             "description": f"Coordinator powered by {agent.name}",
             "sub_agents": sub_agents,
+            "before_model_callback": before_model_callback,
         }
         if execution_tracer is not None:
             coordinator_kwargs["before_agent_callback"] = execution_tracer.before_agent
@@ -170,7 +172,7 @@ class CoordinatorBuilder:
                 api_key=am.api_key or None,
                 base_url=am.base_url or None,
             ),
-            "instruction": am.system_prompt or "You are a helpful assistant.",
+            "instruction": build_instruction(am) if am.system_prompt else "You are a helpful assistant.",
             "tools": tool_loader.load(am.tool_config),
             "mode": "task",
             "before_model_callback": before_model_callback,

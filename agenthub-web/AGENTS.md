@@ -40,6 +40,10 @@ Sidebar / ChatArea (消费数据，不直接调 hooks)
 
 **禁止混用：** React Query 不管 UI 状态，Zustand 不管服务端缓存。
 
+**Pin 状态必须单一数据源：** `pinnedMessageIds: string[]` 在 zustand chatStore 中是客户端唯一真相源。任何 Pin/Unpin 操作（右键菜单、悬停按钮、ChatHeader 面板）都必须同时：调 API + 更新 zustand store + invalidate React Query。不能只做其中两件。
+
+**Artifact 渲染双层防护：** 正常路径 = 后端 SSE artifact 事件 → CardRenderer 渲染卡片。兜底路径 = `sanitizeMarkdown()` 提取 CDATA 为 markdown 代码块 + `renderFallbackCards()` 解析 diff/URL。两者互补，确保不会出现"代码凭空消失"。
+
 ### 组件分层
 
 ```

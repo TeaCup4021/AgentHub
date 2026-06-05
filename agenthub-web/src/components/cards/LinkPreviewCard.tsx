@@ -11,7 +11,7 @@ function getHostname(url: string): string {
   try {
     return new URL(url).hostname;
   } catch {
-    return url;
+    return "";
   }
 }
 
@@ -21,7 +21,7 @@ export function LinkPreviewCard({ artifact }: LinkPreviewCardProps) {
   const hostname = getHostname(c.url);
   const hasOgData = !!c.title || !!c.description || !!c.image;
   const isInternal = hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("192.168.") || hostname.startsWith("10.") || hostname.startsWith("172.16.");
-  const faviconSrc = c.favicon || (isInternal ? "" : `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`);
+  const faviconSrc = c.favicon || (isInternal || !hostname ? "" : `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`);
 
   const handleClick = () => {
     window.open(c.url, "_blank", "noopener,noreferrer");

@@ -2,9 +2,11 @@ import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { DiffEditor } from "@monaco-editor/react";
 import type { Artifact, DiffArtifactContent, ConflictEntry } from "@/types";
+import { getArtifactContent } from "@/types";
 import { useResizable } from "@/hooks/useResizable";
 import { useBlobDownload } from "@/hooks/useBlobDownload";
 import { fileApi } from "@/lib/api";
+import { useUIStore } from "@/stores/uiStore";
 import { ConflictResolver } from "./ConflictResolver";
 
 interface DiffCardProps {
@@ -14,7 +16,7 @@ interface DiffCardProps {
 const DEFAULT_HEIGHT = 340;
 
 export function DiffCard({ artifact }: DiffCardProps) {
-  const c = artifact.content as unknown as DiffArtifactContent;
+  const c = getArtifactContent<DiffArtifactContent>(artifact);
   const [splitView, setSplitView] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -52,7 +54,10 @@ export function DiffCard({ artifact }: DiffCardProps) {
     }
   }, [c.fileName, c.newCode, c.language, downloadUrl]);
 
-  const isDark = typeof document !== "undefined" && document.documentElement.getAttribute("theme-mode") === "dark";
+  const themeSetting = useUIStore((s) => s.theme);
+  const isDark = themeSetting === "system"
+    ? typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
+    : themeSetting === "dark";
 
   if (conflicts) {
     return (

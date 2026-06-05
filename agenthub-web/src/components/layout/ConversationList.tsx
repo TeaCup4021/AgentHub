@@ -656,7 +656,7 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
         okButtonProps={{ disabled: !renameTitle.trim() }}
         cancelButtonProps={{ theme: "borderless" }}
         maskClosable
-        style={{ width: 320 }}
+        style={{ width: 440 }}
       >
         <Input
           value={renameTitle}
@@ -664,6 +664,7 @@ export function ConversationList({ conversations, agents, isLoading, onCreateCon
           placeholder="输入新标题..."
           autoFocus
           onEnterPress={handleRenameSubmit}
+          size="large"
         />
       </Modal>
 
