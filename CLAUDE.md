@@ -21,6 +21,7 @@ Multi-agent collaboration platform — IM 聊天界面 + ADK 编排引擎，支�
 
 **后端：**
 - FastAPI + SQLAlchemy async + PostgreSQL + Redis + MinIO
+- **Gotenberg 8**（Docker 容器，端口 3001）— PPTX→PDF 文档转换
 - Google ADK 2.0 (`google-adk[extensions]==2.0.0`) — Agent 引擎
 - LLM SDK: `anthropic`, `openai`, `google-adk` 内置 LiteLlm
 - 认证: `python-jose` (JWT) + `passlib[bcrypt]`
@@ -35,8 +36,37 @@ Multi-agent collaboration platform — IM 聊天界面 + ADK 编排引擎，支�
 
 ### 开发启动
 
+**前置依赖（Docker 服务）：**
+
 ```bash
-# 一键启动（前后端并行）
+cd backend
+docker compose up -d
+# 启动 postgres(5433) + redis(6379) + minio(9000/9001) + gotenberg(3001)
+```
+
+确认 Gotenberg 就绪：
+
+```bash
+curl http://localhost:3001/health
+# → {"status":"up","details":{"libreoffice":{"status":"up"}}}
+```
+
+**启动后端（Windows）：**
+
+```bash
+cd backend
+venv\Scripts\python -m uvicorn app.main:app --reload --reload-exclude "venv/*" --port 8080
+```
+
+> 注意：`--reload-exclude "venv/*"` 防止 `pip install` 时 venv 文件变更触发重载。不要缺省。
+
+**CLI Agent 工作区：**
+
+确保仓库根目录存在 `cli-workspace/` 目录（已加入 `.gitignore`）。CLI Agent 生成的文件在此目录，不会触发 uvicorn 重载。
+
+**一键启动（前后端并行）：**
+
+```bash
 npm run dev
 
 # 仅后端
@@ -47,6 +77,11 @@ cd agenthub-web && npm run dev
 ```
 
 Mock 模式：`VITE_USE_MOCK=false` 切换真实 API，默认 Mock。
+
+### Windows 环境注意事项
+
+- **httpx 代理问题**：`httpx` 默认读取系统代理设置，`localhost` 请求会被路由到代理导致 502。所有 `httpx.Client`/`AsyncClient` 必须显式设 `trust_env=False`。
+- **uvicorn reload**：Windows 下 WatchFiles 监听整个项目树，新增文件（pip 安装、CLI 生成）会触发意外重载。`--reload-exclude` 必须包含 `venv/*`，CLI workspace 必须在 backend 外部。
 
 ### 数据库
 
@@ -88,7 +123,15 @@ Mock 模式：`VITE_USE_MOCK=false` 切换真实 API，默认 Mock。
 
 > 动态章节。每完成一个模块或修复一个 BUG，更新此节。
 
-**最近更新（2026-06-05）** — Diff 卡「应用到源文件」（选区改写收尾 · 写回闭环）
+**最近更新（2026-06-06）** — PPT 内联浏览（PPTX→PDF 转换管线补全）
+
+- **Gotenberg 后端转换管线** (`converter.py`, `artifact_detector.py`, `files.py`) — PPTX 内联预览从「仅下载」变「PDF iframe 预览」。三条来源路径汇聚：① 用户上传 PPTX → upload 端点即时转换 + prompt 中 `_resolve_internal_file` 检测附件链接 → `_maybe_convert_pptx`；② Agent 回复中的文档 URL → `_detect_urls` → `_is_document_url`；③ CLI Agent 本地生成文件 → `_emit_cli_generated_file_artifacts` 扫描 workspace 后上传。转换走 Gotenberg（LibreOffice headless，docker-compose 中已配置），PDF 存 MinIO，前端复用 DocumentCard 已有 PDF iframe
+- **Content-Disposition inline** (`files.py`) — 下载端点对 PDF/图片返回 `Content-Type` 真实值 + `Content-Disposition: inline`，不再硬编码 `attachment` + `application/octet-stream`，浏览器能内嵌渲染而非弹下载框。新增 `HEAD /download` 和 `GET /preview` 端点
+- **CLI 生成文件自动预览** (`cli_adapter.py`) — `_emit_cli_generated_file_artifacts` 在 CLI 执行完毕后扫描 workspace 中 10 分钟内的文档文件，上传 MinIO → Gotenberg 转 PDF → 发 SSE artifact 事件 → 存 DB
+- **联调发现 4 个 Bug**：① httpx 在 Windows 上走系统代理导致 Gotenberg 502 → 加 `trust_env=False`；② Gotenberg 依赖文件扩展名识别格式 → `_resolve_internal_file` 给文件名加 `.pptx` 等后缀；③ `Content-Disposition: attachment` 强制下载 → 改为 inline；④ CLI workspace 在 backend/ 内触发 uvicorn reload → 外移 + `--reload-exclude "venv/*"`
+- **文档**：ADR `2026-06-06-pptx-pdf-conversion-pipeline.md`，Summary `PPT内联浏览-实施总结-2026-06-06.md`
+
+**上次更新（2026-06-05）** — Diff 卡「应用到源文件」（选区改写收尾 · 写回闭环）
 
 - **Diff 卡一键写回源代码卡** (`DiffCard.tsx`, `lib/diffApply.ts`, `artifact_format.py`) — 选区改写让 Agent 返回 Diff 卡后，此前**无法把改动落回**第一次生成的代码卡：原「保存文件」只是把 `newCode` 当全新文件下载，与源卡零关联。本次新增「应用到源文件」按钮：① 纯函数模块 `diffApply.ts`（`findApplyTarget`/`applySnippet`）从会话消息缓存收集所有代码卡候选，按**文件名 + 片段内容**双重启发式匹配源卡（diff 不带我方 artifact id，故内容匹配为最强信号，含精确子串 + 空白容忍的逐行匹配兜底）；② 命中后把新片段 splice 回源卡全文，调 `PATCH /messages/artifacts/{id}` **追加新版本**（复用 `update_content` 版本链），`invalidateQueries(["messages"])` 刷新；③ 原下载按钮更名「另存为文件」与之区分。后端 `_SELECTION_EDIT_DIRECTIVE` 同步增强：要求 Agent 在 diff 带 `file="<源文件名>"` 且 `--- before` 段逐字复制原片段，提升两条匹配路径命中率。fallback 卡（无 DB 行）提示手动复制
 - **缓存读取走 `@/lib/queryClient` 单例** (`DiffCard.tsx`) — `DiffCard` 同样深埋消息树，收集候选用 `queryClient.getQueryData(["messages", convId])` 而非 `useQueryClient()` hook，与 `CodeCard` 写回、`MessageActions` 同款（CLAUDE.md 既有规则）
@@ -442,6 +485,26 @@ AppException(code, message)  # 基类
 【规则】禁止假设 Agent 输出里带有我方 DB 主键 —— Agent 看不到我们的 artifact id，回链只能靠**内容/文件名启发式**：以「片段内容出现在哪张卡里」为最强信号（精确子串 + 空白容忍逐行匹配兜底），文件名为次要线索。从 `["messages", convId]` 缓存收集候选时注意：该缓存是**最新在前**（后端 `ORDER BY created_at DESC`），`ChatArea` 仅在**显示**时 `.reverse()`，直接读缓存不要再 reverse，否则"最近卡优先"会反向
 【原因】Diff 卡「应用到源文件」（`lib/diffApply.ts`）需把改动落回源代码卡，但 diff 不携带源 artifact id。若按文件名硬匹配，选区改写产出的 diff 常无 `file=` 属性而匹配失败；故以内容匹配为主。曾误加 `.reverse()` 把缓存顺序读反，导致命中最旧而非最新的同名卡
 
+【场景】在 Windows 上使用 httpx 访问 localhost 服务（如 Gotenberg、MinIO）
+【规则】禁止在创建 `httpx.Client()` 或 `httpx.AsyncClient()` 时不传 `trust_env`——必须显式设 `trust_env=False`
+【原因】httpx 默认 `trust_env=True` 会读取 Windows 系统代理设置，导致 `localhost:3001` 之类的本地地址被路由到代理服务器，代理不认识本地服务返回 502/400。`urllib` 无此行为，只有 httpx 受影响。三处调用点（`converter.py:14,28`、`artifact_detector.py:convert_bytes_sync`）均已修复
+
+【场景】向 Gotenberg/LibreOffice 发送文件进行格式转换（如 PPTX→PDF）
+【规则】multipart form-data 中的 `filename` 必须包含正确的文件扩展名（`.pptx`、`.docx` 等），禁止使用无扩展名的临时文件名
+【原因】Gotenberg 内嵌的 LibreOffice 依赖文件扩展名判断输入格式——收到 `uploaded_file_a1b2c3d4`（无后缀）返回 `400 Invalid form data: no form file found`，同一个文件改成 `uploaded_file_a1b2c3d4.pptx` 正常转换。MinIO 中 `stat_object` 可获取原始 `content_type`，据此补上扩展名
+
+【场景】让浏览器内嵌渲染 PDF/图片（而非下载）
+【规则】HTTP 响应必须同时满足两个条件：① `Content-Type` 设为真实值（`application/pdf`、`image/png` 等），禁止用 `application/octet-stream`；② `Content-Disposition` 设为 `inline`，禁止用 `attachment`
+【原因】`attachment` 强制浏览器弹下载框，iframe 中不会渲染 PDF。`application/octet-stream` 让浏览器不知道数据是 PDF，即使 inline 也不会触发 PDF 阅读器
+
+【场景】CLI Agent 的工作目录配置
+【规则】禁止将 `CLI_DEFAULT_WORKSPACE` 设在后端目录（`backend/`）内或任何 `--reload` 监听范围；uvicorn 启动应加 `--reload-exclude` 排除 `venv/`（或其他含大依赖的目录）；启动前确认 workspace 目录已存在
+【原因】CLI Agent 创建/修改文件会触发 uvicorn WatchFiles 重载 → 杀死子进程 → CLI 任务中断。`pip install` 改动 venv/ 数百个文件同样触发重载。workspace 外移 + `--reload-exclude "venv/*"` 双保险
+
+【场景】为新的 Agent Adapter 类型（非标准 LLM）实现 SSE 流
+【规则】必须确认 artifact 检测与持久化管线（`detect_artifacts` → SSE artifact 事件 → `ArtifactService.append_version`）已在适配器中覆盖，不能假设调用方会统一处理
+【原因】CLI Adapter (`cli_adapter.py`) 的 `stream()` 直接产出 SSE 事件绕过 `_adk_sse_stream`，导致 CLI 生成的文件无法自动触发 artifact 检测。任何新的 Adapter 类型都需要显式集成 artifact 管线
+
 ### 偏好类规则（重复强调 ≥2 次）
 
 【场景】定义新 API 端点或 Schema 时
@@ -515,6 +578,35 @@ AppException(code, message)  # 基类
 - 前提（必须 `VITE_USE_MOCK=false` + 后端走 `.venv` 而非 `npm run dev:backend`）
 - 各卡片类型的触发提示词（代码/网页/Diff/文档/链接）
 - 重点观察项（流式实时出卡、`<artifact>` 标签不泄露、刷新后仍在、编辑回写持久化）
+
+### PPT 内联浏览 / Gotenberg 转换调试
+
+当 PPTX 无法内联预览、DocumentCard 不出现、或 Gotenberg 报错时，按以下步骤排查：
+
+**基础设施检查：**
+1. `docker ps | grep gotenberg` — 确认容器运行中
+2. `curl http://localhost:3001/health` — 应返回 `{"status":"up"}` 且 `libreoffice.status` 为 `up`
+3. `python -c "import httpx; print(httpx.Client(trust_env=False).get('http://localhost:3001/health').text)"` — 确认 httpx 绕过代理可达
+
+**转换链路逐段排查：**
+1. **MinIO 文件** — `from app.services.storage import get_file, stat_object` 确认文件存在且字节完整
+2. **Gotenberg 直接转换** — 用 curl 或 `httpx.Client(trust_env=False)` 手动调 `/forms/libreoffice/convert`，验证文件可转
+3. **文件名扩展名** — Gotenberg 依赖扩展名识别格式，检查 `_resolve_internal_file` 返回的文件名是否有 `.pptx` 后缀
+4. **artifact 事件** — grep 后端日志 `artifact` 关键字，确认 `fileType` 是 `"pdf"` 还是 `"pptx"`（后者 = 转换失败降级）
+5. **HTTP 响应头** — `curl -I /api/v1/files/{id}/download` 确认 `Content-Type: application/pdf` + `Content-Disposition: inline`
+
+**CLI Agent 路径额外检查：**
+- 确认 `CLI_DEFAULT_WORKSPACE` 在 `backend/` 外部
+- 重启时加 `--reload-exclude "venv/*"`
+- CLI 生成的文件扩展名是否在 `_CLI_DOC_EXTENSIONS` 集合中
+
+**常见错误对照：**
+| 错误 | 原因 | 检查 |
+|------|------|------|
+| 502 Bad Gateway | httpx 走 Windows 系统代理 | `trust_env=False` |
+| 400 no form file found | 文件名无扩展名 | 补 `.pptx` 等后缀 |
+| 转换成功但弹下载框 | Content-Disposition: attachment | 改为 inline |
+| 转换成功但 iframe 白屏 | Content-Type 错误 | 改为 application/pdf |
 
 ### 本地全量验证（前端 vitest + tsc / 后端 pytest）
 

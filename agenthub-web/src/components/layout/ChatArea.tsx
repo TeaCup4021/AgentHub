@@ -431,9 +431,21 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         );
       }
 
+      // 把附件文件 URL 拼进 prompt（完整 URL 以便后端检测到）
+      let promptForStream = content;
+      if (attachments && attachments.length > 0) {
+        const urls = attachments
+          .filter((a) => a.fileUrl && !a.fileUrl.startsWith("blob:"))
+          .map((a) => a.fileUrl.startsWith("/") ? `${window.location.origin}${a.fileUrl}` : a.fileUrl)
+          .join("\n");
+        if (urls) {
+          promptForStream = content + "\n\n[附件文件链接]\n" + urls;
+        }
+      }
+
       disconnectRef.current?.();
       setIsStreaming(true);
-      lastPromptRef.current = content;
+      lastPromptRef.current = promptForStream;
 
       const onConnectionError = () => {
         const MAX_RETRIES = 3;
@@ -468,7 +480,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       disconnectRef.current = createSSEStream(convId, {
         ...buildCallbacks(convId, conv),
         onConnectionError,
-      }, content, streamMode, plannerAgentIdRef.current);
+      }, promptForStream, streamMode, plannerAgentIdRef.current);
     }).catch(() => {
       qc.setQueryData(
         ["messages", activeId ?? convId],

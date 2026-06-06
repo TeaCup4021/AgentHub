@@ -39,3 +39,15 @@ clone/
 AgentHub-架构设计前端.md
 AgentHub-架构设计后端.md
 课题：AgentHub - 多 Agent 协作平台.md
+
+# CLI workspace (生成的文件)
+cli-workspace/
+
+# Agent 临时生成的文件
+backend/create_ppt.py
+backend/generate_ppt.py
+backend/inline-viewer.html
+backend/AI_Development_Presentation.html
+agenthub-web/describe.mjs
+agenthub-web/preview.mjs
+agenthub-web/screenshot.mjs

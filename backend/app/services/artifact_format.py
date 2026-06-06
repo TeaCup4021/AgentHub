@@ -26,6 +26,11 @@ new code
 4. Files with download URL → use:
 <artifact type="file" url="DOWNLOAD_URL" name="filename.ext" size="BYTES" type="mime/type" />
 
+5. Documents (PDF, Word, Excel, PPT) → use:
+<artifact type="document" url="FILE_URL" filename="filename.ext" size="BYTES" type="mime/type" />
+Use this for any document file you create or reference, especially PowerPoint (PPT/PPTX),
+PDF, Word (DOC/DOCX), and Excel (XLS/XLSX). The file will be displayed inline in the chat.
+
 DO NOT describe artifacts in plain text. ALWAYS use <artifact> tags.
 """
 

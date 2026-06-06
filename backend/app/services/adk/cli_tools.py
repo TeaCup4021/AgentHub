@@ -158,6 +158,52 @@ async def web_search(query: str) -> str:
         return f"Error in web search: {str(e)}"
 
 
+@register_builtin("upload_file")
+async def upload_file_tool(file_path: str) -> str:
+    """Uploads a local file (binary or text) to cloud storage and returns a download URL.
+
+    Use this after generating a file on disk (e.g. a PowerPoint created by python-pptx,
+    an image, or any binary file that create_file can't handle). The returned download_url
+    can be used in <artifact type="document" url="..."> or <artifact type="file" url="...">.
+
+    Args:
+        file_path: Path to the local file to upload.
+
+    Returns:
+        JSON string with download_url, file_id, file_name, size, and mime_type.
+    """
+    try:
+        from app.services import storage
+
+        file_name = os.path.basename(file_path)
+        mime_type, _ = mimetypes.guess_type(file_path)
+        mime_type = mime_type or "application/octet-stream"
+
+        with open(file_path, "rb") as f:
+            content = f.read()
+
+        file_id = str(uuid.uuid4())
+        # Run the synchronous upload in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: storage.upload_file(content, f"files/{file_id}", mime_type),
+        )
+
+        download_url = f"/api/v1/files/{file_id}/download"
+        result = {
+            "status": "uploaded",
+            "file_id": file_id,
+            "download_url": download_url,
+            "file_name": file_name,
+            "file_size": len(content),
+            "mime_type": mime_type,
+        }
+        return f"File uploaded successfully\n{json.dumps(result, ensure_ascii=False)}"
+    except Exception as e:
+        return f"Error uploading file {file_path}: {str(e)}"
+
+
 @register_builtin("preview_publish")
 async def preview_publish(html: str, title: str = "") -> str:
     """Publishes HTML content as a preview page accessible via sandboxed iframe.
