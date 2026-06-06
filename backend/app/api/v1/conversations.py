@@ -12,8 +12,9 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db, async_session_maker
+from app.core.exceptions import NotFoundException
 from app.schemas.conversation import ConversationCreate, ConversationUpdate, ConversationResponse, PinMessageRequest
-from app.schemas.base import Page
+from app.schemas.base import BaseSchema, Page
 from app.models.conversation import Conversation
 from app.models.conversation_participant import ConversationParticipant
 from app.models.agent import Agent as AgentModel
@@ -1565,3 +1566,67 @@ async def stream_conversation(
         _error_sse_stream("NO_AGENT", "该对话未绑定任何 Agent，请先选择 Agent"),
         media_type="text/event-stream",
     )
+
+
+@router.get("/{conv_id}/artifacts/{merge_key}/versions")
+async def get_artifact_versions(
+    conv_id: UUID,
+    merge_key: str,
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.artifact import ArtifactService
+    from app.schemas.message import ArtifactBrief
+
+    rows, total = await ArtifactService.get_versions(db, conv_id, merge_key, page, pageSize)
+    items = [ArtifactBrief.model_validate(row) for row in rows]
+    return Page(list=items, total=total, page=page, pageSize=pageSize)
+
+
+class UpdateArtifactContent(BaseSchema):
+    content: dict
+
+
+@router.patch("/{conv_id}/artifacts/{artifact_id}")
+async def update_artifact_content(
+    conv_id: UUID,
+    artifact_id: UUID,
+    body: UpdateArtifactContent,
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.artifact import ArtifactService
+    from app.schemas.message import ArtifactBrief
+    from app.models.artifact import Artifact
+
+    row = await db.get(Artifact, artifact_id)
+    if row is None:
+        raise NotFoundException("artifact")
+
+    content_body = body.content
+    content_body["artifactType"] = row.artifact_type
+    content_body["title"] = row.title
+
+    existing_merge_key = (row.content or {}).get("_mergeKey", "")
+    if isinstance(existing_merge_key, str) and existing_merge_key.startswith("artifact_id:"):
+        stable_id = existing_merge_key[len("artifact_id:"):]
+    else:
+        stable_id = str(row.id)
+
+    new_row = await ArtifactService.append_version(
+        db=db,
+        conversation_id=conv_id,
+        message_id=row.message_id,
+        artifact_payload={
+            "id": stable_id,
+            "artifactType": row.artifact_type,
+            "title": row.title or "",
+            "content": content_body,
+            "storageKey": row.storage_key,
+            "mimeType": row.mime_type,
+        },
+    )
+    await db.commit()
+
+    artifact_resp = ArtifactBrief.model_validate(new_row)
+    return {"artifact": artifact_resp.model_dump(by_alias=True), "version": new_row.version}

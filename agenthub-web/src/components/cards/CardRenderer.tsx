@@ -11,6 +11,7 @@ import type { FC } from "react";
 
 interface CardRendererProps {
   artifact: Artifact;
+  convId?: string;
 }
 
 const cardRenderers: Record<string, FC<CardRendererProps>> = {
@@ -23,8 +24,8 @@ const cardRenderers: Record<string, FC<CardRendererProps>> = {
   link_preview: LinkPreviewCard,
 };
 
-export const CardRenderer = memo(function CardRenderer({ artifact }: CardRendererProps) {
+export const CardRenderer = memo(function CardRenderer({ artifact, convId }: CardRendererProps) {
   const Renderer = cardRenderers[artifact.artifactType];
   if (!Renderer) return null;
-  return <Renderer artifact={artifact} />;
+  return <Renderer artifact={artifact} convId={convId} />;
 });

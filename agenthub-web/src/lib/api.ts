@@ -259,6 +259,22 @@ export const orchestratorApi = {
   },
 };
 
+export const artifactApi = {
+  getVersions(convId: string, mergeKey: string, page = 1, pageSize = 20) {
+    return api.get<
+      ApiResponse<import("@/types").ArtifactVersionListResponse>
+    >(`/conversations/${convId}/artifacts/${encodeURIComponent(mergeKey)}/versions`, {
+      params: { page, pageSize },
+    });
+  },
+
+  updateContent(convId: string, artifactId: string, content: Record<string, unknown>) {
+    return api.patch<
+      ApiResponse<{ artifact: import("@/types").Artifact; version: number }>
+    >(`/conversations/${convId}/artifacts/${artifactId}`, { content });
+  },
+};
+
 export const authApi = {
   changePassword(oldPassword: string, newPassword: string) {
     return api.patch<ApiResponse<{ status: string; message: string }>>("/auth/password", {

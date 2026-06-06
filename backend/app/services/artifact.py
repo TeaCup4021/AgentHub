@@ -26,6 +26,34 @@ def build_artifact_merge_key(message_id: str, artifact_payload: Dict) -> str:
 
 class ArtifactService:
     @staticmethod
+    async def get_versions(
+        db: AsyncSession,
+        conversation_id,
+        merge_key: str,
+        page: int = 1,
+        page_size: int = 20,
+    ):
+        from sqlalchemy import desc
+        count_query = select(func.count()).select_from(Artifact).where(
+            Artifact.conversation_id == conversation_id,
+            Artifact.content["_mergeKey"].astext == merge_key,
+        )
+        total = (await db.execute(count_query)).scalar_one()
+
+        query = (
+            select(Artifact)
+            .where(
+                Artifact.conversation_id == conversation_id,
+                Artifact.content["_mergeKey"].astext == merge_key,
+            )
+            .order_by(desc(Artifact.version))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        result = await db.execute(query)
+        return result.scalars().all(), total
+
+    @staticmethod
     async def append_version(
         db: AsyncSession,
         conversation_id,

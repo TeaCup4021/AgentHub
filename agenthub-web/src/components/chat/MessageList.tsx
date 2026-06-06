@@ -32,7 +32,7 @@ function cleanContent(message: Message): string {
   return text;
 }
 
-function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
+function renderFallbackCards(content: string, existingArtifacts: Artifact[], convId?: string) {
   const hasArtifactType = (type: string) => existingArtifacts.some((a) => a.artifactType === type);
   const cards: React.ReactNode[] = [];
 
@@ -47,7 +47,7 @@ function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
         version: 1,
         createdAt: new Date().toISOString(),
       };
-      cards.push(<CardRenderer key={fallback.id} artifact={fallback} />);
+      cards.push(<CardRenderer key={fallback.id} artifact={fallback} convId={convId} />);
     };
 
     // 1. Explicit ```diff blocks
@@ -134,7 +134,7 @@ function renderFallbackCards(content: string, existingArtifacts: Artifact[]) {
         version: 1,
         createdAt: new Date().toISOString(),
       };
-      cards.push(<CardRenderer key={fallback.id} artifact={fallback} />);
+      cards.push(<CardRenderer key={fallback.id} artifact={fallback} convId={convId} />);
     }
   }
 
@@ -367,8 +367,8 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
                       )}
                     </div>
                   ))}
-                  {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
-                  {renderFallbackCards(message.content, message.artifacts)}
+                  {message.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} convId={message.conversationId} />)}
+                  {renderFallbackCards(message.content, message.artifacts, message.conversationId)}
                 </>
               )}
             </ErrorBoundary>
@@ -407,7 +407,7 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
   );
 });
 
-const StreamingMessageBubble = memo(function StreamingMessageBubble({ messageId, agentName }: { messageId: string; agentName: string }) {
+const StreamingMessageBubble = memo(function StreamingMessageBubble({ messageId, agentName, convId }: { messageId: string; agentName: string; convId?: string }) {
   const sc = useChatStore((s) => s.getStreamingContent(messageId));
   if (!sc) return null;
   return (
@@ -445,8 +445,8 @@ const StreamingMessageBubble = memo(function StreamingMessageBubble({ messageId,
           <ErrorBoundary label="流式消息渲染">
             {sc.thinkingSteps.length > 0 && <ThinkingBlock steps={sc.thinkingSteps} isStreaming />}
             {sc.content && <MarkdownBubble text={stripArtifactTags(sc.content)} isStreaming />}
-            {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} />)}
-            {renderFallbackCards(sc.content, [])}
+            {sc.artifacts.map((a) => <CardRenderer key={a.id} artifact={a} convId={convId} />)}
+            {renderFallbackCards(sc.content, [], convId)}
           </ErrorBoundary>
         </div>
       </div>
@@ -549,6 +549,7 @@ export function MessageList({
   const [unreadCount, setUnreadCount] = useState(0);
   const prevVisibleCountRef = useRef(0);
   const firstMsgIdRef = useRef<string | null>(null);
+  const convId = messages[0]?.conversationId || "";
 
   const visibleCount =
     messages.length + (streamingMessageId ? 1 : 0) + (isWaiting ? 1 : 0);
@@ -660,7 +661,7 @@ export function MessageList({
         );
       })}
       {streamingMessageId && streamingAgentName && (
-        <StreamingMessageBubble messageId={streamingMessageId} agentName={streamingAgentName} />
+        <StreamingMessageBubble messageId={streamingMessageId} agentName={streamingAgentName} convId={convId} />
       )}
       {isWaiting && !streamingMessageId && (
         <motion.div

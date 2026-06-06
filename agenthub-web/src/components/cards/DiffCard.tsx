@@ -8,6 +8,7 @@ import { useBlobDownload } from "@/hooks/useBlobDownload";
 import { fileApi } from "@/lib/api";
 import { useUIStore } from "@/stores/uiStore";
 import { ConflictResolver } from "./ConflictResolver";
+import { FullscreenModal } from "./FullscreenModal";
 
 interface DiffCardProps {
   artifact: Artifact;
@@ -21,6 +22,7 @@ export function DiffCard({ artifact }: DiffCardProps) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [conflicts, setConflicts] = useState<ConflictEntry[] | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const { downloadUrl } = useBlobDownload();
   const { cardRef, resizeRef, sizeLabelRef, resetSize } = useResizable({
     minW: 420, minH: 200,
@@ -116,6 +118,12 @@ export function DiffCard({ artifact }: DiffCardProps) {
             <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
           </svg>
         </button>
+        <button className="artifact-card__reset" onClick={() => setFullscreen(true)} title="全屏查看">
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+          </svg>
+        </button>
       </div>
 
       <div className="artifact-card__body" style={{ flex: 1, minHeight: 0 }}>
@@ -145,6 +153,32 @@ export function DiffCard({ artifact }: DiffCardProps) {
           <line x1={19} y1={5} x2={5} y2={19}/><line x1={19} y1={11} x2={11} y2={19}/><line x1={19} y1={17} x2={17} y2={19}/>
         </svg>
       </div>
+
+      <FullscreenModal
+        visible={fullscreen}
+        onClose={() => setFullscreen(false)}
+        title={c.fileName || "diff"}
+      >
+        <DiffEditor
+          key={`${artifact.id}-${splitView ? "split" : "unified"}-fullscreen`}
+          height="100%"
+          original={c.oldCode}
+          modified={c.newCode}
+          language={c.language || "text"}
+          theme={isDark ? "vs-dark" : "vs"}
+          options={{
+            renderSideBySide: splitView,
+            readOnly: true,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            fontSize: 14,
+            lineNumbers: "on",
+            padding: { top: 12 },
+          }}
+          keepCurrentOriginalModel={true}
+          keepCurrentModifiedModel={true}
+        />
+      </FullscreenModal>
     </div>
   );
 }

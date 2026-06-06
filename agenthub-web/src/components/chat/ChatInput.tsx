@@ -295,13 +295,20 @@ export function ChatInput({ onSend, onStop, disabled, agents, focusKey }: ChatIn
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const files = e.clipboardData?.files;
-    if (!files?.length) return;
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      if (f.type.startsWith("image/") || f.type.startsWith("application/")) {
-        e.preventDefault();
-        uploadFile(f);
+    if (files?.length) {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f.type.startsWith("image/") || f.type.startsWith("application/")) {
+          e.preventDefault();
+          uploadFile(f);
+        }
       }
+      return;
+    }
+    e.preventDefault();
+    const text = e.clipboardData.getData("text/plain");
+    if (text) {
+      document.execCommand("insertText", false, text);
     }
   }, [uploadFile]);
 

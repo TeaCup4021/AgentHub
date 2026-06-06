@@ -22,6 +22,7 @@ interface ArtifactWorkbenchProps {
 export function ArtifactWorkbench({ messages, agents }: ArtifactWorkbenchProps) {
   const [typeFilter, setTypeFilter] = useState("");
   const [search, setSearch] = useState("");
+  const convId = messages[0]?.conversationId || "";
   const agentOptions = useMemo(() => [
     { value: "", label: "全部 Agent" },
     ...agents.map((a) => ({ value: a.id, label: a.name })),
@@ -105,7 +106,7 @@ export function ArtifactWorkbench({ messages, agents }: ArtifactWorkbenchProps) 
             gap: 12,
           }}>
             {filtered.map(({ artifact }) => (
-              <CardRenderer key={artifact.id} artifact={artifact} />
+              <CardRenderer key={artifact.id} artifact={artifact} convId={convId} />
             ))}
           </div>
         )}

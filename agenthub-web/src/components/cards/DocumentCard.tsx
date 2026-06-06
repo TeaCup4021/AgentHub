@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import type { Artifact, DocumentArtifactContent } from "@/types";
 import { useResizable } from "@/hooks/useResizable";
 import { formatFileSize } from "@/lib/utils";
+import { FullscreenModal } from "./FullscreenModal";
 
 const DEFAULT_HEIGHT = 320;
 const FILE_TYPE_LABELS: Record<string, string> = { pdf: "PDF", docx: "Word", xlsx: "Excel", pptx: "PPT" };
@@ -14,6 +15,7 @@ export function DocumentCard({ artifact }: { artifact: Artifact }) {
   const { cardRef, resizeRef, sizeLabelRef, resetSize } = useResizable({ defaultHeight: DEFAULT_HEIGHT });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [docHtml, setDocHtml] = useState("");
   const [tableHtml, setTableHtml] = useState("");
 
@@ -83,6 +85,12 @@ export function DocumentCard({ artifact }: { artifact: Artifact }) {
         </span>
         <div style={{ flex: 1 }} />
         <span ref={sizeLabelRef} className="artifact-card__size-label" />
+        <button className="artifact-card__reset" onClick={() => setFullscreen(true)} title="全屏查看">
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+          </svg>
+        </button>
         <button className="artifact-card__reset" onClick={resetSize} title="恢复默认大小">
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
             <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
@@ -131,6 +139,28 @@ export function DocumentCard({ artifact }: { artifact: Artifact }) {
           <line x1={19} y1={5} x2={5} y2={19}/><line x1={19} y1={11} x2={11} y2={19}/><line x1={19} y1={17} x2={17} y2={19}/>
         </svg>
       </div>
+
+      <FullscreenModal
+        visible={fullscreen}
+        onClose={() => setFullscreen(false)}
+        title={c.fileName}
+      >
+        <div className="artifact-card__body" style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {loading ? (
+            <Spin />
+          ) : error ? (
+            <Empty title="预览不可用" />
+          ) : c.fileType === "pdf" ? (
+            <iframe src={c.fileUrl} style={{ width: "100%", height: "100%", border: "none" }} title={c.fileName} />
+          ) : c.fileType === "docx" ? (
+            <div className="document-card__docx" dangerouslySetInnerHTML={{ __html: docHtml }} style={{ width: "100%", height: "100%", overflow: "auto", padding: 16, fontSize: "var(--font-size-md)", lineHeight: 1.7, color: "var(--color-text-primary)" }} />
+          ) : c.fileType === "xlsx" ? (
+            <div className="document-card__xlsx" dangerouslySetInnerHTML={{ __html: tableHtml }} style={{ width: "100%", height: "100%", overflow: "auto", padding: 8, color: "var(--color-text-primary)" }} />
+          ) : (
+            <a href={c.fileUrl} download={c.fileName} style={{ fontSize: "var(--font-size-sm)", color: "var(--color-primary)" }}>下载文件</a>
+          )}
+        </div>
+      </FullscreenModal>
     </div>
   );
 }

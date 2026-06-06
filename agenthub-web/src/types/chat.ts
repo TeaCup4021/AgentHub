@@ -211,6 +211,22 @@ export interface ApplyDiffResponse {
   downloadUrl: string;
 }
 
+// ========== Artifact 版本历史 ==========
+
+export interface ArtifactVersion {
+  id: string;
+  version: number;
+  createdAt: string;
+  content: Record<string, unknown>;
+}
+
+export interface ArtifactVersionListResponse {
+  list: ArtifactVersion[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // ========== SSE 事件 ==========
 
 export type SSEEventType =
