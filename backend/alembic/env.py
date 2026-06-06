@@ -1,3 +1,9 @@
+import os
+import sys
+
+# Ensure the backend directory is on sys.path so 'app' can be imported
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 import asyncio
 from logging.config import fileConfig
 

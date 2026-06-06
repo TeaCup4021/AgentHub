@@ -276,6 +276,15 @@ async def _adk_sse_stream(
                         logger.exception("persist stream message failed")
                     real_msg_id = str(real_msg.id) if real_msg else str(uuid4())
                     artifacts = await detect_artifacts(acc["content"])
+                    # 同时检测用户 prompt 中的文档链接（如上传的 PPT 附件）
+                    if prompt_text and prompt_text != acc["content"]:
+                        prompt_artifacts = await detect_artifacts(prompt_text)
+                        for pa in prompt_artifacts:
+                            if pa["artifactType"] == "document" and not any(
+                                a["artifactType"] == "document" and a.get("content", {}).get("fileUrl") == pa.get("content", {}).get("fileUrl")
+                                for a in artifacts
+                            ):
+                                artifacts.append(pa)
                     logger.info(
                         "_adk_sse_stream: message_end mid=%s real_msg_id=%s content_len=%d artifacts_found=%d",
                         mid, real_msg_id, len(acc["content"]), len(artifacts),

@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     AUTH_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     AUTH_ALGORITHM: str = "HS256"
 
+    # Gotenberg (document conversion)
+    GOTENBERG_URL: str = "http://localhost:3001"
+
     # CLI tool paths
     CLAUDE_CODE_CLI_PATH: str = "claude"
     CODEX_CLI_PATH: str = "codex"
