@@ -144,8 +144,21 @@ class MessageService:
         art_query = select(Artifact).where(Artifact.message_id.in_(msg_ids))
         art_result = await db.execute(art_query)
         artifacts = list(art_result.scalars().all())
-        art_map: Dict[UUID, list] = {mid: [] for mid in msg_ids}
+
+        # Collapse version chains: an edit (or re-stream) appends a new row with
+        # the same _mergeKey, so keep only the latest version per chain to avoid
+        # rendering the same card multiple times. Rows without a _mergeKey stand
+        # alone (keyed by their own id).
+        latest_by_chain: Dict[tuple, Artifact] = {}
         for a in artifacts:
+            content = a.content if isinstance(a.content, dict) else {}
+            chain_key = (a.message_id, content.get("_mergeKey") or str(a.id))
+            current = latest_by_chain.get(chain_key)
+            if current is None or (a.version or 0) > (current.version or 0):
+                latest_by_chain[chain_key] = a
+
+        art_map: Dict[UUID, list] = {mid: [] for mid in msg_ids}
+        for a in latest_by_chain.values():
             art_map[a.message_id].append({
                 "id": a.id,
                 "artifact_type": a.artifact_type,

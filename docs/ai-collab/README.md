@@ -13,3 +13,6 @@ AI 协作约定文档，供 Claude 和其他 AI 工具在参与 AgentHub 开发�
 | `orchestration-flow.md` | 群聊编排管线 |
 | `frontend-conventions.md` | 前端组件/状态管理约定 |
 | `glossary.md` | 术语表 |
+| `debug-agent-failure.md` | Agent 对话失败分步排查指南 |
+| `debug-artifact-cards.md` | 产物卡片（artifact）联调测试与排查指南 |
+| `decisions/` | 架构决策记录（ADR） |

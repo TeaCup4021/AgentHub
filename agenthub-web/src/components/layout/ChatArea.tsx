@@ -78,6 +78,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       useChatStore.getState().addPinnedMessage(msgId);
       toast.success("已 Pin，将作为长期上下文");
       qc.invalidateQueries({ queryKey: ["messages", activeId] });
+      qc.invalidateQueries({ queryKey: ["pins", activeId] });
     } catch {
       toast.error("Pin 失败");
     }
@@ -90,6 +91,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       useChatStore.getState().removePinnedMessage(msgId);
       toast.success("已取消 Pin");
       qc.invalidateQueries({ queryKey: ["messages", activeId] });
+      qc.invalidateQueries({ queryKey: ["pins", activeId] });
     } catch {
       toast.error("取消 Pin 失败");
     }
@@ -429,9 +431,21 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         );
       }
 
+      // 把附件文件 URL 拼进 prompt（完整 URL 以便后端检测到）
+      let promptForStream = content;
+      if (attachments && attachments.length > 0) {
+        const urls = attachments
+          .filter((a) => a.fileUrl && !a.fileUrl.startsWith("blob:"))
+          .map((a) => a.fileUrl.startsWith("/") ? `${window.location.origin}${a.fileUrl}` : a.fileUrl)
+          .join("\n");
+        if (urls) {
+          promptForStream = content + "\n\n[附件文件链接]\n" + urls;
+        }
+      }
+
       disconnectRef.current?.();
       setIsStreaming(true);
-      lastPromptRef.current = content;
+      lastPromptRef.current = promptForStream;
 
       const onConnectionError = () => {
         const MAX_RETRIES = 3;
@@ -466,7 +480,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
       disconnectRef.current = createSSEStream(convId, {
         ...buildCallbacks(convId, conv),
         onConnectionError,
-      }, content, streamMode, plannerAgentIdRef.current);
+      }, promptForStream, streamMode, plannerAgentIdRef.current);
     }).catch(() => {
       qc.setQueryData(
         ["messages", activeId ?? convId],
@@ -818,6 +832,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
           onAdjustPlan={handleAdjustPlan}
           onRefinePlan={handleRefinePlan}
           dagTaskId={dagTaskId}
+          onRegenerate={handleRegenerate}
           onPin={handlePin}
           onUnpin={handleUnpin}
         />

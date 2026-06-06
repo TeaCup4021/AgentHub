@@ -54,9 +54,10 @@ describe("CardRenderer", () => {
       content: { language: "ts", oldCode: "a", newCode: "b" },
     });
     render(<CardRenderer artifact={artifact} />);
-    expect(screen.getByText("保存文件")).toBeInTheDocument();
     expect(screen.getByText("ts")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /保存文件/ })).toBeInTheDocument();
+    // Apply-back (write to source card) and save-as (download) are distinct actions.
+    expect(screen.getByRole("button", { name: /应用到源文件/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /另存为文件/ })).toBeInTheDocument();
   });
 
   it("deploy_status building 应显示构建中", () => {

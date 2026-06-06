@@ -1,14 +1,46 @@
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { DiffEditor } from "@monaco-editor/react";
-import type { Artifact, DiffArtifactContent, ConflictEntry } from "@/types";
+import type { InfiniteData } from "@tanstack/react-query";
+import type { Artifact, DiffArtifactContent, ConflictEntry, MessageListData, CodeArtifactContent } from "@/types";
 import { getArtifactContent } from "@/types";
 import { useResizable } from "@/hooks/useResizable";
 import { useBlobDownload } from "@/hooks/useBlobDownload";
-import { fileApi } from "@/lib/api";
+import { fileApi, messageApi } from "@/lib/api";
 import { useUIStore } from "@/stores/uiStore";
+import { useChatStore } from "@/stores/chatStore";
+import { queryClient } from "@/lib/queryClient";
+import { findApplyTarget, type CodeCandidate } from "@/lib/diffApply";
 import { ConflictResolver } from "./ConflictResolver";
 import { FullscreenModal } from "./FullscreenModal";
+
+/**
+ * Collect every code card in the active conversation from the messages cache,
+ * newest-first, as candidates for "apply diff back to source". Read via the
+ * queryClient singleton (not a hook) so this works from a card buried deep in
+ * the message tree — same pattern as CodeCard's write-back.
+ */
+function gatherCodeCandidates(convId: string): CodeCandidate[] {
+  const data = queryClient.getQueryData<InfiniteData<MessageListData>>(["messages", convId]);
+  if (!data) return [];
+  const out: CodeCandidate[] = [];
+  for (const page of data.pages) {
+    for (const msg of page.items) {
+      for (const a of msg.artifacts ?? []) {
+        if (a.artifactType !== "code") continue;
+        const cc = a.content as unknown as CodeArtifactContent;
+        out.push({
+          id: a.id,
+          fileName: cc.fileName,
+          language: cc.language,
+          code: cc.code ?? "",
+          persistable: !a.id.startsWith("fallback-"),
+        });
+      }
+    }
+  }
+  return out;
+}
 
 interface DiffCardProps {
   artifact: Artifact;
@@ -56,6 +88,54 @@ export function DiffCard({ artifact }: DiffCardProps) {
     }
   }, [c.fileName, c.newCode, c.language, downloadUrl]);
 
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
+
+  const handleApply = useCallback(async () => {
+    const convId = useChatStore.getState().activeConversationId;
+    if (!convId) {
+      toast.error("无法定位会话");
+      return;
+    }
+
+    const candidates = gatherCodeCandidates(convId);
+
+    const result = findApplyTarget(
+      { fileName: c.fileName, oldCode: c.oldCode, newCode: c.newCode },
+      candidates,
+    );
+
+    if ("error" in result) {
+      toast.error(
+        result.error === "no-candidates"
+          ? "会话中没有可应用的代码卡"
+          : "未找到匹配的源代码卡（文件名/片段都对不上），可手动复制改后代码",
+      );
+      return;
+    }
+
+    if (!result.target.persistable) {
+      toast.error("源代码卡是临时解析卡（无法写库），请手动复制改后代码");
+      return;
+    }
+
+    setApplying(true);
+    try {
+      await messageApi.updateArtifact(result.target.id, {
+        ...(result.target.fileName ? { fileName: result.target.fileName } : {}),
+        ...(result.target.language ? { language: result.target.language } : {}),
+        code: result.newFullCode,
+      });
+      queryClient.invalidateQueries({ queryKey: ["messages", convId] });
+      setApplied(true);
+      const where = result.target.fileName ? `「${result.target.fileName}」` : "源代码卡";
+      toast.success(`已应用到${where}（追加为新版本）`);
+    } catch {
+      toast.error("应用失败");
+    } finally {
+      setApplying(false);
+    }
+  }, [c.fileName, c.oldCode, c.newCode]);
   const themeSetting = useUIStore((s) => s.theme);
   const isDark = themeSetting === "system"
     ? typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -102,15 +182,28 @@ export function DiffCard({ artifact }: DiffCardProps) {
           {splitView ? "统一" : "并排"}
         </button>
         <button
-          onClick={handleSave}
-          disabled={saving || saved}
+          onClick={handleApply}
+          disabled={applying || applied}
+          title="把改动写回会话里匹配的源代码卡（追加新版本）"
           style={{
             fontSize: 11, background: "none", border: "none",
-            color: saved ? "var(--color-success)" : "var(--color-primary)",
+            color: applied ? "var(--color-success)" : "var(--color-primary)",
+            cursor: applying || applied ? "default" : "pointer", fontWeight: 600,
+          }}
+        >
+          {applying ? "应用中…" : applied ? "✓ 已应用" : "应用到源文件"}
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving || saved}
+          title="把改后代码作为新文件保存/下载"
+          style={{
+            fontSize: 11, background: "none", border: "none",
+            color: saved ? "var(--color-success)" : "var(--color-text-tertiary)",
             cursor: saving || saved ? "default" : "pointer", fontWeight: 600,
           }}
         >
-          {saving ? "保存中…" : saved ? "✓ 已保存" : "保存文件"}
+          {saving ? "保存中…" : saved ? "✓ 已保存" : "另存为文件"}
         </button>
         <span ref={sizeLabelRef} className="artifact-card__size-label" />
         <button className="artifact-card__reset" onClick={resetSize} title="恢复默认大小">

@@ -41,6 +41,15 @@ services:
     networks:
       - agenthub-net
 
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: agenthub-gotenberg
+    ports:
+      - "3001:3000"
+    networks:
+      - agenthub-net
+    restart: unless-stopped
+
 networks:
   agenthub-net:
     driver: bridge

@@ -17,7 +17,7 @@ _SELF_CLOSING_ARTIFACT_RE = re.compile(
     re.IGNORECASE | re.DOTALL)
 
 _ARTIFACT_WITH_BODY_RE = re.compile(
-    r'<artifact\s+type="(code|diff|preview)"'
+    r'<artifact\s+type="(code|diff|preview|document)"'
     r'((?:\s+\w+="[^"]*")*)\s*>(.*?)</artifact>',
     re.IGNORECASE | re.DOTALL)
 
@@ -25,11 +25,17 @@ _ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
 
 _CDATA_RE = re.compile(r'<!\[CDATA\[(.*?)\]\]>', re.DOTALL)
 
-_SYSTEM_URL_PATTERNS = ["/preview/", "/files/"]
+_SYSTEM_URL_PATTERNS = ["/preview/"]
 _EMBEDDABLE_DOMAINS = [
     "docs.google.com", "office.com", "notion.so",
     "figma.com", "youtube.com", "youtu.be", "vimeo.com",
 ]
+_DOC_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"}
+
+_DOC_EXT_TO_TYPE = {
+    ".pdf": "pdf", ".doc": "docx", ".docx": "docx",
+    ".xls": "xlsx", ".xlsx": "xlsx", ".ppt": "pptx", ".pptx": "pptx",
+}
 
 
 def build_content_hash(content: Dict) -> str:
@@ -47,8 +53,9 @@ async def detect_artifacts(content: str) -> List[Dict]:
         for a in _detect_diffs(content):
             if a["artifactType"] not in existing: artifacts.append(a)
 
-    if "preview" not in existing:
-        artifacts.extend(_detect_urls(content))
+    if "preview" not in existing and "document" not in existing:
+        url_arts = await _detect_urls(content)
+        artifacts.extend(url_arts)
 
     for art in artifacts:
         if "id" not in art: art["id"] = str(uuid4())
@@ -106,7 +113,66 @@ async def _build_xml_artifact(art_type: str, attrs: dict, body: str):
         return {"artifactType":"file","title":name or "文件","content":{"fileName":name or "","fileUrl":url or "","fileType":mime or "application/octet-stream","fileSize":int(sz) if sz and sz.isdigit() else 0}}
     if art_type == "deploy_status":
         return {"artifactType":"deploy_status","title":t or "部署","content":{"status":"deployed","url":url or ""}}
+    if art_type == "document":
+        doc_url = url or ""
+        file_name = fn or (doc_url.rstrip("/").split("/")[-1] if doc_url else "document")
+        ext = "." + file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+        file_type = _DOC_EXT_TO_TYPE.get(ext, "pdf")
+        final_url, final_type = await _maybe_convert_pptx(doc_url, file_type, file_name)
+        return {"artifactType":"document","title":t or name or file_name,"content":{"fileName":file_name,"fileUrl":final_url,"fileType":final_type,"fileSize":int(sz) if sz and sz.isdigit() else 0}}
     return None
+
+
+async def _maybe_convert_pptx(doc_url: str, file_type: str, file_name: str):
+    """If the document is a PPTX, convert it to PDF via Gotenberg.
+    Returns (final_url, final_type). On failure, returns original values unchanged.
+    """
+    if file_type != "pptx" or not doc_url:
+        return doc_url, file_type
+
+    import asyncio as _asyncio
+    from uuid import uuid4 as _uuid4
+    from app.services.converter import convert_url_to_pdf, convert_bytes_sync
+    from app.services.storage import upload_file, get_file
+
+    try:
+        # Acquire file bytes — from external URL or internal MinIO path
+        is_internal = doc_url.startswith("/api/v1/files/") or "/api/v1/files/" in doc_url
+        if is_internal:
+            # Extract file_id from /api/v1/files/{file_id}/download (may be absolute URL)
+            import re as _re
+            m = _re.search(r"/api/v1/files/([a-f0-9-]+)/download", doc_url)
+            if m:
+                file_id = m.group(1)
+            else:
+                file_id = doc_url.split("/")[4]
+            try:
+                pdf_bytes_coro = _asyncio.get_event_loop().run_in_executor(
+                    None, lambda: convert_bytes_sync(get_file(f"files/{file_id}"), file_name)
+                )
+                pdf_bytes = await pdf_bytes_coro
+            except Exception:
+                logger.exception("Failed to read pptx from MinIO: %s", doc_url)
+                return doc_url, file_type
+        else:
+            pdf_bytes = await convert_url_to_pdf(doc_url)
+
+        if not pdf_bytes:
+            return doc_url, file_type
+
+        # Upload PDF to MinIO (sync, run in executor)
+        pdf_id = str(_uuid4())
+        loop = _asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None, lambda: upload_file(pdf_bytes, f"files/{pdf_id}", "application/pdf")
+        )
+        final_url = f"/api/v1/files/{pdf_id}/download"
+        logger.info("PPTX → PDF converted: %s → %s", doc_url, final_url)
+        return final_url, "pdf"
+
+    except Exception:
+        logger.exception("PPTX conversion failed, keeping as pptx: %s", doc_url)
+        return doc_url, file_type
 
 
 def _split_diff_body(body):
@@ -162,16 +228,49 @@ def _detect_diffs(content):
 def _is_system_url(url): return any(p in url for p in _SYSTEM_URL_PATTERNS)
 
 
+def _is_document_url(url):
+    u = url.lower()
+    # Check if URL path ends with a document extension
+    from urllib.parse import urlparse
+    path = urlparse(u).path.rstrip("/")
+    return any(path.endswith(e) or ("." + e.lstrip(".") + "?") in (path + "?") for e in _DOC_EXTENSIONS)
+
+
 def _is_embeddable(url):
     u = url.lower()
-    if any(u.endswith(e) for e in [".pdf",".doc",".xls",".ppt"]): return True
+    if _is_document_url(url): return True
     if any(d in u for d in _EMBEDDABLE_DOMAINS): return True
-    # 所有 http/https 链接都作为可预览网页处理
-    return u.startswith("http")
+    return False
 
 
 
-def _detect_urls(content):
+def _resolve_internal_file(url: str):
+    """If url is an internal file API path, return (file_name, file_type, minio_key).
+    Otherwise return None."""
+    import re as _re
+    m = _re.search(r"/api/v1/files/([a-f0-9-]+)/download", url)
+    if not m:
+        return None
+    file_id = m.group(1)
+    try:
+        from app.services.storage import stat_object
+        obj = stat_object(f"files/{file_id}")
+        ct = obj.content_type or ""
+        base_name = f"uploaded_file_{file_id[:8]}"
+        if "presentation" in ct or "powerpoint" in ct:
+            return f"{base_name}.pptx", "pptx", f"files/{file_id}"
+        if "word" in ct or "document" in ct and "xml" in ct:
+            return f"{base_name}.docx", "docx", f"files/{file_id}"
+        if "spreadsheet" in ct or "excel" in ct:
+            return f"{base_name}.xlsx", "xlsx", f"files/{file_id}"
+        if "pdf" in ct:
+            return f"{base_name}.pdf", "pdf", f"files/{file_id}"
+    except Exception:
+        pass
+    return None
+
+
+async def _detect_urls(content):
     c = _INLINE_CODE_RE.sub(" ", content); c = _CODE_BLOCK_RE.sub("", c)
     seen, r = set(), []
     for i, m in enumerate(_URL_RE.finditer(c)):
@@ -179,9 +278,26 @@ def _detect_urls(content):
         if url in seen: continue
         seen.add(url)
         if _is_system_url(url): continue
-        if _is_embeddable(url):
-            pt = "doc" if any(d in url.lower() for d in ["docs.google.com","office.com","notion.so","figma.com",".pdf",".doc",".xls",".ppt"]) else "web"
-            r.append({"artifactType":"preview","title":_preview_title(url,i),"content":{"url":url,"title":url,"previewType":pt}})
+
+        # Check internal file upload URLs first (no extension in path)
+        internal = _resolve_internal_file(url)
+        if internal:
+            file_name, file_type, minio_key = internal
+            final_url, final_type = await _maybe_convert_pptx(url, file_type, file_name)
+            r.append({"artifactType":"document","title":file_name,"content":{"fileName":file_name,"fileUrl":final_url,"fileType":final_type,"fileSize":0}})
+            continue
+
+        if _is_document_url(url):
+            from urllib.parse import urlparse
+            file_name = urlparse(url).path.rstrip("/").split("/")[-1]
+            ext = "." + file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+            file_type = _DOC_EXT_TO_TYPE.get(ext, "pdf")
+
+            final_url, final_type = await _maybe_convert_pptx(url, file_type, file_name)
+
+            r.append({"artifactType":"document","title":file_name,"content":{"fileName":file_name,"fileUrl":final_url,"fileType":final_type,"fileSize":0}})
+        elif _is_embeddable(url):
+            r.append({"artifactType":"preview","title":_preview_title(url,i),"content":{"url":url,"title":url,"previewType":"web"}})
         else:
             og = _try_fetch_og(url)
             r.append({"artifactType":"link_preview","title":og.get("title") or _preview_title(url,i),"content":{"url":url,"title":og.get("title"),"description":og.get("description"),"image":og.get("image"),"favicon":og.get("favicon"),"siteName":og.get("site_name")}})

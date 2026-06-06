@@ -45,6 +45,61 @@ async def _load_pinned_messages(conversation_id: UUID, limit: Optional[int] = No
     return [row[0] for row in result.all() if row[0]]
 
 
+def _is_renderable_part(part) -> bool:
+    """Whether ADK's Anthropic converter can serialize this Part.
+
+    Mirrors the supported branches of ``_part_to_message_block`` in
+    ``google.adk.models.anthropic_llm``. A Part that matches none of them
+    triggers ``NotImplementedError`` on the next LLM call when history is
+    re-serialized. The common offender is an empty text block (``text=''``)
+    that some proxies return alongside a tool_use block.
+    """
+    if getattr(part, "text", None):  # non-empty text (covers thought+text)
+        return True
+    if getattr(part, "thought", None) and getattr(part, "thought_signature", None):
+        return True  # redacted thinking
+    if getattr(part, "function_call", None):
+        return True
+    if getattr(part, "function_response", None):
+        return True
+    if getattr(part, "inline_data", None):
+        return True  # image / pdf
+    if getattr(part, "executable_code", None):
+        return True
+    if getattr(part, "code_execution_result", None):
+        return True
+    return False
+
+
+def _sanitize_request_contents(llm_request) -> int:
+    """Drop empty/unsupported Parts from request history in place.
+
+    Anthropic rejects empty content blocks and ADK crashes on empty text
+    Parts, so a Content left with zero renderable Parts is dropped entirely.
+    Returns the number of Parts removed (for logging).
+    """
+    contents = getattr(llm_request, "contents", None)
+    if not contents:
+        return 0
+
+    removed = 0
+    cleaned_contents = []
+    for content in contents:
+        parts = getattr(content, "parts", None) or []
+        kept = [p for p in parts if _is_renderable_part(p)]
+        removed += len(parts) - len(kept)
+        if not kept:
+            # Fully empty turn — skip it rather than send an empty block.
+            continue
+        if len(kept) != len(parts):
+            content.parts = kept
+        cleaned_contents.append(content)
+
+    if removed:
+        llm_request.contents = cleaned_contents
+    return removed
+
+
 def _build_injection_text(pinned_messages: list[str], spec_rules: Optional[str], pinned_limit: int = 10) -> Optional[str]:
     parts: list[str] = []
 
@@ -63,6 +118,16 @@ def _build_injection_text(pinned_messages: list[str], spec_rules: Optional[str],
 
 
 async def before_model_callback(callback_context, llm_request):
+    # Always strip empty/unsupported Parts first — must run before any early
+    # return below, since the crash happens during model invocation regardless
+    # of whether we have pinned/spec content to inject.
+    try:
+        removed = _sanitize_request_contents(llm_request)
+        if removed:
+            logger.info("pin_spec_injector: stripped %s empty/unsupported part(s)", removed)
+    except Exception:
+        logger.exception("pin_spec_injector: content sanitize failed")
+
     raw_state = getattr(callback_context, "state", None)
     if isinstance(raw_state, dict):
         state = raw_state

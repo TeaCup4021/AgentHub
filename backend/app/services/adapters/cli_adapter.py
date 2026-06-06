@@ -50,6 +50,103 @@ def _format_sse(event_name: str, data: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(data)}\n\n"
 
 
+# Recognized document extensions that the CLI agent may have generated
+_CLI_DOC_EXTENSIONS = {".pptx", ".ppt", ".pdf", ".docx", ".doc", ".xlsx", ".xls"}
+
+_DOC_EXT_TO_ARTIFACT_TYPE: dict[str, str] = {
+    ".pptx": "pptx", ".ppt": "pptx",
+    ".docx": "docx", ".doc": "docx",
+    ".xlsx": "xlsx", ".xls": "xlsx",
+    ".pdf": "pdf",
+}
+
+
+async def _emit_cli_generated_file_artifacts(
+    runner, conv_id: str, message_id: str, accumulated: str,
+) -> tuple[list[dict], list[str]]:
+    """Scan CLI workspace for generated document files, upload them to MinIO,
+    convert PPTX→PDF where applicable, and return (artifacts, sse_events).
+    Each SSE event string already includes the artifact payload for the frontend;
+    the raw artifacts list is for DB persistence."""
+    import os as _os
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from uuid import uuid4 as _uuid4
+
+    workspace = getattr(runner, "_workspace_dir", None) or "."
+    if not _os.path.isdir(workspace):
+        return [], []
+
+    from app.services.storage import upload_file as _minio_upload
+    from app.services.artifact_detector import _maybe_convert_pptx
+
+    # Look for files with recognised extensions; skip hidden / temp files
+    cutoff = _dt.now(_tz.utc) - _td(minutes=10)
+    artifacts: list[dict] = []
+    sse_events: list[str] = []
+
+    try:
+        for entry in _os.scandir(workspace):
+            if not entry.is_file():
+                continue
+            name = entry.name
+            if name.startswith(".") or name.startswith("~"):
+                continue
+            ext = _os.path.splitext(name)[1].lower()
+            if ext not in _CLI_DOC_EXTENSIONS:
+                continue
+            try:
+                stat = entry.stat()
+                mtime = _dt.fromtimestamp(stat.st_mtime, tz=_tz.utc)
+                if mtime < cutoff:
+                    continue
+            except OSError:
+                pass
+
+            file_type = _DOC_EXT_TO_ARTIFACT_TYPE.get(ext, "pdf")
+            file_id = str(_uuid4())
+
+            try:
+                with open(entry.path, "rb") as f:
+                    file_bytes = f.read()
+            except OSError:
+                logger.exception("CLI artifact: cannot read %s", entry.path)
+                continue
+
+            _minio_upload(file_bytes, f"files/{file_id}", "application/octet-stream")
+            doc_url = f"/api/v1/files/{file_id}/download"
+
+            final_url, final_type = await _maybe_convert_pptx(doc_url, file_type, name)
+
+            artifact = {
+                "artifactType": "document",
+                "title": name,
+                "content": {
+                    "fileName": name,
+                    "fileUrl": final_url,
+                    "fileType": final_type,
+                    "fileSize": len(file_bytes),
+                },
+                "id": str(_uuid4()),
+            }
+            artifacts.append(artifact)
+            sse_events.append(_format_sse("artifact", {
+                "version": "v1",
+                "event_id": str(_uuid4()),
+                "conversation_id": conv_id,
+                "message_id": message_id,
+                "artifact": artifact,
+                "timestamp": _dt.now(_tz.utc).isoformat(),
+            }))
+            logger.info(
+                "CLI artifact: %s → fileType=%s fileUrl=%s",
+                name, final_type, final_url,
+            )
+    except OSError:
+        logger.exception("CLI artifact: workspace scan failed")
+
+    return artifacts, sse_events
+
+
 class CliAdapter(AgentAdapter):
     """Adapter for CLI-based coding agents (Claude Code, Codex)."""
 
@@ -146,6 +243,35 @@ class CliAdapter(AgentAdapter):
                 await db.commit()
         except Exception:
             logger.exception("Persist CLI stream message failed")
+
+        # After CLI finishes, scan workspace for generated files (e.g. PPTX)
+        # and upload them to MinIO so the artifact detection pipeline can
+        # produce DocumentCard / PDF preview cards.
+        if not has_error:
+            try:
+                cli_artifacts, cli_art_sse = await _emit_cli_generated_file_artifacts(
+                    runner, str(conv_id), message_id, accumulated,
+                )
+                for art_sse in cli_art_sse:
+                    yield art_sse
+                # Persist artifacts to DB so they survive page refresh
+                if cli_artifacts:
+                    try:
+                        from app.core.database import async_session_maker
+                        from app.services.artifact import ArtifactService
+                        async with async_session_maker() as db:
+                            for art in cli_artifacts:
+                                await ArtifactService.append_version(
+                                    db=db,
+                                    conversation_id=conv_id,
+                                    message_id=UUID(message_id),
+                                    artifact_payload=art,
+                                )
+                            await db.commit()
+                    except Exception:
+                        logger.exception("CLI artifact persist failed")
+            except Exception:
+                logger.exception("CLI file artifact scan failed")
 
         yield _format_sse("message_end", {
             "version": "v1", "event_id": str(uuid4()),

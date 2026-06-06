@@ -21,6 +21,7 @@ Multi-agent collaboration platform — IM 聊天界面 + ADK 编排引擎，支�
 
 **后端：**
 - FastAPI + SQLAlchemy async + PostgreSQL + Redis + MinIO
+- **Gotenberg 8**（Docker 容器，端口 3001）— PPTX→PDF 文档转换
 - Google ADK 2.0 (`google-adk[extensions]==2.0.0`) — Agent 引擎
 - LLM SDK: `anthropic`, `openai`, `google-adk` 内置 LiteLlm
 - 认证: `python-jose` (JWT) + `passlib[bcrypt]`
@@ -35,8 +36,37 @@ Multi-agent collaboration platform — IM 聊天界面 + ADK 编排引擎，支�
 
 ### 开发启动
 
+**前置依赖（Docker 服务）：**
+
 ```bash
-# 一键启动（前后端并行）
+cd backend
+docker compose up -d
+# 启动 postgres(5433) + redis(6379) + minio(9000/9001) + gotenberg(3001)
+```
+
+确认 Gotenberg 就绪：
+
+```bash
+curl http://localhost:3001/health
+# → {"status":"up","details":{"libreoffice":{"status":"up"}}}
+```
+
+**启动后端（Windows）：**
+
+```bash
+cd backend
+venv\Scripts\python -m uvicorn app.main:app --reload --reload-exclude "venv/*" --port 8080
+```
+
+> 注意：`--reload-exclude "venv/*"` 防止 `pip install` 时 venv 文件变更触发重载。不要缺省。
+
+**CLI Agent 工作区：**
+
+确保仓库根目录存在 `cli-workspace/` 目录（已加入 `.gitignore`）。CLI Agent 生成的文件在此目录，不会触发 uvicorn 重载。
+
+**一键启动（前后端并行）：**
+
+```bash
 npm run dev
 
 # 仅后端
@@ -47,6 +77,11 @@ cd agenthub-web && npm run dev
 ```
 
 Mock 模式：`VITE_USE_MOCK=false` 切换真实 API，默认 Mock。
+
+### Windows 环境注意事项
+
+- **httpx 代理问题**：`httpx` 默认读取系统代理设置，`localhost` 请求会被路由到代理导致 502。所有 `httpx.Client`/`AsyncClient` 必须显式设 `trust_env=False`。
+- **uvicorn reload**：Windows 下 WatchFiles 监听整个项目树，新增文件（pip 安装、CLI 生成）会触发意外重载。`--reload-exclude` 必须包含 `venv/*`，CLI workspace 必须在 backend 外部。
 
 ### 数据库
 
@@ -88,7 +123,48 @@ Mock 模式：`VITE_USE_MOCK=false` 切换真实 API，默认 Mock。
 
 > 动态章节。每完成一个模块或修复一个 BUG，更新此节。
 
-**最近更新（2026-06-04）** — 网页预览功能修复
+**最近更新（2026-06-06）** — PPT 内联浏览（PPTX→PDF 转换管线补全）
+
+- **Gotenberg 后端转换管线** (`converter.py`, `artifact_detector.py`, `files.py`) — PPTX 内联预览从「仅下载」变「PDF iframe 预览」。三条来源路径汇聚：① 用户上传 PPTX → upload 端点即时转换 + prompt 中 `_resolve_internal_file` 检测附件链接 → `_maybe_convert_pptx`；② Agent 回复中的文档 URL → `_detect_urls` → `_is_document_url`；③ CLI Agent 本地生成文件 → `_emit_cli_generated_file_artifacts` 扫描 workspace 后上传。转换走 Gotenberg（LibreOffice headless，docker-compose 中已配置），PDF 存 MinIO，前端复用 DocumentCard 已有 PDF iframe
+- **Content-Disposition inline** (`files.py`) — 下载端点对 PDF/图片返回 `Content-Type` 真实值 + `Content-Disposition: inline`，不再硬编码 `attachment` + `application/octet-stream`，浏览器能内嵌渲染而非弹下载框。新增 `HEAD /download` 和 `GET /preview` 端点
+- **CLI 生成文件自动预览** (`cli_adapter.py`) — `_emit_cli_generated_file_artifacts` 在 CLI 执行完毕后扫描 workspace 中 10 分钟内的文档文件，上传 MinIO → Gotenberg 转 PDF → 发 SSE artifact 事件 → 存 DB
+- **联调发现 4 个 Bug**：① httpx 在 Windows 上走系统代理导致 Gotenberg 502 → 加 `trust_env=False`；② Gotenberg 依赖文件扩展名识别格式 → `_resolve_internal_file` 给文件名加 `.pptx` 等后缀；③ `Content-Disposition: attachment` 强制下载 → 改为 inline；④ CLI workspace 在 backend/ 内触发 uvicorn reload → 外移 + `--reload-exclude "venv/*"`
+- **文档**：ADR `2026-06-06-pptx-pdf-conversion-pipeline.md`，Summary `PPT内联浏览-实施总结-2026-06-06.md`
+
+**上次更新（2026-06-05）** — Diff 卡「应用到源文件」（选区改写收尾 · 写回闭环）
+
+- **Diff 卡一键写回源代码卡** (`DiffCard.tsx`, `lib/diffApply.ts`, `artifact_format.py`) — 选区改写让 Agent 返回 Diff 卡后，此前**无法把改动落回**第一次生成的代码卡：原「保存文件」只是把 `newCode` 当全新文件下载，与源卡零关联。本次新增「应用到源文件」按钮：① 纯函数模块 `diffApply.ts`（`findApplyTarget`/`applySnippet`）从会话消息缓存收集所有代码卡候选，按**文件名 + 片段内容**双重启发式匹配源卡（diff 不带我方 artifact id，故内容匹配为最强信号，含精确子串 + 空白容忍的逐行匹配兜底）；② 命中后把新片段 splice 回源卡全文，调 `PATCH /messages/artifacts/{id}` **追加新版本**（复用 `update_content` 版本链），`invalidateQueries(["messages"])` 刷新；③ 原下载按钮更名「另存为文件」与之区分。后端 `_SELECTION_EDIT_DIRECTIVE` 同步增强：要求 Agent 在 diff 带 `file="<源文件名>"` 且 `--- before` 段逐字复制原片段，提升两条匹配路径命中率。fallback 卡（无 DB 行）提示手动复制
+- **缓存读取走 `@/lib/queryClient` 单例** (`DiffCard.tsx`) — `DiffCard` 同样深埋消息树，收集候选用 `queryClient.getQueryData(["messages", convId])` 而非 `useQueryClient()` hook，与 `CodeCard` 写回、`MessageActions` 同款（CLAUDE.md 既有规则）
+
+**上次更新（2026-06-05）** — 对话式局部修改 / 选区级改写（产物预览补全 P2 · #5 收尾）
+
+- **代码卡选区→定向改写闭环** (`CodeCard.tsx`, `ChatInput.tsx`, `chatStore.ts`, `artifact_format.py`) — 此前只有整条消息「引用」，且 `pendingQuote` 是**死链路**（引用条只展示、`ChatInput.handleSend` 从不消费它，引用内容根本没进 prompt）。本次打通：① `CodeCard` 只读视图 `onMouseUp` 捕获选区，浮出「引用此片段修改」按钮，写入扩展后的 `pendingQuote.codeRange{fileName,language,snippet}`；② `ChatInput.handleSend` 真正消费 `pendingQuote`——`composeQuotedPrompt` 把选区拼成自包含 prompt（`[选区修改]` 哨兵 + 代码 fence + 「修改要求」+ diff 指令），整条引用则降级为 blockquote，发送后清空引用；③ 后端 `inject_artifact_reminder` 检测到 `[选区修改]` 哨兵时追加强约束指令，要求 Agent 只改选中片段并返回 `<artifact type="diff">`。无新增 SSE 事件 / 接口，复用既有 prompt query 链路
+- **顺带修复 2 个先前遗留的红测**（均与本任务相邻、非本次引入）：`MessageActions.tsx` 把 `useQueryClient()` hook 改为 `@/lib/queryClient` 单例（违反 CLAUDE.md 既有规则，导致 `MessageList.test` 无 Provider 崩）；`test_artifact_service.py::test_build_merge_key_fallback` 断言改为校验 content-hash 方案（merge_key 早已改为 md5(content)，断言仍写死旧的 `:demo` 后缀）
+
+**上次更新（2026-06-05）** — 代码卡片编辑回写后端（产物预览补全 P1）
+
+- **代码编辑「保存」回写数据库** (`CodeCard.tsx`, `messages.py`, `artifact.py`) — 此前 `CodeCard` 编辑后「保存」只是 `Blob` 本地下载、刷新即丢。新增 `PATCH /api/v1/messages/artifacts/{artifact_id}` 端点 + `ArtifactService.update_content`：编辑作为该 artifact 的**新版本追加**（version+1，复用 `_mergeKey` 接入版本链），保存后 `invalidateQueries(["messages"])` 刷新，刷新页面仍是改后内容
+- **消息列表 artifact 按版本链去重** (`message.py:list_messages`) — `update_content` 追加新行后，`list_messages` 原本拉取所有 artifact 行会导致同一卡片新旧两张并排。改为按 `(message_id, _mergeKey)` 折叠版本链、只取最高 version
+- **queryClient 抽为单例模块** (`lib/queryClient.ts`, `App.tsx`) — `CodeCard` 埋在消息树深处，保存后需失效 query 但不应依赖 `useQueryClient()` hook（孤立渲染/单测无 Provider 会崩）。queryClient 从 `App.tsx` 模块级定义抽到 `lib/queryClient.ts`，组件直接 import 单例调用 `.invalidateQueries()`，与卡片内已有的 `useChatStore.getState()`（React 外调用）风格一致
+- **fallback 卡片降级下载** (`CodeCard.tsx`) — 前端文本兜底解析出的代码卡（id 以 `fallback-` 开头、无 DB 行）「保存」自动降级为本地下载，不调回写端点
+
+**上次更新（2026-06-05）** — 链接预览 iframe「拒绝连接」修复
+
+- **普通链接误用 iframe 导致"拒绝连接"** (`artifact_detector.py`) — 2026-06-04 把 `_is_embeddable` 放宽成「所有 http/https 链接都当可预览网页」，于是回答里的普通链接（如 MDN、python.org）全被渲染成 `PreviewCard` iframe，撞上目标站的 `X-Frame-Options: DENY` / CSP `frame-ancestors` 显示"xxx 拒绝连接"。修复：`_is_embeddable` 回退为只对 `_EMBEDDABLE_DOMAINS`（docs.google/office/notion/figma/youtube/vimeo）和文档文件（pdf/doc/xls/ppt）内嵌，其余链接降级为 `LinkPreviewCard`（OG 卡片 + 新标签页打开）。未用「主动探测响应头」方案，因 docs.python.org 等页面无 XFO 但内部跳转/引用受保护资源，探测不可靠
+- **`_accumulate_stream_events` 漏 await** (`conversations.py:914`) — `detect_artifacts` 已于 2026-06-04 改为 async，但该分支仍同步调用，会拿到 coroutine 而非列表。补 `await`
+
+**上次更新（2026-06-05）** — ADK 空 Part 序列化崩溃修复
+
+- **空文本 Part 导致第二次 LLM 调用崩溃** (`pin_spec_injector.py`) — 带工具的 Agent 首次调用后，代理（luckyapi）返回的 Anthropic 响应含空 text block（`Part(text='')`），ADK 把它写进会话历史；第二次调用重新序列化历史时 `anthropic_llm.py:_part_to_message_block` 对空 Part 抛 `NotImplementedError: Not supported yet`。修复：在 `before_model_callback` **最顶部**（早于所有 early return）调用 `_sanitize_request_contents`，剔除 `llm_request.contents` 中不可渲染的空 Part，整轮变空则丢弃该 Content。`_is_renderable_part` 对齐 ADK 转换器支持的分支（text/thought+sig/function_call/function_response/inline_data/executable_code/code_execution_result）
+
+**上次更新（2026-06-05）** — Pin 消息状态一致性修复
+
+- **「已固定」列表缓存失效** (`PinnedMessages.tsx`, `ChatArea.tsx`) — pin/unpin 后 `invalidateQueries(["pins"])`，弹窗 useQuery 加 `staleTime: 0` + `refetchOnMount: "always"`，spinner 改用 `isFetching` 兜底，修复"先显示 1 条、过一会才全部"的陈旧列表
+- **Pin 角标单一数据源** (`MessageList.tsx`) — 右上角 pin 角标和右键菜单的 `isPinned` 从 `message.isPinned`（query 字段）改为 store 派生的 `isPinnedByStore`，与左边框/计数统一，消除"取消 pin 后角标残留"
+- **Pin/Unpin 全入口失效 query** (`MessageActions.tsx`) — 悬浮 pin 按钮补 `invalidateQueries(["messages"])` 和 `["pins"]`，与右键菜单入口对齐
+- **支持 Pin 用户消息** (`MessageList.tsx`) — 右键菜单触发条件移除 `!isUser` 守卫，用户消息也可 Pin（后端不校验 sender_type）
+
+**上次更新（2026-06-04）** — 网页预览功能修复
 
 - **产物检测异步化** (`artifact_detector.py`) — `detect_artifacts`、`_detect_xml_artifacts`、`_build_xml_artifact` 改为 async，避免同步 MinIO 上传阻塞事件循环导致连接超时
 - **预览服务路由规范** (`preview_server.py`) — 路由改为 `/{preview_id}`，挂载到主应用 `/preview` 前缀下，确保 URL 正确映射
@@ -139,12 +215,12 @@ Mock 模式：`VITE_USE_MOCK=false` 切换真实 API，默认 Mock。
 | 布局系统 | `AppLayout`, `IconSidebar`, `ChatArea`, `ConversationList` | 三栏布局 + 可调整宽度 |
 | 单聊 UI | `MessageList`, `ChatInput`, `MarkdownBubble`, `MessageActions` | 流式渲染 + 操作菜单 |
 | SSE 客户端 | `lib/sse.ts` | 7 事件分发 + AbortController 中断 + prompt 传递 |
-| 产物卡片 (7 种) | `CardRenderer`, `CodeCard`, `DiffCard`, `FileCard`, `PreviewCard`, `LinkPreviewCard`, `DocumentCard`, `DeployStatusCard` | 代码/对比/预览/文件/链接/部署 |
+| 产物卡片 (7 种) | `CardRenderer`, `CodeCard`, `DiffCard`, `FileCard`, `PreviewCard`, `LinkPreviewCard`, `DocumentCard`, `DeployStatusCard` | 代码/对比/预览/文件/链接/部署；CodeCard 编辑可回写后端（追加新版本，刷新保留），fallback 卡降级为下载；CodeCard 支持划选片段→「引用此片段修改」选区级改写 |
 | Card 冲突解决 | `ConflictResolver` | 多 Agent 冲突文件对比 + 接受/拒绝 |
 | Agent 管理 | `AgentManageModal`, `CreateAgentModal`, `AgentDetailPopover` | CRUD + 自定义能力标签 + 自由输入模型名 |
 | 群聊 UI | `OrchestratorPlan`, `OrchestratorSummary`, `AgentProgressBar`, `DagGraph`, `ReActPanel` | 计划审批 + DAG 可视化 + 进度 |
 | 思维链 | `ThinkingBlock` | 分步 thought/action/observation 展示 |
-| Pin 管理 | `PinManager`, `PinnedMessages` | 钉选/取消钉选 |
+| Pin 管理 | `PinManager`, `PinnedMessages`, `MessageActions` | 钉选/取消钉选（含用户消息）+ store 单一数据源 + 全入口 query 失效 |
 | 设置页面 | `SettingsPage`, `TokenUsagePanel`, `TokenCharts`, `ThemeRadioCards`, `BgColorCards` | Token 用量 + 主题 + 背景色 |
 | 认证 | `LoginPage`, `authStore`, `api.ts` interceptors | JWT + refresh 自动续期 |
 | Mock | `mocks/sse.ts`, `mocks/data.ts`, `mocks/handlers.ts` | MSW Mock + SSE Mock |
@@ -164,6 +240,9 @@ Mock 模式：`VITE_USE_MOCK=false` 切换真实 API，默认 Mock。
 | OpenTelemetry / APM | 依赖已存在 | 未集成 |
 | 后端测试 (`pytest`) | 仅 15 个测试文件 | 覆盖率低 |
 | 消息编辑/删除 | 仅有对话级软删除 | 单条消息无编辑/删除 API |
+| 产物卡片全屏预览 | 仅 `PreviewCard` 有全屏 Modal | Code/Diff/Document 卡无全屏入口 |
+| 产物版本历史 UI | 后端 `append_version` 维护版本链、读取去重取最新 | 前端无版本切换/浏览 UI（数据已就绪） |
+| PPT 内联浏览【P2】 | `DocumentCard` 对 pptx 走下载分支 | PDF/Word/Excel 已渲染，仅缺 PPT |
 | WebSocket | 全部基于 SSE（单向） | 无可中断 / 双向通道 |
 | Agent 排序 UI | 群聊中 Agent 执行顺序不可拖拽调整 | 后端支持 `execution_order` |
 | i18n | 未实现 | 中英文混合硬编码 |
@@ -382,6 +461,50 @@ AppException(code, message)  # 基类
 【规则】路由路径不能重复堆叠 — `/preview/{id}` 挂载到 `/preview` 前缀下后，不要再在路由内部加 `/preview` 前缀
 【原因】路由重复会导致实际访问路径变成 `/preview/preview/{id}`，前端请求的 `/preview/{id}` 无法匹配
 
+【场景】同一状态（如 Pin）在 UI 有多个视图，且数据混用 Zustand store 和 React Query
+【规则】所有视图必须绑定同一数据源（优先 store，因其同步即时）；任何写操作（pin/unpin 等）必须在所有入口同时 `invalidateQueries` 相关的所有 query key（如 `["pins"]` 和 `["messages"]`），不能只更新 store 或只刷一个 query
+【原因】Pin 消息曾出现三连 BUG：①「已固定」列表计数走 store、内容走 `["pins"]` 旧缓存导致"先 1 条后全部"；②右上角角标走 `message.isPinned`（`["messages"]` 字段）、左边框走 store，取消 pin 后角标残留；③悬浮按钮入口漏刷 query。根因都是"同一状态多视图、数据源不一、写操作只更新部分来源"
+
+【场景】通过代理 API（如 luckyapi）调用 Anthropic 模型且 Agent 带工具
+【规则】`before_model_callback` 必须在最顶部剔除 `llm_request.contents` 中的空/不可渲染 Part（空 text、无任何有效字段）
+【原因】代理返回的 Anthropic 响应可能含空 text block，ADK 写入历史后第二次调用重新序列化时 `_part_to_message_block` 对空 Part 抛 `NotImplementedError`，导致带工具的多轮对话（如"生成可下载文件"）必崩
+
+【场景】给深埋在消息树中的组件（如 artifact 卡片）加 React Query 写操作（`invalidateQueries`/`setQueryData`）
+【规则】禁止用 `useQueryClient()` hook 取 client — 必须从 `@/lib/queryClient` import 模块级单例调用；`QueryClientProvider` 也绑定该单例
+【原因】`CodeCard` 加保存回写时用了 `useQueryClient()`，导致孤立渲染该卡片的单测（无 `QueryClientProvider`）报 `No QueryClient set`。卡片副作用（失效查询）本就在 React 外触发（与 `useChatStore.getState()` 同风格），用单例既免去给每个卡片测试套 Provider，也与 store 取值方式统一
+
+【场景】产物（artifact）支持用户编辑且需持久化
+【规则】编辑必须走"追加新版本"（复用 `_mergeKey` 链、version+1），禁止原地覆盖；同时读取端（`list_messages` 批量取 artifact）必须按 `_mergeKey` 链去重只取最新版
+【原因】`append_version` 设计为追加，若读取端不去重，一次编辑后消息会同时渲染新旧两张卡。编辑回写后 `invalidateQueries(["messages", convId])` 刷新即可；前端文本兜底卡（id 以 `fallback-` 开头、无 DB 行）无法回写，必须降级为本地下载
+
+【场景】跨前后端约定的「哨兵字符串」（如选区改写的 `[选区修改]` 前缀）
+【规则】前端拼接哨兵处（`ChatInput.composeQuotedPrompt`）和后端检测处（`artifact_format._SELECTION_EDIT_MARKER`）必须保持字面量一致，任一侧改动须同步另一侧
+【原因】选区级改写（CodeCard 选中片段 → 引用 → 描述修改）靠 prompt 前缀 `[选区修改]` 让后端 `inject_artifact_reminder` 追加 diff 定向指令。哨兵不一致会让指令静默失效——前端照常发送、后端不触发约束，Agent 退化为整文件重写而非针对性 diff，且无报错难以排查
+
+【场景】要把 Agent 产出的 artifact（如 diff 卡）「回链」到我方先前存储的源产物（如对应代码卡）
+【规则】禁止假设 Agent 输出里带有我方 DB 主键 —— Agent 看不到我们的 artifact id，回链只能靠**内容/文件名启发式**：以「片段内容出现在哪张卡里」为最强信号（精确子串 + 空白容忍逐行匹配兜底），文件名为次要线索。从 `["messages", convId]` 缓存收集候选时注意：该缓存是**最新在前**（后端 `ORDER BY created_at DESC`），`ChatArea` 仅在**显示**时 `.reverse()`，直接读缓存不要再 reverse，否则"最近卡优先"会反向
+【原因】Diff 卡「应用到源文件」（`lib/diffApply.ts`）需把改动落回源代码卡，但 diff 不携带源 artifact id。若按文件名硬匹配，选区改写产出的 diff 常无 `file=` 属性而匹配失败；故以内容匹配为主。曾误加 `.reverse()` 把缓存顺序读反，导致命中最旧而非最新的同名卡
+
+【场景】在 Windows 上使用 httpx 访问 localhost 服务（如 Gotenberg、MinIO）
+【规则】禁止在创建 `httpx.Client()` 或 `httpx.AsyncClient()` 时不传 `trust_env`——必须显式设 `trust_env=False`
+【原因】httpx 默认 `trust_env=True` 会读取 Windows 系统代理设置，导致 `localhost:3001` 之类的本地地址被路由到代理服务器，代理不认识本地服务返回 502/400。`urllib` 无此行为，只有 httpx 受影响。三处调用点（`converter.py:14,28`、`artifact_detector.py:convert_bytes_sync`）均已修复
+
+【场景】向 Gotenberg/LibreOffice 发送文件进行格式转换（如 PPTX→PDF）
+【规则】multipart form-data 中的 `filename` 必须包含正确的文件扩展名（`.pptx`、`.docx` 等），禁止使用无扩展名的临时文件名
+【原因】Gotenberg 内嵌的 LibreOffice 依赖文件扩展名判断输入格式——收到 `uploaded_file_a1b2c3d4`（无后缀）返回 `400 Invalid form data: no form file found`，同一个文件改成 `uploaded_file_a1b2c3d4.pptx` 正常转换。MinIO 中 `stat_object` 可获取原始 `content_type`，据此补上扩展名
+
+【场景】让浏览器内嵌渲染 PDF/图片（而非下载）
+【规则】HTTP 响应必须同时满足两个条件：① `Content-Type` 设为真实值（`application/pdf`、`image/png` 等），禁止用 `application/octet-stream`；② `Content-Disposition` 设为 `inline`，禁止用 `attachment`
+【原因】`attachment` 强制浏览器弹下载框，iframe 中不会渲染 PDF。`application/octet-stream` 让浏览器不知道数据是 PDF，即使 inline 也不会触发 PDF 阅读器
+
+【场景】CLI Agent 的工作目录配置
+【规则】禁止将 `CLI_DEFAULT_WORKSPACE` 设在后端目录（`backend/`）内或任何 `--reload` 监听范围；uvicorn 启动应加 `--reload-exclude` 排除 `venv/`（或其他含大依赖的目录）；启动前确认 workspace 目录已存在
+【原因】CLI Agent 创建/修改文件会触发 uvicorn WatchFiles 重载 → 杀死子进程 → CLI 任务中断。`pip install` 改动 venv/ 数百个文件同样触发重载。workspace 外移 + `--reload-exclude "venv/*"` 双保险
+
+【场景】为新的 Agent Adapter 类型（非标准 LLM）实现 SSE 流
+【规则】必须确认 artifact 检测与持久化管线（`detect_artifacts` → SSE artifact 事件 → `ArtifactService.append_version`）已在适配器中覆盖，不能假设调用方会统一处理
+【原因】CLI Adapter (`cli_adapter.py`) 的 `stream()` 直接产出 SSE 事件绕过 `_adk_sse_stream`，导致 CLI 生成的文件无法自动触发 artifact 检测。任何新的 Adapter 类型都需要显式集成 artifact 管线
+
 ### 偏好类规则（重复强调 ≥2 次）
 
 【场景】定义新 API 端点或 Schema 时
@@ -448,3 +571,45 @@ AppException(code, message)  # 基类
 1. 检查后端日志中的错误类型（503/404/model_not_found/URL 双倍等）
 2. 验证 base_url 路径格式（Anthropic 不加 `/v1/messages`，LiteLLM 不加 `/chat/completions`）
 3. 确认模型名是否被代理提供商支持
+
+### 产物卡片（Artifact）联调测试
+
+需要验证产物检测/渲染/编辑链路时，参照 `docs/ai-collab/debug-artifact-cards.md`：
+- 前提（必须 `VITE_USE_MOCK=false` + 后端走 `.venv` 而非 `npm run dev:backend`）
+- 各卡片类型的触发提示词（代码/网页/Diff/文档/链接）
+- 重点观察项（流式实时出卡、`<artifact>` 标签不泄露、刷新后仍在、编辑回写持久化）
+
+### PPT 内联浏览 / Gotenberg 转换调试
+
+当 PPTX 无法内联预览、DocumentCard 不出现、或 Gotenberg 报错时，按以下步骤排查：
+
+**基础设施检查：**
+1. `docker ps | grep gotenberg` — 确认容器运行中
+2. `curl http://localhost:3001/health` — 应返回 `{"status":"up"}` 且 `libreoffice.status` 为 `up`
+3. `python -c "import httpx; print(httpx.Client(trust_env=False).get('http://localhost:3001/health').text)"` — 确认 httpx 绕过代理可达
+
+**转换链路逐段排查：**
+1. **MinIO 文件** — `from app.services.storage import get_file, stat_object` 确认文件存在且字节完整
+2. **Gotenberg 直接转换** — 用 curl 或 `httpx.Client(trust_env=False)` 手动调 `/forms/libreoffice/convert`，验证文件可转
+3. **文件名扩展名** — Gotenberg 依赖扩展名识别格式，检查 `_resolve_internal_file` 返回的文件名是否有 `.pptx` 后缀
+4. **artifact 事件** — grep 后端日志 `artifact` 关键字，确认 `fileType` 是 `"pdf"` 还是 `"pptx"`（后者 = 转换失败降级）
+5. **HTTP 响应头** — `curl -I /api/v1/files/{id}/download` 确认 `Content-Type: application/pdf` + `Content-Disposition: inline`
+
+**CLI Agent 路径额外检查：**
+- 确认 `CLI_DEFAULT_WORKSPACE` 在 `backend/` 外部
+- 重启时加 `--reload-exclude "venv/*"`
+- CLI 生成的文件扩展名是否在 `_CLI_DOC_EXTENSIONS` 集合中
+
+**常见错误对照：**
+| 错误 | 原因 | 检查 |
+|------|------|------|
+| 502 Bad Gateway | httpx 走 Windows 系统代理 | `trust_env=False` |
+| 400 no form file found | 文件名无扩展名 | 补 `.pptx` 等后缀 |
+| 转换成功但弹下载框 | Content-Disposition: attachment | 改为 inline |
+| 转换成功但 iframe 白屏 | Content-Type 错误 | 改为 application/pdf |
+
+### 本地全量验证（前端 vitest + tsc / 后端 pytest）
+
+改完代码跑全量测试与类型检查时，参照 `docs/ai-collab/verify-local.md`：
+- **前端命令必须在 `agenthub-web/` 目录内执行**——bash 工具的工作目录会在多次调用间漂移（常漂到 `backend/`），导致 `vitest` 报 `No test files found`。每条前端命令自带 `cd agenthub-web &&`，不要依赖上一条命令留下的 cwd
+- 区分「我引入的失败」与「预存失败」：本机未装 `pytest-asyncio`，所有 `async def` 测试（`tests/api/`、`test_stream_sequentializer.py`）报 `async def functions are not natively supported`，是环境问题、非回归——用 `git stash` 隔离自己改动来确认

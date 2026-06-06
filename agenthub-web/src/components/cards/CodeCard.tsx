@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Artifact, CodeArtifactContent } from "@/types";
@@ -6,6 +6,7 @@ import { HighlightedCode } from "@/components/chat/HighlightedCode";
 import { MonacoCodeEditor } from "@/components/editor/MonacoCodeEditor";
 import { useResizable } from "@/hooks/useResizable";
 import { artifactApi } from "@/lib/api";
+import { useChatStore } from "@/stores/chatStore";
 import { VersionSelector } from "./VersionSelector";
 import { FullscreenModal } from "./FullscreenModal";
 
@@ -16,17 +17,54 @@ interface CodeCardProps {
 
 const DEFAULT_HEIGHT = 260;
 
+interface SnippetSelection {
+  snippet: string;
+  top: number;
+  left: number;
+}
+
 export function CodeCard({ artifact, convId }: CodeCardProps) {
   const queryClient = useQueryClient();
   const [currentArtifact, setCurrentArtifact] = useState(artifact);
   const [editing, setEditing] = useState(false);
   const [editedCode, setEditedCode] = useState((currentArtifact.content as unknown as CodeArtifactContent).code);
   const [fullscreen, setFullscreen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [selection, setSelection] = useState<SnippetSelection | null>(null);
+
   const c = currentArtifact.content as unknown as CodeArtifactContent;
   const mergeKey = (currentArtifact.content as Record<string, unknown>)._mergeKey as string | undefined;
   const { cardRef, resizeRef, sizeLabelRef, resetSize } = useResizable({ defaultHeight: DEFAULT_HEIGHT });
 
+  const isPersistable = !artifact.id.startsWith("fallback-");
+
+  const downloadCode = useCallback((code: string) => {
+    const fileName = c.fileName || `code.${c.language || "txt"}`;
+    const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [c.fileName, c.language]);
+
   const handleSave = useCallback(async (code: string) => {
+    if (!isPersistable) {
+      try {
+        downloadCode(code);
+        setEditing(false);
+        toast.success(`已下载到 ${c.fileName || "文件"}`);
+      } catch {
+        toast.error("下载失败");
+      }
+      return;
+    }
+
+    setSaving(true);
     try {
       const res = await artifactApi.updateContent(convId || "", currentArtifact.id, {
         ...currentArtifact.content,
@@ -42,27 +80,63 @@ export function CodeCard({ artifact, convId }: CodeCardProps) {
       toast.success("已保存为新版本");
     } catch {
       toast.error("保存失败");
+    } finally {
+      setSaving(false);
     }
-  }, [convId, currentArtifact, mergeKey, queryClient]);
+  }, [convId, currentArtifact, mergeKey, queryClient, isPersistable, downloadCode, c.fileName]);
 
   const handleDownload = useCallback(() => {
-    const fileName = c.fileName || `code.${c.language || "txt"}`;
-    const blob = new Blob([c.code], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success(`已下载 ${fileName}`);
-  }, [c.fileName, c.language, c.code]);
+    downloadCode(c.code);
+    toast.success(`已下载 ${c.fileName || "文件"}`);
+  }, [c.fileName, c.code, downloadCode]);
 
   const handleCancel = useCallback(() => {
     setEditedCode(c.code);
     setEditing(false);
   }, [c.code]);
+
+  const handleSelect = useCallback(() => {
+    if (editing) return;
+    const sel = window.getSelection();
+    const body = bodyRef.current;
+    if (!sel || sel.isCollapsed || !body) {
+      setSelection(null);
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    if (!body.contains(range.commonAncestorContainer)) {
+      setSelection(null);
+      return;
+    }
+    const snippet = sel.toString();
+    if (!snippet.trim()) {
+      setSelection(null);
+      return;
+    }
+    const rangeRect = range.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    setSelection({
+      snippet,
+      top: rangeRect.top - bodyRect.top,
+      left: Math.max(0, rangeRect.left - bodyRect.left + rangeRect.width / 2),
+    });
+  }, [editing]);
+
+  const handleQuoteSnippet = useCallback(() => {
+    if (!selection) return;
+    useChatStore.getState().setPendingQuote({
+      messageId: artifact.id,
+      content: selection.snippet,
+      codeRange: {
+        fileName: c.fileName,
+        language: c.language,
+        snippet: selection.snippet,
+      },
+    });
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+    toast.success("已引用代码片段，在输入框中描述修改");
+  }, [selection, artifact.id, c.fileName, c.language]);
 
   const codeContent = editing ? (
     <MonacoCodeEditor
@@ -114,8 +188,13 @@ export function CodeCard({ artifact, convId }: CodeCardProps) {
           <div style={{ flex: 1 }} />
           {editing ? (
             <>
-              <button onClick={handleCancel} style={{ fontSize: 11, background: "none", border: "none", color: "var(--color-text-tertiary)", cursor: "pointer" }}>取消</button>
-              <button onClick={() => handleSave(editedCode)} style={{ fontSize: 11, background: "none", border: "none", color: "var(--color-primary)", cursor: "pointer", fontWeight: 600 }}>保存</button>
+              <button onClick={handleCancel} disabled={saving} style={{ fontSize: 11, background: "none", border: "none", color: "var(--color-text-tertiary)", cursor: saving ? "default" : "pointer" }}>取消</button>
+              {isPersistable && (
+                <button onClick={() => downloadCode(editedCode)} disabled={saving} style={{ fontSize: 11, background: "none", border: "none", color: "var(--color-text-tertiary)", cursor: saving ? "default" : "pointer" }}>下载</button>
+              )}
+              <button onClick={() => handleSave(editedCode)} disabled={saving} style={{ fontSize: 11, background: "none", border: "none", color: "var(--color-primary)", cursor: saving ? "default" : "pointer", fontWeight: 600 }}>
+                {saving ? "保存中…" : isPersistable ? "保存" : "下载"}
+              </button>
             </>
           ) : (
             <>
@@ -147,8 +226,36 @@ export function CodeCard({ artifact, convId }: CodeCardProps) {
           )}
         </div>
 
-        <div className="artifact-card__body" style={{ flex: 1, minHeight: 0 }}>
+        <div
+          ref={bodyRef}
+          className="artifact-card__body"
+          style={{ flex: 1, minHeight: 0, position: "relative" }}
+          onMouseUp={handleSelect}
+        >
           {codeContent}
+          {selection && !editing && (
+            <button
+              onMouseDown={(e) => { e.preventDefault(); handleQuoteSnippet(); }}
+              style={{
+                position: "absolute",
+                top: Math.max(0, selection.top - 30),
+                left: selection.left,
+                transform: "translateX(-50%)",
+                zIndex: 10,
+                display: "flex", alignItems: "center", gap: 4,
+                padding: "4px 10px", borderRadius: 6,
+                border: "none", cursor: "pointer", whiteSpace: "nowrap",
+                fontSize: 11, fontWeight: 600,
+                background: "var(--color-primary)", color: "#fff",
+                boxShadow: "var(--shadow-md)",
+              }}
+            >
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21c3 0 7-1 7-8V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h3M14 21c3 0 7-1 7-8V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h3"/>
+              </svg>
+              引用此片段修改
+            </button>
+          )}
         </div>
 
         {!editing && (

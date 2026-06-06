@@ -103,8 +103,8 @@ export function DocumentCard({ artifact }: { artifact: Artifact }) {
           <Spin />
         ) : error ? (
           <Empty title="预览不可用" description={`${FILE_TYPE_LABELS[c.fileType] || "此"} 文件暂不支持内联预览，请下载查看`} />
-        ) : c.fileType === "pdf" ? (
-          <iframe src={c.fileUrl} style={{ width: "100%", height: "100%", border: "none" }} title={c.fileName} />
+        ) : (c.fileType === "pdf" || c.fileType === "pptx") ? (
+          <iframe src={c.fileUrl} style={{ width: "100%", height: "100%", border: "none" }} title={c.fileName} onError={() => setError(true)} />
         ) : c.fileType === "docx" ? (
           <div
             className="document-card__docx"
@@ -150,7 +150,7 @@ export function DocumentCard({ artifact }: { artifact: Artifact }) {
             <Spin />
           ) : error ? (
             <Empty title="预览不可用" />
-          ) : c.fileType === "pdf" ? (
+          ) : (c.fileType === "pdf" || c.fileType === "pptx") ? (
             <iframe src={c.fileUrl} style={{ width: "100%", height: "100%", border: "none" }} title={c.fileName} />
           ) : c.fileType === "docx" ? (
             <div className="document-card__docx" dangerouslySetInnerHTML={{ __html: docHtml }} style={{ width: "100%", height: "100%", overflow: "auto", padding: 16, fontSize: "var(--font-size-md)", lineHeight: 1.7, color: "var(--color-text-primary)" }} />

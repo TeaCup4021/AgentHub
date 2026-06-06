@@ -16,6 +16,7 @@ import type {
   UpdateAgentRequest,
   UpdateAgentResponse,
   GetArtifactsResponse,
+  UpdateArtifactResponse,
   GetMessageListResponse,
   ApiResponse,
   Message,
@@ -228,6 +229,10 @@ export const messageApi = {
 
   getArtifacts(messageId: string) {
     return api.get<GetArtifactsResponse>(`/messages/${messageId}/artifacts`);
+  },
+
+  updateArtifact(artifactId: string, content: Record<string, unknown>) {
+    return api.patch<UpdateArtifactResponse>(`/messages/artifacts/${artifactId}`, { content });
   },
 };
 

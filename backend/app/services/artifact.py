@@ -107,3 +107,59 @@ class ArtifactService:
                 await db.rollback()
 
         raise RuntimeError("append_version failed after retry")
+
+    @staticmethod
+    async def update_content(
+        db: AsyncSession,
+        artifact_id,
+        new_content: Dict,
+    ) -> Artifact:
+        """Persist a user edit as a NEW version of an existing artifact.
+
+        Loads the artifact by id, reuses its merge key so the edit lands in
+        the same version chain, and appends a fresh row with ``version`` =
+        max + 1. Returns the newly created version row. Internal bookkeeping
+        keys (``_mergeKey`` / ``_eventId``) are preserved/refreshed so future
+        edits keep chaining correctly.
+        """
+        from uuid import uuid4
+
+        existing = (
+            await db.execute(select(Artifact).where(Artifact.id == artifact_id))
+        ).scalar_one_or_none()
+        if existing is None:
+            raise ValueError(f"artifact {artifact_id} not found")
+
+        old_content = dict(existing.content or {})
+        merge_key = old_content.get("_mergeKey") or build_artifact_merge_key(
+            str(existing.message_id), {"artifactType": existing.artifact_type, "content": old_content}
+        )
+
+        # Start from the prior content so untouched fields (language, fileName,
+        # url, …) survive; overlay the caller-supplied changes on top.
+        merged = {k: v for k, v in old_content.items() if not k.startswith("_")}
+        merged.update(new_content or {})
+        merged["_mergeKey"] = merge_key
+        merged["_eventId"] = str(uuid4())  # new event so it is not deduped
+
+        version_query = select(func.max(Artifact.version)).where(
+            Artifact.conversation_id == existing.conversation_id,
+            Artifact.message_id == existing.message_id,
+            Artifact.content["_mergeKey"].astext == merge_key,
+        )
+        current_max = (await db.execute(version_query)).scalar_one()
+        next_version = (current_max or 0) + 1
+
+        row = Artifact(
+            conversation_id=existing.conversation_id,
+            message_id=existing.message_id,
+            artifact_type=existing.artifact_type,
+            title=existing.title,
+            content=merged,
+            storage_key=existing.storage_key,
+            mime_type=existing.mime_type,
+            version=next_version,
+        )
+        db.add(row)
+        await db.flush()
+        return row

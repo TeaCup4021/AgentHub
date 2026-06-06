@@ -61,6 +61,7 @@ export type GetAgentDetailResponse = ApiResponse<Agent>;
 // ========== Artifact API ==========
 
 export type GetArtifactsResponse = ApiResponse<Artifact[]>;
+export type UpdateArtifactResponse = ApiResponse<Artifact>;
 
 // ========== Project API ==========
 
@@ -100,4 +101,6 @@ export type UploadFileResponse = ApiResponse<{
   mime_type: string;
   width?: number;
   height?: number;
+  preview_url?: string | null;
+  preview_file_id?: string | null;
 }>;

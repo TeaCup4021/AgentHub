@@ -11,6 +11,8 @@ class FileUploadResponse(BaseModel):
     mime_type: str
     width: int | None = None
     height: int | None = None
+    preview_url: str | None = None
+    preview_file_id: str | None = None
 
 
 class FileInfoResponse(BaseModel):
