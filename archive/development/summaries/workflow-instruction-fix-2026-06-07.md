@@ -130,7 +130,7 @@ logger.info(
 |------|----------|------|
 | `backend/app/services/adk/workflow_builder.py` | 强制覆盖 instruction + 修正日志 | 3 行关键逻辑 |
 | `backend/app/services/adapters/cli_adapter.py` | 使用 agent.instruction 而非提取 llm_request | ~30 行 |
-| `docs/ai-collab/decisions/004-workflow-instruction-propagation-fix.md` | 完整决策文档 | 新增 |
+| `docs/ai-collab/decisions/cli-agent/004-workflow-instruction-propagation-fix.md` | 完整决策文档 | 新增 |
 
 ---
 

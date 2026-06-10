@@ -5,11 +5,11 @@
 本规则基于仓库现有资产：
 
 - `AGENTS.md`
-- `.vibe-coding/workflow.md`（已归档至 `archive/development/vibe-coding-templates/`）
-- `.vibe-coding/plan-template.md`（已归档）
-- `.vibe-coding/summary-template.md`（已归档）
-- `archive/development/plans/`（原 `vibeCodingPlan/`）
-- `archive/development/summaries/`（原 `vibeCodingSummary/`）
+- `archive/development/vibe-coding-templates/workflow.md`（已归档至 `archive/development/vibe-coding-templates/`）
+- `archive/development/vibe-coding-templates/plan-template.md`（已归档）
+- `archive/development/vibe-coding-templates/summary-template.md`（已归档）
+- `archive/development/plans/`（原 `archive/development/plans/`）
+- `archive/development/summaries/`（原 `archive/development/summaries/`）
 - `docs/`
 - `docs/ai-collab/`
 - `agenthub-web/docs/specs/`
@@ -174,7 +174,7 @@ owner: Backend B
 created: 2026-06-09
 updated: 2026-06-09
 source_assets:
-  - docs/ai-collab/decisions/002-group-chat-dag-execution.md
+  - docs/ai-collab/decisions/orchestration/002-group-chat-dag-execution.md
 depends_on:
   - SPEC-SSE-PROTOCOL-001
 relates_to:
@@ -210,7 +210,7 @@ updated: 2026-06-09
 specs:
   - SPEC-GROUPCHAT-DAG-001
 source_assets:
-  - vibeCodingPlan/群聊DAG执行与Orchestrator总结重构.md
+  - archive/development/plans/群聊DAG执行与Orchestrator总结重构.md
 tasks:
   - TASK-GROUPCHAT-DAG-001
   - TASK-GROUPCHAT-DAG-002
@@ -283,7 +283,7 @@ implements:
   - backend/app/services/adk/orchestrator.py
   - backend/tests/services/test_orchestrator.py
 summaries:
-  - vibeCodingSummary/群聊DAG执行与Orchestrator总结重构-summary.md
+  - archive/development/summaries/群聊DAG执行与Orchestrator总结重构-summary.md
 verification:
   - command: pytest backend/tests/services/test_orchestrator.py
     result: passed
@@ -348,7 +348,7 @@ verification:
 
 ### 6.1 生成 SPEC
 
-1. 读取相关已有文档，包括 `AGENTS.md`、`docs/`、`docs/ai-collab/`、`agenthub-web/docs/specs/`、`vibeCodingPlan/`、`vibeCodingSummary/`。
+1. 读取相关已有文档，包括 `AGENTS.md`、`docs/vibe-graph/specs`、`docs/ai-collab/`。
 2. 判断是否已有可复用 spec 或历史设计。
 3. 若已有，优先扩展或引用现有节点，不重复创建同义 spec。
 4. 若没有，创建新的 `SPEC-*`。
@@ -371,7 +371,7 @@ verification:
 ### 6.4 实施 IMPLEMENTS
 
 1. 实施前必须读取目标文件上下文。
-2. 必须遵循 `AGENTS.md` 和 `.vibe-coding/workflow.md` 的工程约定。
+2. 必须遵循 `AGENTS.md` 和 `archive/development/vibe-coding-templates/workflow.md` 的工程约定。
 3. 后端接口必须遵循统一响应格式 `{ code, data, message }`、snake_case 存储、camelCase 序列化、分页和日期格式约定。
 4. SSE 相关实现必须遵循既有 SSE 事件规范。
 5. 若发现实际实现必须偏离 PLAN，必须记录偏离原因，并在必要时先向用户确认。
@@ -380,8 +380,8 @@ verification:
 
 1. 实施后必须创建或更新 `TRACE-*`。
 2. TRACE 必须记录实际触达路径、验证结果、偏离项和后续事项。
-3. 若已有 `vibeCodingSummary/` 记录，应在 TRACE 中链接该 summary。
-4. 若本次任务需要新增 summary，应遵循 `.vibe-coding/summary-template.md`。
+3. 若已有 `archive/development/summaries/` 记录，应在 TRACE 中链接该 summary。
+4. 若本次任务需要新增 summary，应遵循 `archive/development/vibe-coding-templates/summary-template.md`。
 5. 若未能运行验证，必须在 TRACE 和最终回复中说明原因。
 
 ## 7. 历史补录流程
@@ -475,7 +475,7 @@ deviations:
 
 ## 9. 总结回写规则
 
-SUMMARY 是图谱链路的收口，既可以复用 `vibeCodingSummary/` 中已有总结，也可以新增总结。
+SUMMARY 是图谱链路的收口，既可以复用 `archive/development/summaries/` 中已有总结，也可以新增总结。
 
 总结必须覆盖：
 
@@ -485,7 +485,7 @@ SUMMARY 是图谱链路的收口，既可以复用 `vibeCodingSummary/` 中已�
 4. 哪些内容未完成或需要后续处理。
 5. 是否存在与原计划不一致的地方。
 
-若新增 summary，应优先放在 `vibeCodingSummary/`，并在对应 TRACE 的 `summaries` 中引用。
+若新增 summary，应优先放在 `archive/development/summaries/`，并在对应 TRACE 的 `summaries` 中引用。
 
 ## 10. AI 操作约束
 
@@ -496,7 +496,7 @@ SUMMARY 是图谱链路的收口，既可以复用 `vibeCodingSummary/` 中已�
 1. 未经用户要求，不得修改业务代码来“配合”图谱补录。
 2. 创建或更新图谱节点时，默认只修改 `docs/vibe-graph/`。
 3. 更新历史 source asset 前必须确认这是用户明确要求，而不是索引补录需要。
-4. 不得删除或移动历史 `vibeCodingPlan/`、`vibeCodingSummary/`、`docs/` 文档。
+4. 不得删除或移动历史 `archive/development/plans/`、`archive/development/summaries/`、`docs/` 文档。
 
 ### 10.2 事实约束
 
@@ -523,7 +523,7 @@ SUMMARY 是图谱链路的收口，既可以复用 `vibeCodingSummary/` 中已�
 
 ## 11. 与现有流程的关系
 
-既有 `.vibe-coding/workflow.md` 的闭环是：
+既有 `archive/development/vibe-coding-templates/workflow.md` 的闭环是：
 
 ```text
 Plan -> Review -> Implement -> Summarize
@@ -579,3 +579,4 @@ SPEC -> Plan -> Review -> Task -> Implement -> Trace -> Summarize
 2. 不得为了显得完整而伪造测试结果、用户确认或实现路径。
 3. 未重新运行的业务验证必须明确标记为 `not_run` 或说明来自历史 summary。
 4. 交付说明应区分“已完成规范资产”和“后续可继续补录的历史功能”。
+

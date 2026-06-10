@@ -10,8 +10,8 @@ plan: PLAN-PREVIEW-PPT-INLINE-001
 specs:
   - SPEC-PREVIEW-PPT-INLINE-001
 source_assets:
-  - vibeCodingSummary/PPT内联浏览-实施总结-2026-06-06.md
-  - vibeCodingSummary/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
+  - archive/development/summaries/PPT内联浏览-实施总结-2026-06-06.md
+  - archive/development/summaries/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
 depends_on:
   - TASK-PREVIEW-PPT-INLINE-001
   - TASK-PREVIEW-PPT-INLINE-005
@@ -72,3 +72,4 @@ Related:
 - [[TASK-PREVIEW-PPT-INLINE-001]]
 - [[TASK-PREVIEW-PPT-INLINE-005]]
 - [[TRACE-PREVIEW-PPT-INLINE-001]]
+

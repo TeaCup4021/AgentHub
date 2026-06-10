@@ -8,9 +8,9 @@ created: 2026-06-10
 updated: 2026-06-10
 source_assets:
   - AGENTS.md
-  - .vibe-coding/workflow.md
-  - .vibe-coding/plan-template.md
-  - .vibe-coding/summary-template.md
+  - archive/development/vibe-coding-templates/workflow.md
+  - archive/development/vibe-coding-templates/plan-template.md
+  - archive/development/vibe-coding-templates/summary-template.md
   - docs/vibe-graph/rules.md
   - docs/vibe-graph/SKILL.md
   - docs/vibe-graph/prompts.md
@@ -40,7 +40,7 @@ contracts:
 
 项目负责人要求在 Vibecoding 过程中沉淀一套属于 AgentHub 自己的人类与 AI 协作规范，交付内容需要包含 spec、skill、rules 等资产，而不是零散的计划和总结文件。
 
-AgentHub 已经存在 `.vibe-coding/` 工作流、`vibeCodingPlan/`、`vibeCodingSummary/`、`docs/ai-collab/` 和大量历史决策记录。Vibe Graph 的目标是在这些资产之上补充稳定 ID、节点关系、任务追踪和验证记录，让后续 AI 可以沿着同一条链路理解、执行和复现工作。
+AgentHub 已经存在 `.vibe-coding/` 工作流、`archive/development/plans/`、`archive/development/summaries/`、`docs/ai-collab/` 和大量历史决策记录。Vibe Graph 的目标是在这些资产之上补充稳定 ID、节点关系、任务追踪和验证记录，让后续 AI 可以沿着同一条链路理解、执行和复现工作。
 
 ## 目标
 
@@ -117,3 +117,4 @@ Related:
 - [[TASK-AICOLLAB-VIBE-GRAPH-005]]
 - [[TRACE-AICOLLAB-VIBE-GRAPH-001]]
 - [[SPEC-GROUPCHAT-DAG-001]]
+

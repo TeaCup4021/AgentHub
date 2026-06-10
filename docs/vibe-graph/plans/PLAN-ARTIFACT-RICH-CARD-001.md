@@ -9,9 +9,9 @@ updated: 2026-06-10
 specs:
   - SPEC-ARTIFACT-RICH-CARD-001
 source_assets:
-  - vibeCodingPlan/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
-  - vibeCodingSummary/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md
-  - docs/ai-collab/decisions/2026-06-04-web-preview-fix.md
+  - archive/development/plans/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
+  - archive/development/summaries/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md
+  - docs/ai-collab/decisions/artifact-preview/2026-06-04-web-preview-fix.md
 depends_on: []
 relates_to:
   - PLAN-PREVIEW-PPT-INLINE-001
@@ -124,3 +124,4 @@ Related:
 - [[TASK-ARTIFACT-RICH-CARD-005]]
 - [[TASK-ARTIFACT-RICH-CARD-006]]
 - [[TRACE-ARTIFACT-RICH-CARD-001]]
+

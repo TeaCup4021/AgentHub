@@ -7,9 +7,9 @@ owner: Backend B
 created: 2026-06-10
 updated: 2026-06-10
 source_assets:
-  - vibeCodingSummary/deployment-feature-2026-06-07.md
-  - vibeCodingSummary/cli-deploy-card-fix-2026-06-07.md
-  - vibeCodingSummary/cli-deploy-existing-file-link-fix-2026-06-07.md
+  - archive/development/summaries/deployment-feature-2026-06-07.md
+  - archive/development/summaries/cli-deploy-card-fix-2026-06-07.md
+  - archive/development/summaries/cli-deploy-existing-file-link-fix-2026-06-07.md
 depends_on:
   - SPEC-ARTIFACT-RICH-CARD-001
 relates_to:
@@ -109,3 +109,4 @@ Related:
 - [[TASK-DEPLOYMENT-PREVIEW-005]]
 - [[TRACE-DEPLOYMENT-PREVIEW-001]]
 - [[SPEC-ARTIFACT-RICH-CARD-001]]
+

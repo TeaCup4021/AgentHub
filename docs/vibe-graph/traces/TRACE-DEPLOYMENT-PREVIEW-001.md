@@ -13,9 +13,9 @@ tasks:
   - TASK-DEPLOYMENT-PREVIEW-004
   - TASK-DEPLOYMENT-PREVIEW-005
 source_assets:
-  - vibeCodingSummary/deployment-feature-2026-06-07.md
-  - vibeCodingSummary/cli-deploy-card-fix-2026-06-07.md
-  - vibeCodingSummary/cli-deploy-existing-file-link-fix-2026-06-07.md
+  - archive/development/summaries/deployment-feature-2026-06-07.md
+  - archive/development/summaries/cli-deploy-card-fix-2026-06-07.md
+  - archive/development/summaries/cli-deploy-existing-file-link-fix-2026-06-07.md
 depends_on:
   - TRACE-ARTIFACT-RICH-CARD-001
 relates_to: []
@@ -41,9 +41,9 @@ implements:
   - backend/tests/services/test_deployment_source.py
   - backend/tests/services/test_deployment_command.py
 summaries:
-  - vibeCodingSummary/deployment-feature-2026-06-07.md
-  - vibeCodingSummary/cli-deploy-card-fix-2026-06-07.md
-  - vibeCodingSummary/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md
+  - archive/development/summaries/deployment-feature-2026-06-07.md
+  - archive/development/summaries/cli-deploy-card-fix-2026-06-07.md
+  - archive/development/summaries/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md
 verification:
   - command: backend startup
     result: passed
@@ -122,9 +122,9 @@ followups:
 
 ## Summary 链接
 
-- `vibeCodingSummary/deployment-feature-2026-06-07.md`
-- `vibeCodingSummary/cli-deploy-card-fix-2026-06-07.md`
-- `vibeCodingSummary/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md`
+- `archive/development/summaries/deployment-feature-2026-06-07.md`
+- `archive/development/summaries/cli-deploy-card-fix-2026-06-07.md`
+- `archive/development/summaries/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md`
 
 ## Obsidian 双链
 
@@ -138,3 +138,4 @@ Related:
 - [[TASK-DEPLOYMENT-PREVIEW-004]]
 - [[TASK-DEPLOYMENT-PREVIEW-005]]
 - [[TRACE-ARTIFACT-RICH-CARD-001]]
+

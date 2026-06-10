@@ -37,9 +37,9 @@
 
 - `vibeCodingPlan/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md`
 - `vibeCodingSummary/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md`
-- `docs/ai-collab/decisions/2026-06-04-web-preview-fix.md`
-- `docs/ai-collab/decisions/2026-06-05-artifact-edit-writeback.md`
-- `docs/ai-collab/decisions/2026-06-05-diff-apply-to-source.md`
+- `docs/ai-collab/decisions/artifact-preview/2026-06-04-web-preview-fix.md`
+- `docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-artifact-edit-writeback.md`
+- `docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-diff-apply-to-source.md`
 - `vibeCodingSummary/deployment-feature-2026-06-07.md`
 - `vibeCodingSummary/cli-deploy-card-fix-2026-06-07.md`
 

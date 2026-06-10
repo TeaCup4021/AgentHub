@@ -10,8 +10,8 @@ plan: PLAN-DEPLOYMENT-PREVIEW-001
 specs:
   - SPEC-DEPLOYMENT-PREVIEW-001
 source_assets:
-  - vibeCodingSummary/deployment-feature-2026-06-07.md
-  - vibeCodingSummary/cli-deploy-card-fix-2026-06-07.md
+  - archive/development/summaries/deployment-feature-2026-06-07.md
+  - archive/development/summaries/cli-deploy-card-fix-2026-06-07.md
 depends_on:
   - TASK-DEPLOYMENT-PREVIEW-001
   - TASK-DEPLOYMENT-PREVIEW-003
@@ -76,3 +76,4 @@ Related:
 - [[TASK-DEPLOYMENT-PREVIEW-001]]
 - [[TASK-DEPLOYMENT-PREVIEW-003]]
 - [[TRACE-DEPLOYMENT-PREVIEW-001]]
+

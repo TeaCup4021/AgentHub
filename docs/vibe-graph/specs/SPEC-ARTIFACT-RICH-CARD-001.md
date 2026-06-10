@@ -7,10 +7,10 @@ owner: Backend A
 created: 2026-06-10
 updated: 2026-06-10
 source_assets:
-  - vibeCodingPlan/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
-  - vibeCodingSummary/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md
-  - docs/ai-collab/decisions/2026-06-04-web-preview-fix.md
-  - docs/ai-collab/decisions/2026-06-05-artifact-edit-writeback.md
+  - archive/development/plans/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
+  - archive/development/summaries/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md
+  - docs/ai-collab/decisions/artifact-preview/2026-06-04-web-preview-fix.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-artifact-edit-writeback.md
 depends_on: []
 relates_to:
   - SPEC-PREVIEW-PPT-INLINE-001
@@ -29,7 +29,7 @@ non_goals:
   - 定义轻量部署生命周期。
 contracts:
   - docs/AgentHub 响应格式与前后端对齐约定.md
-  - docs/ai-collab/sse-protocol.md
+  - docs/ai-collab/contracts/sse-protocol.md
 ---
 
 # 富媒体产物卡片
@@ -112,3 +112,4 @@ Related:
 - [[TRACE-ARTIFACT-RICH-CARD-001]]
 - [[SPEC-PREVIEW-PPT-INLINE-001]]
 - [[SPEC-DIFF-APPLY-SOURCE-001]]
+

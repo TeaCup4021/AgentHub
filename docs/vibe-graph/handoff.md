@@ -36,10 +36,13 @@ SPEC -> PLAN -> TASK -> IMPLEMENTS -> TRACE -> SUMMARY
 | 富媒体产物卡片 | 覆盖 DiffCard、FileCard、PreviewCard、LinkPreviewCard、文件 API、预览服务和前端兜底。 | `SPEC-ARTIFACT-RICH-CARD-001` -> `PLAN-ARTIFACT-RICH-CARD-001` -> `TASK-ARTIFACT-RICH-CARD-*` -> `TRACE-ARTIFACT-RICH-CARD-001` |
 | Diff 应用到源产物 | 覆盖 DiffCard 一键写回源代码卡、启发式匹配和版本链回写。 | `SPEC-DIFF-APPLY-SOURCE-001` -> `PLAN-DIFF-APPLY-SOURCE-001` -> `TASK-DIFF-APPLY-SOURCE-*` -> `TRACE-DIFF-APPLY-SOURCE-001` |
 | 轻量级部署预览 | 覆盖 deploy_status artifact、部署 API、DeployStatusCard 和 CLI fallback。 | `SPEC-DEPLOYMENT-PREVIEW-001` -> `PLAN-DEPLOYMENT-PREVIEW-001` -> `TASK-DEPLOYMENT-PREVIEW-*` -> `TRACE-DEPLOYMENT-PREVIEW-001` |
+| CodeCard 编辑回写 | 覆盖 CodeCard 保存、artifact 版本链追加、消息读取折叠和前端缓存刷新。 | `SPEC-ARTIFACT-EDIT-WRITEBACK-001` -> `PLAN-ARTIFACT-EDIT-WRITEBACK-001` -> `TASK-ARTIFACT-EDIT-WRITEBACK-*` -> `TRACE-ARTIFACT-EDIT-WRITEBACK-001` |
+| Agent 管理与模型配置 | 覆盖 Agent CRUD、模型验证、apiKey/baseUrl、ADK 模型解析、工具配置和前端管理 UI。 | `SPEC-AGENT-MANAGEMENT-001` -> `PLAN-AGENT-MANAGEMENT-001` -> `TASK-AGENT-MANAGEMENT-*` -> `TRACE-AGENT-MANAGEMENT-001` |
+| 会话消息与 PinSpec | 覆盖会话 CRUD、消息游标分页、内联 artifacts、Pin/Unpin、PinSpec 注入和前端 Pin 状态一致性。 | `SPEC-CONVERSATION-MESSAGE-PIN-001` -> `PLAN-CONVERSATION-MESSAGE-PIN-001` -> `TASK-CONVERSATION-MESSAGE-PIN-*` -> `TRACE-CONVERSATION-MESSAGE-PIN-001` |
 
 ## 与现有流程的关系
 
-`.vibe-coding/workflow.md` 仍然保留原有闭环：
+`archive/development/vibe-coding-templates/workflow.md` 仍然保留原有闭环：
 
 ```text
 Plan -> Review -> Implement -> Summarize
@@ -113,12 +116,12 @@ Validation passed: 0 errors, 0 warning(s).
 
 推荐后续按以下顺序继续沉淀：
 
-1. 将 `CodeCard 编辑回写` 从富媒体卡片中拆成独立 `ARTIFACT-EDIT-WRITEBACK` 图谱。
-2. 将 `Agent 管理与模型配置` 补录为 `AGENT` 领域图谱。
-3. 将 `会话、消息和 PinSpec` 补录为 `CONVERSATION` 领域图谱。
-4. 将仓库内 `docs/vibe-graph/SKILL.md` 安装为个人 Codex Skill，便于跨线程复用。
-5. 在 CI 或本地脚本中固定运行 Vibe Graph 校验。
+1. 将仓库内 `docs/vibe-graph/SKILL.md` 安装为个人 Codex Skill，便于跨线程复用。
+2. 在 CI 或本地脚本中固定运行 Vibe Graph 校验。
+3. 继续补录 Context Assembler、CapabilityRegistry、Planner 两阶段协议、SSE Translator 等核心能力。
+4. 对 `TRACE` 中标记的业务 followup 单独生成新 `SPEC/PLAN/TASK`，例如 API Key 安全治理、PinSpec 端到端联调、CodeCard 版本历史 UI。
 
 ## 交付边界
 
 本次交付只沉淀协作规范和历史补录，不修改业务代码，不声明未重新运行的业务端到端测试已经通过。
+

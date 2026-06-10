@@ -214,4 +214,4 @@ INSERT INTO messages (..., '<thinking>\nThe user has sent me a list of available
 
 - `backend/app/services/adapters/cli_adapter.py` (第 181-248 行)
 - `backend/app/services/adk/workflow_builder.py` (第 61-65 行)
-- `docs/ai-collab/decisions/004-workflow-instruction-propagation-fix.md`
+- `docs/ai-collab/decisions/cli-agent/004-workflow-instruction-propagation-fix.md`

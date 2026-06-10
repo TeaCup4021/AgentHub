@@ -16,7 +16,7 @@ depends_on:
 relates_to: []
 implements:
   - docs/vibe-graph/traces/TRACE-AICOLLAB-VIBE-GRAPH-001.md
-  - vibeCodingSummary/vibe-graph-collaboration-handoff-2026-06-10.md
+  - archive/development/summaries/vibe-graph-collaboration-handoff-2026-06-10.md
 traces:
   - TRACE-AICOLLAB-VIBE-GRAPH-001
 blocked_by: []
@@ -39,7 +39,7 @@ acceptance:
 ## 预期触达路径
 
 - `docs/vibe-graph/traces/TRACE-AICOLLAB-VIBE-GRAPH-001.md`
-- `vibeCodingSummary/vibe-graph-collaboration-handoff-2026-06-10.md`
+- `archive/development/summaries/vibe-graph-collaboration-handoff-2026-06-10.md`
 
 ## 执行步骤
 
@@ -65,3 +65,4 @@ Related:
 - [[PLAN-AICOLLAB-VIBE-GRAPH-001]]
 - [[TASK-AICOLLAB-VIBE-GRAPH-004]]
 - [[TRACE-AICOLLAB-VIBE-GRAPH-001]]
+

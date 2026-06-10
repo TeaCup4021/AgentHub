@@ -10,8 +10,8 @@ plan: PLAN-GROUPCHAT-DAG-001
 specs:
   - SPEC-GROUPCHAT-DAG-001
 source_assets:
-  - vibeCodingPlan/群聊DAG执行与Orchestrator总结重构.md
-  - vibeCodingSummary/群聊DAG执行与Orchestrator总结重构-summary.md
+  - archive/development/plans/群聊DAG执行与Orchestrator总结重构.md
+  - archive/development/summaries/群聊DAG执行与Orchestrator总结重构-summary.md
 depends_on:
   - TASK-GROUPCHAT-DAG-004
 relates_to: []
@@ -69,3 +69,4 @@ Related:
 - [[PLAN-GROUPCHAT-DAG-001]]
 - [[TASK-GROUPCHAT-DAG-004]]
 - [[TRACE-GROUPCHAT-DAG-001]]
+

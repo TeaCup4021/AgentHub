@@ -26,8 +26,8 @@ SPEC -> PLAN -> TASK -> IMPLEMENTS -> TRACE -> SUMMARY
 - `docs/ai-collab/decisions/`
 - `agenthub-web/docs/specs/`
 - `agenthub-web/docs/plans/`
-- `archive/development/plans/`（原 `vibeCodingPlan/`）
-- `archive/development/summaries/`（原 `vibeCodingSummary/`）
+- `archive/development/plans/`（原 `archive/development/plans/`）
+- `archive/development/summaries/`（原 `archive/development/summaries/`）
 - `archive/development/vibe-coding-templates/`（原 `.vibe-coding/`）
 - `AGENTS.md`
 
@@ -55,7 +55,7 @@ SPEC -> PLAN -> TASK -> IMPLEMENTS -> TRACE -> SUMMARY
 | Skill | 已强化 | `docs/vibe-graph/SKILL.md` 可作为仓库内 Codex Skill 使用，并覆盖新需求、历史补录、实施追踪和交付场景。 |
 | 校验机制 | 已建立 | 可运行 `scripts/validate-vibe-graph.py` 校验节点。 |
 | 负责人交付 | 已建立 | `handoff.md` 可作为规范包交付入口。 |
-| 历史迁移试点 | 已扩展 | 已补录 `GROUPCHAT-DAG`、`PREVIEW-PPT-INLINE`、`ARTIFACT-RICH-CARD`、`DIFF-APPLY-SOURCE`、`DEPLOYMENT-PREVIEW` 多条样例链路。 |
+| 历史迁移试点 | 已扩展 | 已补录 `GROUPCHAT-DAG`、`PREVIEW-PPT-INLINE`、`ARTIFACT-RICH-CARD`、`DIFF-APPLY-SOURCE`、`DEPLOYMENT-PREVIEW`、`ARTIFACT-EDIT-WRITEBACK`、`AGENT-MANAGEMENT`、`CONVERSATION-MESSAGE-PIN` 多条样例链路。 |
 | Obsidian 式双链 | 已开始 | 已维护样例节点双链，并在 `obsidian.md` 提供 Mermaid 总览。 |
 
 ## 已有试点
@@ -84,9 +84,16 @@ SPEC -> PLAN -> TASK -> IMPLEMENTS -> TRACE -> SUMMARY
 - `PLAN-DEPLOYMENT-PREVIEW-001`
 - `TASK-DEPLOYMENT-PREVIEW-001` 至 `TASK-DEPLOYMENT-PREVIEW-005`
 - `TRACE-DEPLOYMENT-PREVIEW-001`
+- `SPEC-ARTIFACT-EDIT-WRITEBACK-001`
+- `PLAN-ARTIFACT-EDIT-WRITEBACK-001`
+- `TASK-ARTIFACT-EDIT-WRITEBACK-001` 至 `TASK-ARTIFACT-EDIT-WRITEBACK-004`
+- `TRACE-ARTIFACT-EDIT-WRITEBACK-001`
+- `SPEC-AGENT-MANAGEMENT-001`
+- `PLAN-AGENT-MANAGEMENT-001`
+- `TASK-AGENT-MANAGEMENT-001` 至 `TASK-AGENT-MANAGEMENT-006`
+- `TRACE-AGENT-MANAGEMENT-001`
+- `SPEC-CONVERSATION-MESSAGE-PIN-001`
+- `PLAN-CONVERSATION-MESSAGE-PIN-001`
+- `TASK-CONVERSATION-MESSAGE-PIN-001` 至 `TASK-CONVERSATION-MESSAGE-PIN-006`
+- `TRACE-CONVERSATION-MESSAGE-PIN-001`
 
-后续候选：
-
-- CodeCard 编辑回写。
-- Agent 管理与模型配置。
-- 会话、消息和 PinSpec 基础链路。

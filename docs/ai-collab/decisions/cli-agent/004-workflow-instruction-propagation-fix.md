@@ -101,5 +101,5 @@ CLI Agent 是一次性子进程。它启动的 HTTP 服务器在 CLI 退出后�
 ## 相关记录
 
 - `vibeCodingSummary/workflow-instruction-fix-2026-06-07.md` — 修复历程详细记录
-- `docs/ai-collab/decisions/002-group-chat-dag-execution.md` — DAG 执行架构
-- `docs/ai-collab/decisions/003-multi-agent-orchestration-fixes.md` — 多 Agent 修复
+- `docs/ai-collab/decisions/orchestration/002-group-chat-dag-execution.md` — DAG 执行架构
+- `docs/ai-collab/decisions/orchestration/003-multi-agent-orchestration-fixes.md` — 多 Agent 修复

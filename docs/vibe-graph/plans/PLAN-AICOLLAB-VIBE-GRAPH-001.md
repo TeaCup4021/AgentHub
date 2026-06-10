@@ -10,7 +10,7 @@ specs:
   - SPEC-AICOLLAB-VIBE-GRAPH-001
 source_assets:
   - AGENTS.md
-  - .vibe-coding/workflow.md
+  - archive/development/vibe-coding-templates/workflow.md
   - docs/vibe-graph/rules.md
   - docs/vibe-graph/SKILL.md
 depends_on: []
@@ -77,13 +77,13 @@ verification:
 | `TASK-AICOLLAB-VIBE-GRAPH-002` | 整理 Skill、模板和固定口令 | `docs/vibe-graph/SKILL.md`, `docs/vibe-graph/prompts.md` | 后续 AI 能按 Skill 执行。 |
 | `TASK-AICOLLAB-VIBE-GRAPH-003` | 补负责人交付说明和入口索引 | `docs/vibe-graph/handoff.md`, `docs/vibe-graph/index.md` | 负责人可快速验收。 |
 | `TASK-AICOLLAB-VIBE-GRAPH-004` | 补录 PPT 内联浏览历史样例 | `docs/vibe-graph/specs/`, `plans/`, `tasks/`, `traces/` | 第二个案例链路完整。 |
-| `TASK-AICOLLAB-VIBE-GRAPH-005` | 校验并记录交付总结 | `docs/vibe-graph/scripts/validate-vibe-graph.py`, `vibeCodingSummary/` | 校验通过并有 summary。 |
+| `TASK-AICOLLAB-VIBE-GRAPH-005` | 校验并记录交付总结 | `docs/vibe-graph/scripts/validate-vibe-graph.py`, `archive/development/summaries/` | 校验通过并有 summary。 |
 
 ## 契约与兼容性
 
-- 不改变 `.vibe-coding/workflow.md` 的 Plan -> Review -> Implement -> Summarize 闭环。
+- 不改变 `archive/development/vibe-coding-templates/workflow.md` 的 Plan -> Review -> Implement -> Summarize 闭环。
 - Vibe Graph 作为索引层补充稳定节点和关系。
-- 继续保留历史 `vibeCodingPlan/`、`vibeCodingSummary/`、`docs/ai-collab/` 原位。
+- 继续保留历史 `archive/development/plans/`、`archive/development/summaries/`、`docs/ai-collab/` 原位。
 - 图谱节点路径使用仓库相对路径，便于校验和跨 AI 使用。
 
 ## 风险
@@ -114,3 +114,4 @@ Related:
 - [[TASK-AICOLLAB-VIBE-GRAPH-005]]
 - [[TRACE-AICOLLAB-VIBE-GRAPH-001]]
 - [[PLAN-GROUPCHAT-DAG-001]]
+

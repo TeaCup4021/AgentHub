@@ -65,9 +65,20 @@ docs/vibe-graph/
 
 历史文档仍保持原位，不搬迁、不重写。
 
+已补录的业务能力包括：
+
+- 群聊 DAG 执行。
+- PPT 内联浏览。
+- 富媒体产物卡片。
+- Diff 应用到源产物。
+- 轻量级部署预览。
+- CodeCard 编辑回写。
+- Agent 管理与模型配置。
+- 会话、消息和 PinSpec 基础链路。
+
 后续阶段可以继续补充：
 
-- 更多历史功能迁移，例如 CodeCard 编辑回写、Agent 管理、会话消息基础链路和 PinSpec。
+- 更多历史功能迁移，例如 Context Assembler、CapabilityRegistry、Planner 两阶段协议和 SSE Translator。
 - 更完整的 Obsidian 式双链。
 - 更严格的自动化校验。
 - 将仓库内 Skill 安装为个人 Codex Skill。
@@ -81,3 +92,4 @@ docs/vibe-graph/
 - 创建节点时使用 `templates/`。
 - 补录历史文档时参考 `references/migration-guide.md`。
 - 修改图谱后运行 `scripts/validate-vibe-graph.py`。
+

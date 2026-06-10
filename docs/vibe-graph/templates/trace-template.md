@@ -14,7 +14,7 @@ relates_to: []
 implements:
   - path/to/changed-file
 summaries:
-  - vibeCodingSummary/path-to-summary.md
+  - archive/development/summaries/path-to-summary.md
 verification:
   - command: "{验证命令}"
     result: not_run
@@ -68,3 +68,4 @@ Related:
 - [[SPEC-{DOMAIN}-{TOPIC}-{NNN}]]
 - [[PLAN-{DOMAIN}-{TOPIC}-{NNN}]]
 - [[TASK-{DOMAIN}-{TOPIC}-{NNN}]]
+

@@ -152,3 +152,4 @@ python docs/vibe-graph/scripts/validate-vibe-graph.py docs/vibe-graph
 - 实施后必须有 `TRACE`。
 - 验证结果必须真实；未运行就写 `not_run` 和原因。
 - 历史补录时，不要把历史 summary 当成当前代码事实；需要对照当前仓库路径。
+

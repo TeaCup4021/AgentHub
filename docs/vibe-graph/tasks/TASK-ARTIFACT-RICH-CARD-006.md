@@ -10,8 +10,8 @@ plan: PLAN-ARTIFACT-RICH-CARD-001
 specs:
   - SPEC-ARTIFACT-RICH-CARD-001
 source_assets:
-  - docs/ai-collab/decisions/2026-06-04-web-preview-fix.md
-  - vibeCodingPlan/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
+  - docs/ai-collab/decisions/artifact-preview/2026-06-04-web-preview-fix.md
+  - archive/development/plans/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
 depends_on:
   - TASK-ARTIFACT-RICH-CARD-002
   - TASK-ARTIFACT-RICH-CARD-003
@@ -78,3 +78,4 @@ Related:
 - [[TASK-ARTIFACT-RICH-CARD-003]]
 - [[TASK-ARTIFACT-RICH-CARD-004]]
 - [[TRACE-ARTIFACT-RICH-CARD-001]]
+

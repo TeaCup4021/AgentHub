@@ -110,7 +110,7 @@ backend/
 
 ## 验证操作建议（联调）
 
-按 `docs/ai-collab/debug-artifact-cards.md` 前提（`VITE_USE_MOCK=false` + 后端走 `.venv`）：
+按 `docs/ai-collab/playbooks/debug/artifact-cards.md` 前提（`VITE_USE_MOCK=false` + 后端走 `.venv`）：
 
 1. 让 Agent 输出一段代码（生成 code 卡）。
 2. 在卡片只读视图中划选若干行 → 上方浮出「引用此片段修改」→ 点击。

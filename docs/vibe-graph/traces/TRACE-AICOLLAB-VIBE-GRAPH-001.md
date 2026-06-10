@@ -14,7 +14,7 @@ tasks:
   - TASK-AICOLLAB-VIBE-GRAPH-005
 source_assets:
   - AGENTS.md
-  - .vibe-coding/workflow.md
+  - archive/development/vibe-coding-templates/workflow.md
   - docs/vibe-graph/rules.md
   - docs/vibe-graph/SKILL.md
 depends_on: []
@@ -39,9 +39,9 @@ implements:
   - docs/vibe-graph/obsidian.md
   - docs/vibe-graph/source-assets.md
   - docs/vibe-graph/agents/openai.yaml
-  - vibeCodingSummary/vibe-graph-collaboration-handoff-2026-06-10.md
+  - archive/development/summaries/vibe-graph-collaboration-handoff-2026-06-10.md
 summaries:
-  - vibeCodingSummary/vibe-graph-collaboration-handoff-2026-06-10.md
+  - archive/development/summaries/vibe-graph-collaboration-handoff-2026-06-10.md
 verification:
   - command: python docs/vibe-graph/scripts/validate-vibe-graph.py docs/vibe-graph
     result: passed
@@ -77,7 +77,7 @@ followups:
 - `docs/vibe-graph/obsidian.md`
 - `docs/vibe-graph/source-assets.md`
 - `docs/vibe-graph/agents/openai.yaml`
-- `vibeCodingSummary/vibe-graph-collaboration-handoff-2026-06-10.md`
+- `archive/development/summaries/vibe-graph-collaboration-handoff-2026-06-10.md`
 
 ## 实施摘要
 
@@ -103,7 +103,7 @@ followups:
 
 ## Summary 链接
 
-- `vibeCodingSummary/vibe-graph-collaboration-handoff-2026-06-10.md`
+- `archive/development/summaries/vibe-graph-collaboration-handoff-2026-06-10.md`
 
 ## Obsidian 双链
 
@@ -118,3 +118,4 @@ Related:
 - [[TASK-AICOLLAB-VIBE-GRAPH-005]]
 - [[TRACE-GROUPCHAT-DAG-001]]
 - [[TRACE-PREVIEW-PPT-INLINE-001]]
+

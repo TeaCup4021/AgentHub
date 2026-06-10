@@ -9,8 +9,8 @@ updated: 2026-06-10
 specs:
   - SPEC-DIFF-APPLY-SOURCE-001
 source_assets:
-  - docs/ai-collab/decisions/2026-06-05-diff-apply-to-source.md
-  - docs/ai-collab/decisions/2026-06-05-artifact-edit-writeback.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-diff-apply-to-source.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-artifact-edit-writeback.md
 depends_on:
   - PLAN-ARTIFACT-RICH-CARD-001
 relates_to: []
@@ -112,3 +112,4 @@ Related:
 - [[TASK-DIFF-APPLY-SOURCE-003]]
 - [[TASK-DIFF-APPLY-SOURCE-004]]
 - [[TRACE-DIFF-APPLY-SOURCE-001]]
+

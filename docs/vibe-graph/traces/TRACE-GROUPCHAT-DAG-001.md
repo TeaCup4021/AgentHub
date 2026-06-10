@@ -16,9 +16,9 @@ tasks:
   - TASK-GROUPCHAT-DAG-007
   - TASK-GROUPCHAT-DAG-008
 source_assets:
-  - vibeCodingPlan/群聊DAG执行与Orchestrator总结重构.md
-  - vibeCodingSummary/群聊DAG执行与Orchestrator总结重构-summary.md
-  - docs/ai-collab/decisions/002-group-chat-dag-execution.md
+  - archive/development/plans/群聊DAG执行与Orchestrator总结重构.md
+  - archive/development/summaries/群聊DAG执行与Orchestrator总结重构-summary.md
+  - docs/ai-collab/decisions/orchestration/002-group-chat-dag-execution.md
 depends_on: []
 relates_to: []
 implements:
@@ -33,7 +33,7 @@ implements:
   - agenthub-web/src/types/chat.ts
   - backend/tests/services/adapters/test_adk_to_sse_multiagent.py
 summaries:
-  - vibeCodingSummary/群聊DAG执行与Orchestrator总结重构-summary.md
+  - archive/development/summaries/群聊DAG执行与Orchestrator总结重构-summary.md
 verification:
   - command: pytest tests/
     result: partial
@@ -119,7 +119,7 @@ followups:
 
 ## Summary 链接
 
-- `vibeCodingSummary/群聊DAG执行与Orchestrator总结重构-summary.md`
+- `archive/development/summaries/群聊DAG执行与Orchestrator总结重构-summary.md`
 
 ## Obsidian 双链
 
@@ -135,3 +135,4 @@ Related:
 - [[TASK-GROUPCHAT-DAG-006]]
 - [[TASK-GROUPCHAT-DAG-007]]
 - [[TASK-GROUPCHAT-DAG-008]]
+

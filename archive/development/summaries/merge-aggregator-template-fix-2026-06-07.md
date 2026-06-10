@@ -185,6 +185,6 @@ runner.run_single_turn(message="")
 
 ## 相关记录
 
-- `docs/ai-collab/decisions/002-group-chat-dag-execution.md` — DAG 执行架构
-- `docs/ai-collab/decisions/004-workflow-instruction-propagation-fix.md` — Workflow instruction 传递修复
+- `docs/ai-collab/decisions/orchestration/002-group-chat-dag-execution.md` — DAG 执行架构
+- `docs/ai-collab/decisions/cli-agent/004-workflow-instruction-propagation-fix.md` — Workflow instruction 传递修复
 - `CLAUDE.md` 纠正类规则 — 新增「LlmAgent instruction 动态内容」规则

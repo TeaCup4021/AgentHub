@@ -28,7 +28,7 @@ SPEC -> PLAN -> TASK -> IMPLEMENTS -> TRACE -> SUMMARY
 ## Reference Loading
 
 - Use `references/node-schema.md` when checking frontmatter fields, status values, and relationships.
-- Use `references/migration-guide.md` when backfilling history from `vibeCodingPlan/`, `vibeCodingSummary/`, `docs/ai-collab/`, or old Codex/Claude Code notes.
+- Use `references/migration-guide.md` when backfilling history from `archive/development/plans/`, `archive/development/summaries/`, `docs/ai-collab/`, or old Codex/Claude Code notes.
 - Use `handoff.md` when the user asks to package or explain the collaboration rules to a project lead.
 - Use `prompts.md` when the user wants reusable AI instructions rather than a one-off answer.
 
@@ -80,3 +80,4 @@ basic relationships, and referenced local paths.
 - Do not mark `verified` unless validation was actually run.
 - Do not turn historical summary claims into current facts without checking the repository or labeling them as historical.
 - Prefer small capability-oriented specs over broad catch-all specs.
+

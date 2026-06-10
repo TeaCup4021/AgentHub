@@ -11,7 +11,7 @@ specs:
   - SPEC-AICOLLAB-VIBE-GRAPH-001
 source_assets:
   - AGENTS.md
-  - .vibe-coding/workflow.md
+  - archive/development/vibe-coding-templates/workflow.md
   - docs/vibe-graph/rules.md
 depends_on: []
 relates_to: []
@@ -36,7 +36,7 @@ acceptance:
 ## 前置条件
 
 - 已存在 `docs/vibe-graph/rules.md`。
-- 已存在 `.vibe-coding/workflow.md`。
+- 已存在 `archive/development/vibe-coding-templates/workflow.md`。
 - 用户明确要求补充可交付的 spec、skill、rules 等协作规范。
 
 ## 预期触达路径
@@ -68,3 +68,4 @@ Related:
 - [[SPEC-AICOLLAB-VIBE-GRAPH-001]]
 - [[PLAN-AICOLLAB-VIBE-GRAPH-001]]
 - [[TRACE-AICOLLAB-VIBE-GRAPH-001]]
+

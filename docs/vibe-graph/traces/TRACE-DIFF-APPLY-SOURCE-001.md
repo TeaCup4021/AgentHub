@@ -12,8 +12,8 @@ tasks:
   - TASK-DIFF-APPLY-SOURCE-003
   - TASK-DIFF-APPLY-SOURCE-004
 source_assets:
-  - docs/ai-collab/decisions/2026-06-05-diff-apply-to-source.md
-  - docs/ai-collab/decisions/2026-06-05-artifact-edit-writeback.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-diff-apply-to-source.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-artifact-edit-writeback.md
 depends_on:
   - TRACE-ARTIFACT-RICH-CARD-001
 relates_to: []
@@ -26,8 +26,8 @@ implements:
   - agenthub-web/src/lib/__tests__/diffApply.test.ts
   - agenthub-web/src/components/cards/__tests__/CardRenderer.test.tsx
 summaries:
-  - docs/ai-collab/decisions/2026-06-05-diff-apply-to-source.md
-  - vibeCodingSummary/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-diff-apply-to-source.md
+  - archive/development/summaries/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md
 verification:
   - command: diffApply.ts unit tests
     result: passed
@@ -98,8 +98,8 @@ followups:
 
 ## Summary 链接
 
-- `docs/ai-collab/decisions/2026-06-05-diff-apply-to-source.md`
-- `vibeCodingSummary/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md`
+- `docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-diff-apply-to-source.md`
+- `archive/development/summaries/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md`
 
 ## Obsidian 双链
 
@@ -112,3 +112,4 @@ Related:
 - [[TASK-DIFF-APPLY-SOURCE-003]]
 - [[TASK-DIFF-APPLY-SOURCE-004]]
 - [[TRACE-ARTIFACT-RICH-CARD-001]]
+

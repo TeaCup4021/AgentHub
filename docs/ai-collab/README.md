@@ -1,18 +1,22 @@
 # docs/ai-collab
 
-AI 协作约定文档，供 Claude 和其他 AI 工具在参与 AgentHub 开发时读取。
+AI 协作约定按类型和功能拆分在本目录下。Vibecoding 建立 SPEC 前，先按需求进入一个子目录，不要全量读取本目录。
 
-## 文件索引
+## 目录路由
 
-| 文件 | 内容 |
-|------|------|
-| `api-conventions.md` | API 设计规范、URL 结构、参数命名 |
-| `sse-protocol.md` | SSE 7 种事件类型规范 |
-| `database-schema.md` | 核心表结构 |
-| `agent-adapter.md` | Adapter 模式 + 注册流程 |
-| `orchestration-flow.md` | 群聊编排管线 |
-| `frontend-conventions.md` | 前端组件/状态管理约定 |
-| `glossary.md` | 术语表 |
-| `debug-agent-failure.md` | Agent 对话失败分步排查指南 |
-| `debug-artifact-cards.md` | 产物卡片（artifact）联调测试与排查指南 |
-| `decisions/` | 架构决策记录（ADR） |
+| 目录 | 读取时机 |
+| --- | --- |
+| `contracts/` | API、SSE、数据库、前端等长期契约变更。 |
+| `runtime/` | Agent Adapter、群聊编排、运行链路变更。 |
+| `playbooks/` | 本地验证、排障和联调。 |
+| `playbooks/debug/` | 已有症状复现或故障诊断。 |
+| `decisions/` | 需要理解历史架构取舍或修复原则。 |
+| `reference/` | 术语、历史上下文索引和辅助资料。 |
+
+## 读取规则
+
+1. 先读本文件。
+2. 再读目标子目录的 `README.md`。
+3. 最后只读该目录下与需求直接相关的文件。
+
+通常不需要一次读取超过 1 个子目录。

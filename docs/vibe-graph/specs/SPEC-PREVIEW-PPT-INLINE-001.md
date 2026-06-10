@@ -7,9 +7,9 @@ owner: Backend A
 created: 2026-06-10
 updated: 2026-06-10
 source_assets:
-  - vibeCodingPlan/AgentHub-PPT内联浏览-实施计划-v2.md
-  - vibeCodingSummary/PPT内联浏览-实施总结-2026-06-06.md
-  - vibeCodingSummary/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
+  - archive/development/plans/AgentHub-PPT内联浏览-实施计划-v2.md
+  - archive/development/summaries/PPT内联浏览-实施总结-2026-06-06.md
+  - archive/development/summaries/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
 depends_on: []
 relates_to:
   - SPEC-AICOLLAB-VIBE-GRAPH-001
@@ -108,3 +108,4 @@ Related:
 - [[TASK-PREVIEW-PPT-INLINE-006]]
 - [[TRACE-PREVIEW-PPT-INLINE-001]]
 - [[SPEC-AICOLLAB-VIBE-GRAPH-001]]
+

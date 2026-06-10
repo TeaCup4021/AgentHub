@@ -10,7 +10,7 @@ plan: PLAN-ARTIFACT-RICH-CARD-001
 specs:
   - SPEC-ARTIFACT-RICH-CARD-001
 source_assets:
-  - vibeCodingPlan/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
+  - archive/development/plans/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
 depends_on:
   - TASK-ARTIFACT-RICH-CARD-004
 relates_to: []
@@ -67,3 +67,4 @@ Related:
 - [[PLAN-ARTIFACT-RICH-CARD-001]]
 - [[TASK-ARTIFACT-RICH-CARD-004]]
 - [[TRACE-ARTIFACT-RICH-CARD-001]]
+

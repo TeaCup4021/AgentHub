@@ -9,9 +9,9 @@
 | 路径 | 作用 |
 | --- | --- |
 | `AGENTS.md` | 仓库级 AI 协作规则和长期约定。 |
-| `.vibe-coding/workflow.md` | 已有的 Plan -> Review -> Implement -> Summarize 工作流。 |
-| `.vibe-coding/plan-template.md` | 已有实施计划模板。 |
-| `.vibe-coding/summary-template.md` | 已有实施总结模板。 |
+| `archive/development/vibe-coding-templates/workflow.md` | 已有的 Plan -> Review -> Implement -> Summarize 工作流。 |
+| `archive/development/vibe-coding-templates/plan-template.md` | 已有实施计划模板。 |
+| `archive/development/vibe-coding-templates/summary-template.md` | 已有实施总结模板。 |
 | `docs/vibe-graph/handoff.md` | Vibe Graph 协作规范交付给项目负责人的入口。 |
 | `docs/vibe-graph/SKILL.md` | 仓库内 Codex Skill，指导后续 AI 维护图谱。 |
 | `docs/vibe-graph/prompts.md` | 可复制给 AI 使用的固定协作口令。 |
@@ -27,9 +27,12 @@
 
 | 路径 | 作用 |
 | --- | --- |
-| `docs/ai-collab/README.md` | AI 协作文档入口。 |
-| `docs/ai-collab/*.md` | Adapter、API 约定、SSE、前端约定、验证和调试等领域笔记。 |
-| `docs/ai-collab/decisions/*.md` | 决策记录和修复后的设计依据。 |
+| `docs/ai-collab/README.md` | AI 协作文档的短入口，按子目录路由上下文。 |
+| `docs/ai-collab/contracts/` | API、SSE、数据库和前端长期契约。 |
+| `docs/ai-collab/runtime/` | Agent Adapter 和群聊编排等运行机制。 |
+| `docs/ai-collab/playbooks/` | 本地验证、联调和排障手册。 |
+| `docs/ai-collab/reference/` | 术语和历史上下文索引。 |
+| `docs/ai-collab/decisions/` | 按领域分类的 ADR 和修复决策记录。 |
 
 ## 前端 Spec 与 Plan
 
@@ -42,8 +45,8 @@
 
 | 路径 | 作用 |
 | --- | --- |
-| `vibeCodingPlan/` | 历史每日计划和功能级实施计划。 |
-| `vibeCodingSummary/` | 历史实施总结、验证记录和修复记录。 |
+| `archive/development/plans/` | 历史每日计划和功能级实施计划。 |
+| `archive/development/summaries/` | 历史实施总结、验证记录和修复记录。 |
 
 ## 实现目录
 
@@ -65,8 +68,14 @@
 | 能力 | 图谱节点 |
 | --- | --- |
 | AI 协作规范 | `SPEC-AICOLLAB-VIBE-GRAPH-001` |
+| AI 协作上下文路由 | `SPEC-AICOLLAB-CONTEXT-ROUTING-001` |
+| AI 协作文档物理分类 | `SPEC-AICOLLAB-DOC-TAXONOMY-001` |
 | 群聊 DAG 执行 | `SPEC-GROUPCHAT-DAG-001` |
 | PPT 内联浏览 | `SPEC-PREVIEW-PPT-INLINE-001` |
 | 富媒体产物卡片 | `SPEC-ARTIFACT-RICH-CARD-001` |
 | Diff 应用到源产物 | `SPEC-DIFF-APPLY-SOURCE-001` |
 | 轻量级部署预览 | `SPEC-DEPLOYMENT-PREVIEW-001` |
+| CodeCard 编辑回写 | `SPEC-ARTIFACT-EDIT-WRITEBACK-001` |
+| Agent 管理与模型配置 | `SPEC-AGENT-MANAGEMENT-001` |
+| 会话消息与 PinSpec 基础链路 | `SPEC-CONVERSATION-MESSAGE-PIN-001` |
+

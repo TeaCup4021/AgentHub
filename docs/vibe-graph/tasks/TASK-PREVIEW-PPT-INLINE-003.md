@@ -10,7 +10,7 @@ plan: PLAN-PREVIEW-PPT-INLINE-001
 specs:
   - SPEC-PREVIEW-PPT-INLINE-001
 source_assets:
-  - vibeCodingSummary/PPT内联浏览-实施总结-2026-06-06.md
+  - archive/development/summaries/PPT内联浏览-实施总结-2026-06-06.md
 depends_on:
   - TASK-PREVIEW-PPT-INLINE-001
 relates_to:
@@ -67,3 +67,4 @@ Related:
 - [[TASK-PREVIEW-PPT-INLINE-001]]
 - [[TASK-PREVIEW-PPT-INLINE-002]]
 - [[TRACE-PREVIEW-PPT-INLINE-001]]
+

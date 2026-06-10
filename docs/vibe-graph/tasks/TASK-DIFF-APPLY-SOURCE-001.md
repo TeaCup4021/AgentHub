@@ -10,7 +10,7 @@ plan: PLAN-DIFF-APPLY-SOURCE-001
 specs:
   - SPEC-DIFF-APPLY-SOURCE-001
 source_assets:
-  - docs/ai-collab/decisions/2026-06-05-diff-apply-to-source.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-diff-apply-to-source.md
 depends_on: []
 relates_to: []
 implements:
@@ -63,3 +63,4 @@ Related:
 - [[SPEC-DIFF-APPLY-SOURCE-001]]
 - [[PLAN-DIFF-APPLY-SOURCE-001]]
 - [[TRACE-DIFF-APPLY-SOURCE-001]]
+

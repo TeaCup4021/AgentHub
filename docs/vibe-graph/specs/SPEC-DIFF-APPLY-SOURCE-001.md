@@ -7,9 +7,9 @@ owner: Frontend
 created: 2026-06-10
 updated: 2026-06-10
 source_assets:
-  - docs/ai-collab/decisions/2026-06-05-diff-apply-to-source.md
-  - docs/ai-collab/decisions/2026-06-05-artifact-edit-writeback.md
-  - vibeCodingSummary/对话式局部修改-选区级改写-summary.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-diff-apply-to-source.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-artifact-edit-writeback.md
+  - archive/development/summaries/对话式局部修改-选区级改写-summary.md
 depends_on:
   - SPEC-ARTIFACT-RICH-CARD-001
 relates_to:
@@ -27,7 +27,7 @@ non_goals:
   - 将 Diff 另存为文件和应用到源文件统一为一个语义。
   - 为所有 artifact 类型建立显式外键回链。
 contracts:
-  - docs/ai-collab/decisions/2026-06-05-artifact-edit-writeback.md
+  - docs/ai-collab/decisions/artifact-edit-diff/2026-06-05-artifact-edit-writeback.md
 ---
 
 # Diff 应用到源产物
@@ -102,3 +102,4 @@ Related:
 - [[TASK-DIFF-APPLY-SOURCE-004]]
 - [[TRACE-DIFF-APPLY-SOURCE-001]]
 - [[SPEC-ARTIFACT-RICH-CARD-001]]
+

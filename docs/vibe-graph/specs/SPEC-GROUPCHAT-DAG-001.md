@@ -7,9 +7,9 @@ owner: Backend B
 created: 2026-06-09
 updated: 2026-06-09
 source_assets:
-  - vibeCodingPlan/群聊DAG执行与Orchestrator总结重构.md
-  - vibeCodingSummary/群聊DAG执行与Orchestrator总结重构-summary.md
-  - docs/ai-collab/decisions/002-group-chat-dag-execution.md
+  - archive/development/plans/群聊DAG执行与Orchestrator总结重构.md
+  - archive/development/summaries/群聊DAG执行与Orchestrator总结重构-summary.md
+  - docs/ai-collab/decisions/orchestration/002-group-chat-dag-execution.md
 depends_on: []
 relates_to: []
 plans:
@@ -113,3 +113,4 @@ Related:
 - [[TASK-GROUPCHAT-DAG-007]]
 - [[TASK-GROUPCHAT-DAG-008]]
 - [[TRACE-GROUPCHAT-DAG-001]]
+

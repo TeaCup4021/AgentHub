@@ -188,7 +188,7 @@ print('LlmAgent has callback:', llm_agent.before_model_callback is not None)  # 
 
 ## 相关文档
 
-- **决策文档**：`docs/ai-collab/decisions/006-cli-agent-language-and-execution-fix.md`
+- **决策文档**：`docs/ai-collab/decisions/cli-agent/006-cli-agent-language-and-execution-fix.md`
 - **CLAUDE.md 更新**：已记录问题 #16 和新规则
 - **相关问题**：
   - 问题 #15：CLI Agent 在 Workflow 中收到技能列表（已于 2026-06-07 早期修复）

@@ -14,10 +14,10 @@ tasks:
   - TASK-PREVIEW-PPT-INLINE-005
   - TASK-PREVIEW-PPT-INLINE-006
 source_assets:
-  - vibeCodingPlan/AgentHub-PPT内联浏览-实施计划.md
-  - vibeCodingPlan/AgentHub-PPT内联浏览-实施计划-v2.md
-  - vibeCodingSummary/PPT内联浏览-实施总结-2026-06-06.md
-  - vibeCodingSummary/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
+  - archive/development/plans/AgentHub-PPT内联浏览-实施计划.md
+  - archive/development/plans/AgentHub-PPT内联浏览-实施计划-v2.md
+  - archive/development/summaries/PPT内联浏览-实施总结-2026-06-06.md
+  - archive/development/summaries/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
 depends_on: []
 relates_to:
   - TRACE-AICOLLAB-VIBE-GRAPH-001
@@ -34,9 +34,9 @@ implements:
   - agenthub-web/src/components/cards/DocumentCard.tsx
   - agenthub-web/src/types/api.ts
 summaries:
-  - vibeCodingSummary/PPT内联浏览-实施总结-2026-06-06.md
-  - vibeCodingSummary/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
-  - vibeCodingSummary/vibe-graph-ppt-inline-backfill-2026-06-10.md
+  - archive/development/summaries/PPT内联浏览-实施总结-2026-06-06.md
+  - archive/development/summaries/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
+  - archive/development/summaries/vibe-graph-ppt-inline-backfill-2026-06-10.md
 verification:
   - command: historical manual integration
     result: passed
@@ -113,9 +113,9 @@ followups:
 
 ## Summary 链接
 
-- `vibeCodingSummary/PPT内联浏览-实施总结-2026-06-06.md`
-- `vibeCodingSummary/PPT内联浏览-计划vs实际实施对比-2026-06-06.md`
-- `vibeCodingSummary/vibe-graph-ppt-inline-backfill-2026-06-10.md`
+- `archive/development/summaries/PPT内联浏览-实施总结-2026-06-06.md`
+- `archive/development/summaries/PPT内联浏览-计划vs实际实施对比-2026-06-06.md`
+- `archive/development/summaries/vibe-graph-ppt-inline-backfill-2026-06-10.md`
 
 ## Obsidian 双链
 
@@ -129,3 +129,4 @@ Related:
 - [[TASK-PREVIEW-PPT-INLINE-004]]
 - [[TASK-PREVIEW-PPT-INLINE-005]]
 - [[TASK-PREVIEW-PPT-INLINE-006]]
+

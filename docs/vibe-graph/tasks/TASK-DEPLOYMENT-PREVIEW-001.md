@@ -10,7 +10,7 @@ plan: PLAN-DEPLOYMENT-PREVIEW-001
 specs:
   - SPEC-DEPLOYMENT-PREVIEW-001
 source_assets:
-  - vibeCodingSummary/deployment-feature-2026-06-07.md
+  - archive/development/summaries/deployment-feature-2026-06-07.md
 depends_on: []
 relates_to: []
 implements:
@@ -71,3 +71,4 @@ Related:
 - [[SPEC-DEPLOYMENT-PREVIEW-001]]
 - [[PLAN-DEPLOYMENT-PREVIEW-001]]
 - [[TRACE-DEPLOYMENT-PREVIEW-001]]
+

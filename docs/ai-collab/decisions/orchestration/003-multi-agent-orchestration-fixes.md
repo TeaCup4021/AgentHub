@@ -195,5 +195,5 @@ _PLANNER_TIMEOUT_SECONDS = int(os.getenv("AGENTHUB_PLANNER_TIMEOUT", "180"))
 - **deepseek 超时**: 180s 仍可能不够，建议用户 @ 指定其他 planner
 
 ## 相关文档
-- `docs/ai-collab/decisions/002-group-chat-dag-execution.md` — DAG 执行重构
+- `docs/ai-collab/decisions/orchestration/002-group-chat-dag-execution.md` — DAG 执行重构
 - `CLAUDE.md` — 规则章节新增 5 条纠正类规则

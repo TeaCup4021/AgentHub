@@ -10,9 +10,9 @@ plan: PLAN-AICOLLAB-VIBE-GRAPH-001
 specs:
   - SPEC-AICOLLAB-VIBE-GRAPH-001
 source_assets:
-  - vibeCodingPlan/AgentHub-PPT内联浏览-实施计划-v2.md
-  - vibeCodingSummary/PPT内联浏览-实施总结-2026-06-06.md
-  - vibeCodingSummary/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
+  - archive/development/plans/AgentHub-PPT内联浏览-实施计划-v2.md
+  - archive/development/summaries/PPT内联浏览-实施总结-2026-06-06.md
+  - archive/development/summaries/PPT内联浏览-计划vs实际实施对比-2026-06-06.md
 depends_on:
   - TASK-AICOLLAB-VIBE-GRAPH-003
 relates_to:
@@ -27,7 +27,7 @@ implements:
   - docs/vibe-graph/tasks/TASK-PREVIEW-PPT-INLINE-005.md
   - docs/vibe-graph/tasks/TASK-PREVIEW-PPT-INLINE-006.md
   - docs/vibe-graph/traces/TRACE-PREVIEW-PPT-INLINE-001.md
-  - vibeCodingSummary/vibe-graph-ppt-inline-backfill-2026-06-10.md
+  - archive/development/summaries/vibe-graph-ppt-inline-backfill-2026-06-10.md
 traces:
   - TRACE-AICOLLAB-VIBE-GRAPH-001
 blocked_by: []
@@ -53,7 +53,7 @@ acceptance:
 - `docs/vibe-graph/plans/PLAN-PREVIEW-PPT-INLINE-001.md`
 - `docs/vibe-graph/tasks/TASK-PREVIEW-PPT-INLINE-001.md` 至 `TASK-PREVIEW-PPT-INLINE-006.md`
 - `docs/vibe-graph/traces/TRACE-PREVIEW-PPT-INLINE-001.md`
-- `vibeCodingSummary/vibe-graph-ppt-inline-backfill-2026-06-10.md`
+- `archive/development/summaries/vibe-graph-ppt-inline-backfill-2026-06-10.md`
 
 ## 执行步骤
 
@@ -81,3 +81,4 @@ Related:
 - [[PLAN-AICOLLAB-VIBE-GRAPH-001]]
 - [[SPEC-PREVIEW-PPT-INLINE-001]]
 - [[TRACE-AICOLLAB-VIBE-GRAPH-001]]
+

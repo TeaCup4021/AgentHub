@@ -22,8 +22,8 @@
 ## 迁移步骤
 
 1. 收集源资产。
-   - `vibeCodingPlan/`
-   - `vibeCodingSummary/`
+   - `archive/development/plans/`
+   - `archive/development/summaries/`
    - `docs/`
    - `docs/ai-collab/`
    - `agenthub-web/docs/specs/`
@@ -82,4 +82,5 @@ verification:
 ```text
 待确认：该能力是否覆盖前端 mock 数据同步。
 ```
+
 

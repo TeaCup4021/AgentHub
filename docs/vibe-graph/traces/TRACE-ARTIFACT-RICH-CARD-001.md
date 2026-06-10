@@ -14,9 +14,9 @@ tasks:
   - TASK-ARTIFACT-RICH-CARD-005
   - TASK-ARTIFACT-RICH-CARD-006
 source_assets:
-  - vibeCodingPlan/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
-  - vibeCodingSummary/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md
-  - docs/ai-collab/decisions/2026-06-04-web-preview-fix.md
+  - archive/development/plans/AgentHub-前后端-富媒体卡片升级方案-文件预览Diff.md
+  - archive/development/summaries/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md
+  - docs/ai-collab/decisions/artifact-preview/2026-06-04-web-preview-fix.md
 depends_on: []
 relates_to:
   - TRACE-PREVIEW-PPT-INLINE-001
@@ -45,8 +45,8 @@ implements:
   - agenthub-web/src/types/chat.ts
   - agenthub-web/vite.config.ts
 summaries:
-  - vibeCodingSummary/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md
-  - vibeCodingSummary/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md
+  - archive/development/summaries/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md
+  - archive/development/summaries/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md
 verification:
   - command: npx tsc -b --noEmit
     result: passed
@@ -107,8 +107,8 @@ followups:
 
 ## Summary 链接
 
-- `vibeCodingSummary/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md`
-- `vibeCodingSummary/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md`
+- `archive/development/summaries/AgentHub-富媒体卡片升级-文件预览Diff-实施总结.md`
+- `archive/development/summaries/vibe-graph-artifact-diff-deployment-backfill-2026-06-10.md`
 
 ## Obsidian 双链
 
@@ -122,3 +122,4 @@ Related:
 - [[TASK-ARTIFACT-RICH-CARD-004]]
 - [[TASK-ARTIFACT-RICH-CARD-005]]
 - [[TASK-ARTIFACT-RICH-CARD-006]]
+
