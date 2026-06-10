@@ -1,0 +1,194 @@
+:root {
+  --color-primary: #3370ff;
+  --color-primary-hover: #4080ff;
+  --color-primary-active: #2b5fd9;
+  --color-primary-light: rgba(51, 112, 255, 0.08);
+
+  --color-success: #00a870;
+  --color-warning: #e37318;
+  --color-danger: #d54941;
+  --color-info: #3370ff;
+
+  /* 灰度色阶 — 浅→深 */
+  --color-gray-50: #fafafa;
+  --color-gray-100: #f4f4f5;
+  --color-gray-200: #e4e4e7;
+  --color-gray-400: #a1a1aa;
+  --color-gray-600: #52525b;
+  --color-gray-900: #3f3f46;
+  --color-gray-950: #18181b;
+
+  /* 状态语义色 */
+  --color-status-running: #3b82f6;
+  --color-status-done: var(--color-success);
+  --color-status-failed: var(--color-danger);
+  --color-status-timeout: var(--color-warning);
+
+  /* 阶段色 */
+  --color-phase-thought: #8b5cf6;
+  --color-phase-action: #e37318;
+  --color-phase-observation: #00a870;
+
+  /* 阶段色背景 (8% 透明度，用于标签等) */
+  --color-phase-thought-bg: rgba(139, 92, 246, 0.08);
+  --color-phase-action-bg: rgba(227, 115, 24, 0.08);
+  --color-phase-observation-bg: rgba(0, 168, 112, 0.08);
+
+  /* 三层颜色体系: 底层(页面) > 中层(卡片/模块) > 上层(输入框) */
+  --color-bg-app: #dce5f7;
+  --color-bg-sidebar: #ffffff;
+  --color-bg-chat: #ffffff;
+  --color-bg-elevated: #f5f6f9;
+
+  /* 覆盖 Semi UI 背景 token — bg-0 给 Card 等容器用(白色)，bg-1~4 逐层加深 */
+  --semi-color-bg-0: rgba(255,255,255,1);
+  --semi-color-bg-1: rgba(255,255,255,1);
+  --semi-color-bg-2: rgba(248,249,251,1);
+  --semi-color-bg-3: rgba(242,244,247,1);
+  --semi-color-bg-4: rgba(236,239,243,1);
+
+  /* 输入框/表单控件背景 — 区别于卡片白色，形成凹入交互感 */
+  --semi-color-fill-0: rgba(241,244,249,1);
+  --color-bg-hover: rgba(0, 0, 0, 0.05);
+  --color-bg-active: rgba(51, 112, 255, 0.12);
+  --color-bg-mask: rgba(0, 0, 0, 0.3);
+
+  --color-bubble-user-bg: #e1edff;
+  --color-bubble-user-text: #1f2329;
+  --color-bubble-agent-bg: #ffffff;
+  --color-bubble-agent-border: #e5e6eb;
+
+  --color-text-primary: #1f2329;
+  --color-text-secondary: #646a73;
+  --color-text-tertiary: #8f959e;
+  --color-text-disabled: #c9cdd4;
+  --color-text-link: #3370ff;
+  --color-text-white: #ffffff;
+
+  --color-border-light: #e8eaef;
+  --color-border-medium: #d3d6dc;
+  --color-card-border: rgba(0, 0, 0, 0.06);
+  --color-stat-bg: #f7f8fc;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-bubble: 12px;
+  --radius-tag: 4px;
+  --radius-xl: 16px;
+  --radius-round: 50%;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.06);
+
+  --radius-card: 8px;
+  --radius-input: 6px;
+
+  /* 按钮统一令牌 */
+  --btn-radius: 6px;
+  --btn-height-sm: 28px;
+  --btn-height-md: 36px;
+  --btn-fill: var(--color-gray-950);
+  --btn-fill-hover: var(--color-gray-900);
+  --btn-outline-border: var(--color-gray-200);
+  --btn-outline-color: var(--color-gray-600);
+  --btn-ghost-color: var(--color-gray-400);
+  --btn-ghost-hover-bg: var(--color-gray-100);
+
+  --app-padding: 8px;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+  --icon-nav-width: 56px;
+  --conv-list-width: 260px;
+}
+
+[theme-mode="dark"] {
+  --color-bg-app: #141414;
+  --color-bg-sidebar: #1f1f1f;
+  --color-bg-chat: #1f1f1f;
+  --color-bg-elevated: #2a2a2a;
+
+  --semi-color-bg-0: rgba(20,20,20,1);
+  --semi-color-bg-1: rgba(31,31,31,1);
+  --semi-color-bg-2: rgba(42,42,42,1);
+  --semi-color-bg-3: rgba(51,51,51,1);
+  --semi-color-bg-4: rgba(58,58,58,1);
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-active: rgba(51, 112, 255, 0.15);
+  --color-bg-mask: rgba(0, 0, 0, 0.6);
+
+  --color-bubble-user-bg: #1a3a5c;
+  --color-bubble-user-text: #e5e5e5;
+  --color-bubble-agent-bg: #2a2a2a;
+  --color-bubble-agent-border: #3a3a3a;
+
+  --color-text-primary: #e5e5e5;
+  --color-text-secondary: #999999;
+  --color-text-tertiary: #666666;
+  --color-text-disabled: #444444;
+  --color-text-link: #5c8fff;
+
+  --color-border-light: #3a3a3a;
+  --color-border-medium: #4a4a4a;
+  --color-card-border: rgba(255, 255, 255, 0.08);
+  --color-stat-bg: #2a2a2a;
+
+  --semi-color-fill-0: rgba(255, 255, 255, 0.06);
+  --semi-color-fill-1: rgba(255, 255, 255, 0.10);
+  --semi-color-fill-2: rgba(255, 255, 255, 0.14);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.3);
+
+  /* 灰度色阶 — 暗色下反转 */
+  --color-gray-50: #18181b;
+  --color-gray-100: #27272a;
+  --color-gray-200: #3f3f46;
+  --color-gray-400: #71717a;
+  --color-gray-600: #a1a1aa;
+  --color-gray-900: #d4d4d8;
+  --color-gray-950: #e4e4e7;
+
+  /* 状态色 — 暗色下提亮 */
+  --color-status-running: #60a5fa;
+
+  /* 阶段色 — 暗色下提亮 */
+  --color-phase-thought: #a78bfa;
+  --color-phase-action: #fbbf24;
+  --color-phase-observation: #34d399;
+
+  --color-phase-thought-bg: rgba(167, 139, 250, 0.10);
+  --color-phase-action-bg: rgba(251, 191, 36, 0.10);
+  --color-phase-observation-bg: rgba(52, 211, 153, 0.10);
+
+  /* 按钮令牌 — 暗色下反转填充色 */
+  --btn-fill: var(--color-gray-200);
+  --btn-fill-hover: var(--color-gray-100);
+  --btn-outline-border: var(--color-gray-600);
+  --btn-outline-color: var(--color-gray-400);
+  --btn-ghost-color: var(--color-gray-400);
+  --btn-ghost-hover-bg: var(--color-gray-100);
+}

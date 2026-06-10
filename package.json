@@ -1,0 +1,12 @@
+{
+  "name": "agenthub",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"cd backend && uvicorn app.main:app --reload --port 8080\" \"cd agenthub-web && npm run dev\"",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8080",
+    "dev:frontend": "cd agenthub-web && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

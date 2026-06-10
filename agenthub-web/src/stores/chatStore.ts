@@ -1,0 +1,213 @@
+import { create } from "zustand";
+import type { Artifact, ThinkingStep, PlanSubtask, Attachment } from "@/types";
+
+interface StreamingMessage {
+  content: string;
+  artifacts: Artifact[];
+  thinkingSteps: ThinkingStep[];
+}
+
+export type ConnectionStatus = 'connected' | 'reconnecting' | 'failed';
+
+/** A captured code selection to be rewritten by an agent (selection-level edit). */
+export interface QuoteCodeRange {
+  fileName?: string;
+  language?: string;
+  snippet: string;
+}
+
+/** Pending quote shown in the input bar. `codeRange` distinguishes a code-snippet
+ * quote (selection-level rewrite) from a plain whole-message quote. */
+export interface PendingQuote {
+  messageId: string;
+  content: string;
+  codeRange?: QuoteCodeRange;
+}
+
+export interface OrchestratorPendingPlan {
+  planId: string;
+  subtasks: PlanSubtask[];
+  plannerAgentId?: string | null;
+  plannerAgentName?: string | null;
+}
+
+interface ChatUIState {
+  activeConversationId: string | null;
+  searchQuery: string;
+  isStreaming: boolean;
+  streamingContent: Record<string, StreamingMessage>;
+  pendingMention: string | null;
+  connectionStatus: ConnectionStatus;
+  retryCount: number;
+  pendingQuote: PendingQuote | null;
+  messageSearch: string;
+  pendingPlan: OrchestratorPendingPlan | null;
+  dagTaskId: string | null;
+  persistedThinkingSteps: ThinkingStep[];
+
+  setActiveConversation: (id: string | null) => void;
+  setSearchQuery: (query: string) => void;
+  setMessageSearch: (query: string) => void;
+  setIsStreaming: (v: boolean) => void;
+  initStreamingMessage: (messageId: string) => void;
+  appendStreamToken: (messageId: string, delta: string) => void;
+  appendStreamArtifact: (messageId: string, artifact: Artifact) => void;
+  appendThinkingStep: (messageId: string, step: ThinkingStep) => void;
+  finalizeStreamingMessage: (messageId: string) => void;
+  getStreamingContent: (messageId: string) => StreamingMessage | undefined;
+  clearStreamingContent: (messageId: string) => void;
+  stopAllStreaming: () => void;
+  setPendingMention: (name: string | null) => void;
+  setConnectionStatus: (status: ConnectionStatus) => void;
+  setRetryCount: (n: number) => void;
+  setPendingQuote: (quote: PendingQuote | null) => void;
+  setPendingPlan: (plan: OrchestratorPendingPlan | null) => void;
+  setDagTaskId: (id: string | null) => void;
+  setPersistedThinkingSteps: (steps: ThinkingStep[]) => void;
+  appendPersistedThinkingStep: (step: ThinkingStep) => void;
+  pinnedMessageIds: string[];
+  addPinnedMessage: (id: string) => void;
+  removePinnedMessage: (id: string) => void;
+  setPinnedMessages: (ids: string[]) => void;
+  pendingAttachments: Attachment[];
+  addPendingAttachment: (att: Attachment) => void;
+  removePendingAttachment: (id: string) => void;
+  clearPendingAttachments: () => void;
+}
+
+export const useChatStore = create<ChatUIState>((set, get) => ({
+  activeConversationId: null,
+  searchQuery: "",
+  isStreaming: false,
+  streamingContent: {},
+  pendingMention: null,
+  connectionStatus: 'connected',
+  retryCount: 0,
+  pendingQuote: null,
+  messageSearch: "",
+  pendingPlan: null,
+  dagTaskId: null,
+  persistedThinkingSteps: [],
+  pinnedMessageIds: [],
+  pendingAttachments: [],
+
+  setActiveConversation: (id) => set({ activeConversationId: id }),
+  setSearchQuery: (q) => set({ searchQuery: q }),
+  setMessageSearch: (q) => set({ messageSearch: q }),
+  setIsStreaming: (v) => set({ isStreaming: v }),
+
+  initStreamingMessage: (messageId) =>
+    set((s) => ({
+      isStreaming: true,
+      streamingContent: {
+        ...s.streamingContent,
+        [messageId]: { content: "", artifacts: [], thinkingSteps: [] },
+      },
+    })),
+
+  appendStreamToken: (messageId, delta) =>
+    set((s) => {
+      const entry = s.streamingContent[messageId];
+      if (!entry) return s;
+      return {
+        streamingContent: {
+          ...s.streamingContent,
+          [messageId]: { ...entry, content: entry.content + delta },
+        },
+      };
+    }),
+
+  appendStreamArtifact: (messageId, artifact) =>
+    set((s) => {
+      const entry = s.streamingContent[messageId];
+      if (!entry) return s;
+      const existingIndex = entry.artifacts.findIndex((a) => a.id === artifact.id);
+      const artifacts = existingIndex >= 0
+        ? entry.artifacts.map((a, index) => (index === existingIndex ? artifact : a))
+        : [...entry.artifacts, artifact];
+      return {
+        streamingContent: {
+          ...s.streamingContent,
+          [messageId]: {
+            ...entry,
+            artifacts,
+          },
+        },
+      };
+    }),
+
+  appendThinkingStep: (messageId, step) =>
+    set((s) => {
+      const entry = s.streamingContent[messageId];
+      if (!entry) return s;
+      const existingIdx = entry.thinkingSteps.findIndex(
+        (st) => st.phase === step.phase && st.text === step.text,
+      );
+      let updatedSteps: ThinkingStep[];
+      if (existingIdx >= 0) {
+        updatedSteps = [...entry.thinkingSteps];
+        updatedSteps[existingIdx] = step;
+      } else {
+        updatedSteps = [...entry.thinkingSteps, step];
+      }
+      return {
+        streamingContent: {
+          ...s.streamingContent,
+          [messageId]: { ...entry, thinkingSteps: updatedSteps },
+        },
+      };
+    }),
+
+  finalizeStreamingMessage: (messageId) =>
+    set((s) => {
+      const { [messageId]: _, ...rest } = s.streamingContent;
+      return { isStreaming: Object.keys(rest).length > 0, streamingContent: rest };
+    }),
+
+  stopAllStreaming: () =>
+    set({ isStreaming: false, streamingContent: {} }),
+
+  getStreamingContent: (messageId) => get().streamingContent[messageId],
+
+  clearStreamingContent: (messageId) =>
+    set((s) => {
+      const { [messageId]: _, ...rest } = s.streamingContent;
+      return { streamingContent: rest };
+    }),
+
+  setPendingMention: (name) => set({ pendingMention: name }),
+
+  setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setRetryCount: (n) => set({ retryCount: n }),
+
+  setPendingQuote: (quote) => set({ pendingQuote: quote }),
+
+  setPendingPlan: (plan) => set({ pendingPlan: plan }),
+  setDagTaskId: (id) => set({ dagTaskId: id }),
+  setPersistedThinkingSteps: (steps) => set({ persistedThinkingSteps: steps }),
+  appendPersistedThinkingStep: (step) =>
+    set((s) => {
+      const idx = s.persistedThinkingSteps.findIndex(
+        (st) => st.phase === step.phase && st.text === step.text,
+      );
+      if (idx >= 0) {
+        const updated = [...s.persistedThinkingSteps];
+        updated[idx] = step;
+        return { persistedThinkingSteps: updated };
+      }
+      return { persistedThinkingSteps: [...s.persistedThinkingSteps, step] };
+    }),
+
+  addPinnedMessage: (id) => set((s) => {
+    if (s.pinnedMessageIds.includes(id)) return s;
+    return { pinnedMessageIds: [...s.pinnedMessageIds, id] };
+  }),
+  removePinnedMessage: (id) => set((s) => ({
+    pinnedMessageIds: s.pinnedMessageIds.filter((pid) => pid !== id),
+  })),
+  setPinnedMessages: (ids) => set({ pinnedMessageIds: ids }),
+
+  addPendingAttachment: (att) => set((s) => ({ pendingAttachments: [...s.pendingAttachments, att] })),
+  removePendingAttachment: (id) => set((s) => ({ pendingAttachments: s.pendingAttachments.filter((a) => a.id !== id) })),
+  clearPendingAttachments: () => set({ pendingAttachments: [] }),
+}));

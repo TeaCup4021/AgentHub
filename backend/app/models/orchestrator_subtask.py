@@ -1,0 +1,20 @@
+import uuid
+from typing import Optional
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, Text, Integer, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from app.models.base import Base, UUIDMixin, TimestampMixin
+
+class OrchestratorSubtask(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "orchestrator_subtasks"
+    task_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('orchestrator_tasks.id'), nullable=False)
+    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('agents.id'), nullable=False)
+    instruction: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, server_default='queued')
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default='0')
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=True)
+    output_message_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('messages.id'), nullable=True)
+    error_detail: Mapped[str] = mapped_column(Text, nullable=True)
+    depends_on: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, server_default='single_turn')
+    execution_order: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

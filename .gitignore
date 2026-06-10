@@ -1,0 +1,60 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.log
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Backend env
+backend/.env
+
+# Superpowers (外部仓库，不作为本项目代码提交)
+superpowers/
+
+# 项目配置
+.claude/
+.codex/
+.superpowers/
+
+# 临时/参考文件
+clone/
+AgentHub-架构设计前端.md
+AgentHub-架构设计后端.md
+课题：AgentHub - 多 Agent 协作平台.md
+
+# CLI workspace (生成的文件)
+cli-workspace/
+
+# Generated artifacts
+backend/logs/
+agenthub-web/e2e/screenshots/
+agenthub-web/src/tempfile_*.mermaid
+
+# Agent 临时生成的文件
+backend/create_ppt.py
+backend/generate_ppt.py
+backend/inline-viewer.html
+backend/AI_Development_Presentation.html
+agenthub-web/describe.mjs
+agenthub-web/preview.mjs
+agenthub-web/screenshot.mjs

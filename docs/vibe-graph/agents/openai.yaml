@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vibe Graph"
+  short_description: "维护并交付 AI 协作追溯图谱"
+  default_prompt: "Use $vibe-graph to create, backfill, validate, or hand off SPEC -> PLAN -> TASK -> TRACE collaboration nodes."
