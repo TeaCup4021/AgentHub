@@ -8,6 +8,7 @@ class SubTaskPlan(BaseSchema):
     subtask_id: str
     agent_id: Optional[UUID] = None
     agent_name: Optional[str] = None
+    assignment_reason: Optional[str] = None
     instruction: str
     recommended_capabilities: List[str] = []
     acceptance_criteria: List[str] = []

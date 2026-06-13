@@ -102,6 +102,9 @@ function normalizePlanSubtask(task: PlanSubtask, index: number): PlanSubtask {
     subtask_id: task.subtask_id ?? task.subtaskId ?? `stage-${index + 1}`,
     instruction: task.instruction ?? "",
     priority: task.priority ?? index + 1,
+    agent_id: task.agent_id ?? task.agentId ?? task.agent?.id ?? null,
+    agent_name: task.agent_name ?? task.agentName ?? task.agent?.name ?? null,
+    assignment_reason: task.assignment_reason ?? task.assignmentReason ?? null,
     agent_config: task.agent_config ?? task.agentConfig,
     recommended_capabilities: task.recommended_capabilities ?? task.recommendedCapabilities ?? [],
     acceptance_criteria: task.acceptance_criteria ?? task.acceptanceCriteria ?? [],
@@ -330,6 +333,11 @@ export function ChatArea({ conversations }: ChatAreaProps) {
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
 
   const conversation = conversations.find((c) => c.id === activeId);
+  const conversationAgents = useMemo(() => {
+    if (!conversation) return agents;
+    const ids = new Set(conversation.agentIds);
+    return agents.filter((agent) => ids.has(agent.id));
+  }, [agents, conversation]);
   const artifactCount = useMemo(
     () => rawMessages.reduce((sum, m) => sum + (m.artifacts?.length ?? 0), 0),
     [rawMessages],
@@ -696,6 +704,9 @@ export function ChatArea({ conversations }: ChatAreaProps) {
     const convId = activeId;
     const plan = normalizePlanSubtasks(subtasks).map((st) => ({
       subtask_id: st.subtask_id,
+      agent_id: st.agent_id ?? null,
+      agent_name: st.agent_name ?? null,
+      assignment_reason: st.assignment_reason ?? null,
       instruction: st.instruction,
       recommended_capabilities: st.recommended_capabilities ?? [],
       acceptance_criteria: st.acceptance_criteria ?? [],
@@ -956,6 +967,7 @@ export function ChatArea({ conversations }: ChatAreaProps) {
         <MessageList
           messages={displayMessages}
           agents={agents}
+          planAgents={conversationAgents}
           streamingMessageId={currentStream.messageId}
           streamingAgentName={currentStream.agentName}
           isWaiting={isStreaming && !currentStream.messageId}

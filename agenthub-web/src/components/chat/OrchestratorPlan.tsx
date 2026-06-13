@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, TextArea, Tag } from "@douyinfe/semi-ui";
+import { Button, Select, Switch, TextArea, Tag } from "@douyinfe/semi-ui";
 import { IconEdit, IconPlus, IconSend } from "@douyinfe/semi-icons";
 import { AgentConfigPreviewCard } from "@/components/cards/AgentConfigPreviewCard";
 import type { PlanSubtask } from "@/types";
@@ -8,6 +8,7 @@ interface OrchestratorPlanProps {
   planId: string;
   subtasks: PlanSubtask[];
   plannerAgentName?: string | null;
+  plannerAgentId?: string | null;
   agents?: { id: string; name: string }[];
   onConfirm?: () => void;
   onAdjust?: (subtasks: PlanSubtask[]) => void;
@@ -32,19 +33,41 @@ const GRAY_50 = "var(--color-gray-50)";
 function copyPlan(task: PlanSubtask): PlanSubtask {
   return {
     ...task,
+    agent_id: task.agent_id ?? task.agentId ?? task.agent?.id ?? null,
+    agent_name: task.agent_name ?? task.agentName ?? task.agent?.name ?? null,
+    assignment_reason: task.assignment_reason ?? task.assignmentReason ?? null,
     recommended_capabilities: [...(task.recommended_capabilities ?? [])],
     acceptance_criteria: [...(task.acceptance_criteria ?? [])],
     depends_on: [...(task.depends_on ?? [])],
   };
 }
 
+function splitLines(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function StageMeta({ task }: { task: PlanSubtask }) {
   const caps = task.recommended_capabilities ?? [];
   const criteria = task.acceptance_criteria ?? [];
+  const agentName = task.agent_name ?? task.agentName ?? task.agent?.name;
+  const reason = task.assignment_reason ?? task.assignmentReason;
+  const dependsOn = task.depends_on ?? task.dependsOn ?? [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 5 }}>
       <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+        {agentName ? (
+          <Tag size="small" color="purple">
+            @{agentName}
+          </Tag>
+        ) : (
+          <Tag size="small" color="grey">
+            Agent TBD
+          </Tag>
+        )}
         <Tag size="small" color={task.can_parallel === false ? "orange" : "green"}>
           {task.can_parallel === false ? "Sequential" : "Parallel OK"}
         </Tag>
@@ -65,6 +88,16 @@ function StageMeta({ task }: { task: PlanSubtask }) {
           Acceptance: {criteria.join("; ")}
         </div>
       )}
+      {dependsOn.length > 0 && (
+        <div style={{ color: GRAY_400, fontSize: 11, lineHeight: 1.45 }}>
+          Depends on: {dependsOn.join(", ")}
+        </div>
+      )}
+      {reason && (
+        <div style={{ color: GRAY_400, fontSize: 11, lineHeight: 1.45 }}>
+          Assignment: {reason}
+        </div>
+      )}
     </div>
   );
 }
@@ -73,6 +106,8 @@ export function OrchestratorPlan({
   planId,
   subtasks: initialSubtasks,
   plannerAgentName,
+  plannerAgentId,
+  agents = [],
   onConfirm,
   onAdjust,
   onRefine,
@@ -83,6 +118,9 @@ export function OrchestratorPlan({
   if (initialSubtasks.length === 0) return null;
 
   const planBy = plannerAgentName ? `Planned by @${plannerAgentName}` : "Planned by default Orchestrator";
+  const executorAgents = plannerAgentId
+    ? agents.filter((agent) => agent.id !== plannerAgentId)
+    : agents;
 
   const handleStartEdit = () => {
     setDraft(initialSubtasks.map(copyPlan));
@@ -102,6 +140,48 @@ export function OrchestratorPlan({
     setDraft((prev) => prev.map((t, idx) => (idx === i ? { ...t, instruction } : t)));
   };
 
+  const handleUpdateCriteria = (i: number, value: string) => {
+    setDraft((prev) => prev.map((task, idx) => (
+      idx === i
+        ? {
+            ...task,
+            acceptance_criteria: splitLines(value),
+          }
+        : task
+    )));
+  };
+
+  const handleUpdateDependsOn = (i: number, value: unknown) => {
+    const depends_on = Array.isArray(value)
+      ? value.map((item) => String(item)).filter(Boolean)
+      : [];
+    setDraft((prev) => prev.map((task, idx) => (
+      idx === i ? { ...task, depends_on } : task
+    )));
+  };
+
+  const handleUpdateParallel = (i: number, can_parallel: boolean) => {
+    setDraft((prev) => prev.map((task, idx) => (
+      idx === i ? { ...task, can_parallel } : task
+    )));
+  };
+
+  const handleUpdateAgent = (i: number, agentId: string | number | unknown) => {
+    const value = typeof agentId === "string" ? agentId : String(agentId ?? "");
+    const selected = executorAgents.find((agent) => agent.id === value);
+    setDraft((prev) => prev.map((task, idx) => (
+      idx === i
+        ? {
+            ...task,
+            agent_id: selected?.id ?? null,
+            agent_name: selected?.name ?? null,
+            agent: selected ? { id: selected.id, name: selected.name } : undefined,
+            assignment_reason: selected ? "User selected this agent during plan review." : null,
+          }
+        : task
+    )));
+  };
+
   const handleDelete = (i: number) => {
     setDraft((prev) => prev.filter((_, idx) => idx !== i));
   };
@@ -112,6 +192,9 @@ export function OrchestratorPlan({
       ...prev,
       {
         subtask_id: newId,
+        agent_id: executorAgents[0]?.id ?? null,
+        agent_name: executorAgents[0]?.name ?? null,
+        agent: executorAgents[0] ? { id: executorAgents[0].id, name: executorAgents[0].name } : undefined,
         instruction: "",
         recommended_capabilities: [],
         acceptance_criteria: [],
@@ -123,6 +206,10 @@ export function OrchestratorPlan({
   };
 
   const taskRows = editing ? draft : initialSubtasks;
+  const stageOptions = draft.map((task, index) => ({
+    label: task.subtask_id || `stage-${index + 1}`,
+    value: task.subtask_id || `stage-${index + 1}`,
+  }));
 
   return (
     <div>
@@ -163,7 +250,7 @@ export function OrchestratorPlan({
           borderRadius: 3,
           padding: "1px 5px",
         }}>
-          Dynamic assignment
+          Reviewable assignment
         </span>
       </div>
 
@@ -184,7 +271,7 @@ export function OrchestratorPlan({
           <circle cx="12" cy="12" r="10" />
           <path d="M12 8v4M12 16h.01" />
         </svg>
-        <span>Review the staged plan. Agents are assigned after confirmation.</span>
+        <span>Review the staged plan and assigned agents before execution.</span>
       </div>
 
       <div style={{
@@ -242,13 +329,62 @@ export function OrchestratorPlan({
               </div>
             ) : editing ? (
               <>
-                <TextArea
-                  value={task.instruction}
-                  onChange={(v) => handleUpdateInstruction(i, v)}
-                  rows={2}
-                  autosize
-                  style={{ flex: 1, fontSize: 12 }}
-                />
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                  <Select
+                    size="small"
+                    value={task.agent_id ?? task.agentId ?? task.agent?.id ?? undefined}
+                    placeholder="Select agent"
+                    optionList={executorAgents.map((agent) => ({ label: agent.name, value: agent.id }))}
+                    onChange={(value) => handleUpdateAgent(i, value)}
+                    style={{ width: "100%" }}
+                  />
+                  <TextArea
+                    value={task.instruction}
+                    onChange={(v) => handleUpdateInstruction(i, v)}
+                    rows={2}
+                    autosize
+                    style={{ fontSize: 12 }}
+                  />
+                  <TextArea
+                    value={(task.acceptance_criteria ?? task.acceptanceCriteria ?? []).join("\n")}
+                    onChange={(v) => handleUpdateCriteria(i, v)}
+                    rows={2}
+                    autosize
+                    placeholder="Acceptance criteria, one per line"
+                    style={{ fontSize: 12 }}
+                  />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center" }}>
+                    <Select
+                      multiple
+                      size="small"
+                      value={task.depends_on ?? task.dependsOn ?? []}
+                      placeholder="Depends on"
+                      optionList={stageOptions.filter((option) => option.value !== task.subtask_id)}
+                      onChange={(value) => handleUpdateDependsOn(i, value)}
+                      style={{ width: "100%" }}
+                    />
+                    <label style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      color: GRAY_400,
+                      fontSize: 11,
+                      whiteSpace: "nowrap",
+                    }}>
+                      <Switch
+                        size="small"
+                        checked={task.can_parallel !== false}
+                        onChange={(checked) => handleUpdateParallel(i, checked)}
+                      />
+                      Parallel
+                    </label>
+                  </div>
+                  {(task.assignment_reason ?? task.assignmentReason) && (
+                    <div style={{ color: GRAY_400, fontSize: 11, lineHeight: 1.45 }}>
+                      Assignment: {task.assignment_reason ?? task.assignmentReason}
+                    </div>
+                  )}
+                </div>
                 <Button
                   size="small"
                   theme="borderless"

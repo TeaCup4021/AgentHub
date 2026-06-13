@@ -193,6 +193,9 @@ export interface AgentVerifyRequest {
 
 export interface ConfirmPlanItem {
   subtask_id: string;
+  agent_id?: string | null;
+  agent_name?: string | null;
+  assignment_reason?: string | null;
   instruction: string;
   recommended_capabilities?: string[];
   acceptance_criteria?: string[];

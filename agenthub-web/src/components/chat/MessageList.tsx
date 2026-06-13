@@ -52,6 +52,9 @@ function normalizePlanSubtask(task: PlanSubtask, index: number): PlanSubtask {
     subtask_id: task.subtask_id ?? task.subtaskId ?? `stage-${index + 1}`,
     instruction: task.instruction ?? "",
     priority: task.priority ?? index + 1,
+    agent_id: task.agent_id ?? task.agentId ?? task.agent?.id ?? null,
+    agent_name: task.agent_name ?? task.agentName ?? task.agent?.name ?? null,
+    assignment_reason: task.assignment_reason ?? task.assignmentReason ?? null,
     agent_config: task.agent_config ?? task.agentConfig,
     recommended_capabilities: task.recommended_capabilities ?? task.recommendedCapabilities ?? [],
     acceptance_criteria: task.acceptance_criteria ?? task.acceptanceCriteria ?? [],
@@ -247,9 +250,10 @@ const TimeSeparator = memo(function TimeSeparator({ time }: { time: string }) {
   );
 });
 
-const MessageBubble = memo(function MessageBubble({ message, agents, searchText, onRegenerate, onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId, onPin, onUnpin }: {
+const MessageBubble = memo(function MessageBubble({ message, agents, planAgents, searchText, onRegenerate, onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId, onPin, onUnpin }: {
   message: Message;
   agents: Agent[];
+  planAgents?: Agent[];
   searchText?: string;
   onRegenerate?: (convId: string, msgId: string) => void;
   onConfirmPlan?: (planId: string, subtasks: PlanSubtask[]) => void;
@@ -438,7 +442,8 @@ const MessageBubble = memo(function MessageBubble({ message, agents, searchText,
                   planId={planMeta.planId}
                   subtasks={planMeta.subtasks}
                   plannerAgentName={planMeta.plannerAgentName}
-                  agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+                  plannerAgentId={planMeta.plannerAgentId}
+                  agents={(planAgents ?? agents).map((a) => ({ id: a.id, name: a.name }))}
                   onConfirm={() => onConfirmPlan?.(planMeta.planId, planMeta.subtasks)}
                   onAdjust={(subtasks) => onAdjustPlan?.(subtasks)}
                   onRefine={onRefinePlan}
@@ -644,6 +649,7 @@ function highlightText(text: string, query: string): string {
 interface MessageListProps {
   messages: Message[];
   agents: Agent[];
+  planAgents?: Agent[];
   streamingMessageId?: string | null;
   streamingAgentName?: string;
   isWaiting?: boolean;
@@ -661,7 +667,7 @@ interface MessageListProps {
 }
 
 export function MessageList({
-  messages, agents, streamingMessageId, streamingAgentName,
+  messages, agents, planAgents, streamingMessageId, streamingAgentName,
   isWaiting, hasMore, isFetchingMore, onLoadMore, searchText, onRegenerate,
   onConfirmPlan, onAdjustPlan, onRefinePlan, dagTaskId, onPin, onUnpin,
 }: MessageListProps) {
@@ -779,7 +785,7 @@ export function MessageList({
             transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
           >
             {needSeparator && <TimeSeparator time={msg.createdAt} />}
-            <MessageBubble message={msg} agents={agents} searchText={searchText} onRegenerate={onRegenerate} onConfirmPlan={onConfirmPlan} onAdjustPlan={onAdjustPlan} onRefinePlan={onRefinePlan} dagTaskId={dagTaskId} onPin={onPin} onUnpin={onUnpin} />
+            <MessageBubble message={msg} agents={agents} planAgents={planAgents} searchText={searchText} onRegenerate={onRegenerate} onConfirmPlan={onConfirmPlan} onAdjustPlan={onAdjustPlan} onRefinePlan={onRefinePlan} dagTaskId={dagTaskId} onPin={onPin} onUnpin={onUnpin} />
           </motion.div>
         );
       })}

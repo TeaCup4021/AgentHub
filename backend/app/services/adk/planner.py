@@ -248,9 +248,14 @@ class OrchestratorPlanner:
             for st in current_plan.subtasks:
                 deps = ", ".join(st.depends_on) if st.depends_on else "none"
                 caps = ", ".join(st.recommended_capabilities or []) or "unspecified"
+                assignee = (
+                    f", agent: {st.agent_name} ({st.agent_id})"
+                    if st.agent_id or st.agent_name
+                    else ""
+                )
                 lines.append(
                     f"  {st.subtask_id}: {st.instruction} "
-                    f"(capabilities: [{caps}], dependsOn: [{deps}], mode: {st.mode})"
+                    f"(capabilities: [{caps}], dependsOn: [{deps}], mode: {st.mode}{assignee})"
                 )
             current_plan_text = (
                 "Current stage plan:\n" + "\n".join(lines) + "\n\n"
@@ -261,7 +266,7 @@ class OrchestratorPlanner:
 
         return (
             f"{'Create' if mode == 'create' else 'Modify'} a stage execution plan for the "
-            f"following request. This plan is for user review only; do not assign concrete agents yet.\n\n"
+            f"following request. This plan is for user review and must include a concrete agent assignment for each stage.\n\n"
             f"Available group agents for capability reference:\n{agent_list}\n\n"
             f"{current_plan_text}"
             "Output ONLY a JSON object (no markdown, no extra text):\n"
@@ -270,6 +275,9 @@ class OrchestratorPlanner:
             "    {\n"
             "      \"subtaskId\": \"s1\",\n"
             "      \"instruction\": \"<stage goal and expected deliverable>\",\n"
+            "      \"agentId\": \"<id of one available group agent>\",\n"
+            "      \"agentName\": \"<name of that agent>\",\n"
+            "      \"assignmentReason\": \"<why this agent is the best fit>\",\n"
             "      \"recommendedCapabilities\": [\"frontend\", \"testing\"],\n"
             "      \"acceptanceCriteria\": [\"<how the user can judge this stage done>\"],\n"
             "      \"dependsOn\": [],\n"
@@ -280,15 +288,16 @@ class OrchestratorPlanner:
             "  ]\n"
             "}\n\n"
             "Rules:\n"
-            "1. Do NOT include agentId or agentName. Agent assignment happens only after the user confirms this plan.\n"
-            "2. Each stage must describe what should be done and what deliverable should exist.\n"
-            "3. recommendedCapabilities should list capability tags or expertise needed for the stage.\n"
-            "4. dependsOn controls stage dependencies and display ordering. Empty means the stage can start immediately.\n"
-            "5. canParallel is true when the stage can run alongside other stages with satisfied dependencies.\n"
-            "6. mode must always be single_turn.\n"
-            "7. subtaskId must be unique within the plan.\n"
-            "8. Write every instruction in the SAME language as the user request below, and explicitly tell the executor to reply in that language.\n"
-            "9. Do not create stages for starting servers or manual deployment commands; the platform handles hosting artifacts automatically.\n"
+            "1. Every stage MUST include agentId and agentName selected from Available group agents; never invent agents.\n"
+            "2. assignmentReason must briefly explain why the selected agent matches the stage.\n"
+            "3. Each stage must describe what should be done and what deliverable should exist.\n"
+            "4. recommendedCapabilities should list capability tags or expertise needed for the stage.\n"
+            "5. dependsOn controls stage dependencies and display ordering. Empty means the stage can start immediately.\n"
+            "6. canParallel is true when the stage can run alongside other stages with satisfied dependencies.\n"
+            "7. mode must always be single_turn.\n"
+            "8. subtaskId must be unique within the plan.\n"
+            "9. Write every instruction in the SAME language as the user request below, and explicitly tell the executor to reply in that language.\n"
+            "10. Do not create stages for starting servers or manual deployment commands; the platform handles hosting artifacts automatically.\n"
             f"User request: {user_message}"
         )
     # Helpers
@@ -348,6 +357,10 @@ class OrchestratorPlanner:
                             subtask_id=item.get("subtaskId", item.get("subtask_id", self._gen_subtask_id())),
                             agent_id=parsed_agent_id,
                             agent_name=item.get("agentName", item.get("agent_name")),
+                            assignment_reason=item.get(
+                                "assignmentReason",
+                                item.get("assignment_reason"),
+                            ),
                             instruction=item["instruction"],
                             recommended_capabilities=item.get(
                                 "recommendedCapabilities",

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.schemas.message import ArtifactBrief, ArtifactUpdate, MessageCreate, MessageResponse, MessageListResponse
 from app.models.agent import Agent
+from app.models.conversation_participant import ConversationParticipant
 from app.models.message import Message
 from app.models.artifact import Artifact
 from app.services.message import MessageService
@@ -93,11 +94,59 @@ async def create_message(
                 raise HTTPException(status_code=409, detail="Plan already confirmed or executed")
             raise HTTPException(status_code=404, detail="No pending plan found")
 
-        new_plan_dict = {"subtasks": [
-            {
+        normalized_items: list[dict] = []
+        subtask_ids: set[str] = set()
+        has_reviewed_assignment = False
+        for index, item in enumerate(data.plan):
+            if not isinstance(item, dict):
+                raise HTTPException(status_code=400, detail="each plan item must be an object")
+
+            subtask_id = str(
+                item.get("subtask_id", item.get("subtaskId")) or f"s{index + 1}"
+            )
+            if subtask_id in subtask_ids:
+                raise HTTPException(status_code=400, detail=f"duplicate subtask_id: {subtask_id}")
+            subtask_ids.add(subtask_id)
+
+            instruction = str(item.get("instruction") or "").strip()
+            if not instruction:
+                raise HTTPException(status_code=400, detail=f"instruction is required for {subtask_id}")
+
+            raw_agent_id = item.get("agent_id", item.get("agentId"))
+            agent_id = str(raw_agent_id) if raw_agent_id else None
+            agent_name = item.get("agent_name", item.get("agentName"))
+            has_reviewed_assignment = has_reviewed_assignment or bool(agent_id or agent_name)
+
+            raw_depends_on = item.get("depends_on", item.get("dependsOn", [])) or []
+            if isinstance(raw_depends_on, str):
+                depends_on = [
+                    dep.strip()
+                    for dep in raw_depends_on.split(",")
+                    if dep.strip()
+                ]
+            elif isinstance(raw_depends_on, list):
+                depends_on = [
+                    str(dep).strip()
+                    for dep in raw_depends_on
+                    if str(dep).strip()
+                ]
+            else:
+                raise HTTPException(status_code=400, detail=f"depends_on must be a list for {subtask_id}")
+
+            mode = item.get("mode", "single_turn") or "single_turn"
+            if mode != "single_turn":
+                raise HTTPException(status_code=400, detail=f"unsupported mode for {subtask_id}: {mode}")
+
+            normalized_items.append({
                 **item,
-                "subtask_id": item.get("subtask_id", item.get("subtaskId", f"sub-{uuid4().hex[:8]}")),
-                "instruction": item["instruction"],
+                "subtask_id": subtask_id,
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "assignment_reason": item.get(
+                    "assignment_reason",
+                    item.get("assignmentReason"),
+                ),
+                "instruction": instruction,
                 "recommended_capabilities": item.get(
                     "recommended_capabilities",
                     item.get("recommendedCapabilities", []),
@@ -107,35 +156,91 @@ async def create_message(
                     item.get("acceptanceCriteria", []),
                 ) or [],
                 "can_parallel": item.get("can_parallel", item.get("canParallel", True)),
-                "depends_on": item.get("depends_on", item.get("dependsOn", [])),
-                "mode": item.get("mode", "single_turn"),
+                "depends_on": depends_on,
+                "mode": mode,
                 "output_key": item.get("output_key", item.get("outputKey")),
-            }
-            for item in data.plan
-        ]}
+            })
+
+        for item in normalized_items:
+            subtask_id = item["subtask_id"]
+            if subtask_id in item["depends_on"]:
+                raise HTTPException(status_code=400, detail=f"{subtask_id} cannot depend on itself")
+            invalid_deps = [dep for dep in item["depends_on"] if dep not in subtask_ids]
+            if invalid_deps:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"invalid depends_on for {subtask_id}: {', '.join(invalid_deps)}",
+                )
+
+        if has_reviewed_assignment:
+            missing_agent_items = [
+                item["subtask_id"]
+                for item in normalized_items
+                if not item.get("agent_id")
+            ]
+            if missing_agent_items:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"agent_id is required for reviewed assignments: {', '.join(missing_agent_items)}",
+                )
+
+            parts_result = await db.execute(
+                select(ConversationParticipant.participant_id).where(
+                    ConversationParticipant.conversation_id == conv_id,
+                    ConversationParticipant.participant_type == "agent",
+                )
+            )
+            participant_ids = list(parts_result.scalars().all())
+            eligible_by_id: dict[str, Agent] = {}
+            if participant_ids:
+                agents_result = await db.execute(
+                    select(Agent).where(
+                        Agent.id.in_(participant_ids),
+                        Agent.is_active == True,
+                    )
+                )
+                eligible_by_id = {
+                    str(agent.id): agent
+                    for agent in agents_result.scalars().all()
+                    if agent.id != task.planner_agent_id
+                }
+
+            for item in normalized_items:
+                agent_id = item["agent_id"]
+                if agent_id == str(task.planner_agent_id):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"planner agent cannot execute stage {item['subtask_id']}",
+                    )
+                agent = eligible_by_id.get(agent_id)
+                if not agent:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"agent_id is not an active group executor for {item['subtask_id']}: {agent_id}",
+                    )
+                item["agent_name"] = agent.name
+
+        new_plan_dict = {"subtasks": normalized_items}
         plan_obj = OrchestratorPlan(subtasks=[
             SubTaskPlan(
-                subtask_id=item.get("subtask_id", item.get("subtaskId", f"sub-{uuid4().hex[:8]}")),
+                subtask_id=item["subtask_id"],
+                agent_id=item.get("agent_id"),
+                agent_name=item.get("agent_name"),
+                assignment_reason=item.get("assignment_reason"),
                 instruction=item["instruction"],
-                recommended_capabilities=item.get(
-                    "recommended_capabilities",
-                    item.get("recommendedCapabilities", []),
-                ) or [],
-                acceptance_criteria=item.get(
-                    "acceptance_criteria",
-                    item.get("acceptanceCriteria", []),
-                ) or [],
-                can_parallel=item.get("can_parallel", item.get("canParallel", True)),
-                depends_on=item.get("depends_on", item.get("dependsOn", [])),
+                recommended_capabilities=item.get("recommended_capabilities", []),
+                acceptance_criteria=item.get("acceptance_criteria", []),
+                can_parallel=item.get("can_parallel", True),
+                depends_on=item.get("depends_on", []),
                 mode=item.get("mode", "single_turn"),
-                output_key=item.get("output_key", item.get("outputKey")),
+                output_key=item.get("output_key"),
             )
-            for item in data.plan
+            for item in normalized_items
         ])
 
-        # Validate and persist the user-approved stage plan without binding
-        # concrete agents yet. Assignment happens at execution time from the
-        # current group roster.
+        # Persist the user-approved stage plan. Reviewed assignments are
+        # validated above; legacy plans without agent_id can still fall back to
+        # dynamic assignment during execution.
         if not plan_obj.subtasks:
             raise HTTPException(status_code=400, detail="plan cannot be empty")
         task.plan = {

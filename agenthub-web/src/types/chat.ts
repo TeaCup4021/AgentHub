@@ -285,6 +285,12 @@ export interface PlanSubtask {
   subtask_id: string;
   subtaskId?: string;
   agent?: { id: string; name: string };
+  agent_id?: string | null;
+  agentId?: string | null;
+  agent_name?: string | null;
+  agentName?: string | null;
+  assignment_reason?: string | null;
+  assignmentReason?: string | null;
   instruction: string;
   priority?: number;
   type?: "code" | "review" | "create_agent" | "deploy";

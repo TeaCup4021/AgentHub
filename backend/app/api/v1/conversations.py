@@ -1022,12 +1022,19 @@ async def _orchestrator_plan_stream(
                     conv_id, planner_agent.name,
                 )
 
+        execution_candidates = await _load_group_execution_agents(
+            db=db,
+            conv_id=conv_id,
+            orchestrator_agent_id=effective_planner_id,
+        )
+        candidate_agent_ids = [agent.id for agent in execution_candidates]
+
         planner = OrchestratorPlanner()
         result = await asyncio.wait_for(
             planner.plan(
                 db=db,
                 user_message=user_msg.content,
-                agent_ids=mentions,
+                agent_ids=candidate_agent_ids,
                 conversation_id=conv_id,
                 planner_agent=planner_agent,
             ),
@@ -1081,6 +1088,9 @@ async def _orchestrator_plan_stream(
         {
             "subtask_id": str(st.subtask_id),
             "agent": {"id": str(st.agent_id or ""), "name": st.agent_name or ""},
+            "agent_id": str(st.agent_id) if st.agent_id else None,
+            "agent_name": st.agent_name,
+            "assignment_reason": st.assignment_reason,
             "instruction": st.instruction,
             "recommended_capabilities": st.recommended_capabilities,
             "acceptance_criteria": st.acceptance_criteria,
@@ -1209,15 +1219,6 @@ async def _orchestrator_refine_stream(
         if not user_msg:
             raise ValueError("No user feedback message found")
 
-        # Load current group roster for capability-aware refinement.
-        parts_result = await db.execute(
-            select(ConversationParticipant.participant_id).where(
-                ConversationParticipant.conversation_id == conv_id,
-                ConversationParticipant.participant_type == "agent",
-            )
-        )
-        agent_ids = list(parts_result.scalars().all())
-
         # Resolve planner agent
         planner_agent = None
         planner_name = "Orchestrator"
@@ -1226,6 +1227,13 @@ async def _orchestrator_refine_stream(
             planner_agent = await db.get(AgentModel, effective_planner_id)
             if planner_agent:
                 planner_name = planner_agent.name
+
+        execution_candidates = await _load_group_execution_agents(
+            db=db,
+            conv_id=conv_id,
+            orchestrator_agent_id=effective_planner_id,
+        )
+        agent_ids = [agent.id for agent in execution_candidates]
 
         planner = OrchestratorPlanner()
         result = await asyncio.wait_for(
@@ -1271,6 +1279,9 @@ async def _orchestrator_refine_stream(
         {
             "subtask_id": str(st.subtask_id),
             "agent": {"id": str(st.agent_id or ""), "name": st.agent_name or ""},
+            "agent_id": str(st.agent_id) if st.agent_id else None,
+            "agent_name": st.agent_name,
+            "assignment_reason": st.assignment_reason,
             "instruction": st.instruction,
             "recommended_capabilities": st.recommended_capabilities,
             "acceptance_criteria": st.acceptance_criteria,
@@ -1497,6 +1508,12 @@ def _normalize_plan_stage(stage: dict, index: int) -> dict:
     stage_id = stage.get("subtask_id", stage.get("subtaskId")) or f"s{index + 1}"
     return {
         "subtask_id": str(stage_id),
+        "agent_id": stage.get("agent_id", stage.get("agentId")),
+        "agent_name": stage.get("agent_name", stage.get("agentName")),
+        "assignment_reason": stage.get(
+            "assignment_reason",
+            stage.get("assignmentReason"),
+        ),
         "instruction": stage.get("instruction", ""),
         "recommended_capabilities": stage.get(
             "recommended_capabilities",
@@ -1572,6 +1589,63 @@ def _build_assignment_instruction(stage: dict, agent: AgentModel, fallback: bool
     return "\n\n".join(parts)
 
 
+def _stage_agent_id(stage: dict) -> str | None:
+    raw = stage.get("agent_id", stage.get("agentId"))
+    return str(raw) if raw else None
+
+
+def _stage_agent_name(stage: dict) -> str | None:
+    raw = stage.get("agent_name", stage.get("agentName"))
+    return str(raw) if raw else None
+
+
+def _stage_assignment_reason(stage: dict) -> str | None:
+    raw = stage.get("assignment_reason", stage.get("assignmentReason"))
+    return str(raw) if raw else None
+
+
+def _build_confirmed_assignments(
+    stages: list[dict],
+    agents: list[AgentModel],
+) -> list[dict]:
+    """Convert user-reviewed planner assignments into executable assignments.
+
+    Returns an empty list when any stage lacks a valid current execution agent,
+    so the legacy dynamic assignment path can safely take over.
+    """
+    if not stages or not agents:
+        return []
+
+    agent_by_id = {str(agent.id): agent for agent in agents}
+    assignments: list[dict] = []
+    for stage in stages:
+        agent_id = _stage_agent_id(stage)
+        if not agent_id or agent_id not in agent_by_id:
+            return []
+        agent = agent_by_id[agent_id]
+        assignments.append({
+            "stage_id": stage["subtask_id"],
+            "subtask_id": f"{stage['subtask_id']}__{agent_id.replace('-', '_')}",
+            "agent_id": agent_id,
+            "agent_name": _stage_agent_name(stage) or agent.name,
+            "assignment_reason": _stage_assignment_reason(stage),
+            "instruction": _build_assignment_instruction(stage, agent),
+            "depends_on": stage["depends_on"],
+            "mode": stage.get("mode", "single_turn"),
+            "output_key": stage.get("output_key"),
+            "recommended_capabilities": stage.get("recommended_capabilities", []),
+            "acceptance_criteria": stage.get("acceptance_criteria", []),
+            "fallback_agent_ids": [
+                str(candidate.id)
+                for candidate in agents
+                if candidate.id != agent.id
+            ],
+            "attempt": 1,
+            "source": "planner_confirmed",
+        })
+    return assignments
+
+
 def _extract_assignment_goal(instruction: str) -> str:
     text = instruction or ""
     if "目标：" in text:
@@ -1623,6 +1697,19 @@ async def _build_dynamic_assignments(
     ]
     if not stages or not agents:
         return []
+
+    confirmed_assignments = _build_confirmed_assignments(stages, agents)
+    if confirmed_assignments:
+        logger.info(
+            "Using planner-confirmed assignments: task=%s stages=%d",
+            orch_task.id,
+            len(confirmed_assignments),
+        )
+        plan["subtasks"] = stages
+        plan["assignments"] = confirmed_assignments
+        orch_task.plan = plan
+        await db.flush()
+        return confirmed_assignments
 
     assignments: list[dict] = []
     usage_count: dict[UUID, int] = {agent.id: 0 for agent in agents}
@@ -1712,6 +1799,7 @@ def _assignment_to_plan_subtask(
         subtask_id=assignment["subtask_id"],
         agent_id=agent.id,
         agent_name=agent.name,
+        assignment_reason=assignment.get("assignment_reason"),
         instruction=assignment["instruction"],
         recommended_capabilities=assignment.get("recommended_capabilities", []),
         acceptance_criteria=assignment.get("acceptance_criteria", []),
